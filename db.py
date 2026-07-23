@@ -51,13 +51,32 @@ def _ensure_is_admin_column(conn):
         conn.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
 
 
+def _ensure_session_columns(conn):
+    cols = [row["name"] for row in conn.execute("PRAGMA table_info(users)")]
+    if "last_login_at" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN last_login_at TEXT")
+    if "last_seen_at" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN last_seen_at TEXT")
+    if "is_online" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN is_online INTEGER NOT NULL DEFAULT 0")
+
+
 def init_db():
     conn = get_db()
     with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
         conn.executescript(f.read())
     _ensure_is_admin_column(conn)
+    _ensure_session_columns(conn)
     conn.commit()
     conn.close()
+
+
+def log_activity(conn, user_id, username, action, detail="", ip_address=None):
+    conn.execute(
+        """INSERT INTO activity_log (user_id, username, action, detail, ip_address)
+           VALUES (?, ?, ?, ?, ?)""",
+        (user_id, username, action, detail, ip_address),
+    )
 
 
 def seed_defaults():

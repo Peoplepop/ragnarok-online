@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}使用者狀態 - 諸神的黃昏{% endblock %}
+
+{% block content %}
+  {% include "_admin_nav.html" %}
+  <h2 style="color: var(--gold-bright); font-size: 18px; margin-top:0;">使用者狀態</h2>
+  <p class="hint" style="margin-top:-8px; margin-bottom:20px;">
+    閒置門檻：{{ idle_threshold }} 分鐘未活動會在該使用者下次連線時被自動登出（記錄為「閒置自動登出」）。
+    「閒置逾時」狀態代表該使用者已超過門檻但尚未觸發下一次請求，此狀態僅供顯示參考，
+    若使用者直接關閉瀏覽器而非按登出，也會短暫顯示為在線，直到門檻時間過後才會轉為閒置逾時。
+  </p>
+
+  <div class="panel">
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <thead>
+        <tr style="text-align:left; color:var(--text-dim); border-bottom:1px solid var(--border);">
+          <th style="padding:8px 6px;">帳號</th>
+          <th style="padding:8px 6px;">狀態</th>
+          <th style="padding:8px 6px;">上次登入</th>
+          <th style="padding:8px 6px;">最後活動</th>
+          <th style="padding:8px 6px;">本次時長</th>
+          <th style="padding:8px 6px;">閒置時間</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr style="border-bottom:1px solid rgba(212,175,55,0.1);">
+          <td style="padding:8px 6px;">
+            {{ r.username }}
+            {% if r.is_admin %}<span style="color:var(--gold); font-size:11px;">管理員</span>{% endif %}
+          </td>
+          <td style="padding:8px 6px; color: {{ 'var(--gold-bright)' if r.status=='在線' else 'var(--text-dim)' }};">{{ r.status }}</td>
+          <td style="padding:8px 6px; color:var(--text-dim);">{{ r.last_login_at or '-' }}</td>
+          <td style="padding:8px 6px; color:var(--text-dim);">{{ r.last_seen_at or '-' }}</td>
+          <td style="padding:8px 6px;">{{ r.duration }}</td>
+          <td style="padding:8px 6px;">{{ r.idle }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" style="padding:12px 6px; color:var(--text-dim);">目前沒有使用者資料</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

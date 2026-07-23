@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}系統紀錄 - 諸神的黃昏{% endblock %}
+
+{% block content %}
+  {% include "_admin_nav.html" %}
+  <h2 style="color: var(--gold-bright); font-size: 18px; margin-top:0;">系統紀錄</h2>
+  <p class="hint" style="margin-top:-8px; margin-bottom:20px;">顯示最近 200 筆註冊 / 登入 / 登出紀錄</p>
+
+  <div class="panel">
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <thead>
+        <tr style="text-align:left; color:var(--text-dim); border-bottom:1px solid var(--border);">
+          <th style="padding:8px 6px;">時間</th>
+          <th style="padding:8px 6px;">帳號</th>
+          <th style="padding:8px 6px;">動作</th>
+          <th style="padding:8px 6px;">IP</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        <tr style="border-bottom:1px solid rgba(212,175,55,0.1);">
+          <td style="padding:8px 6px; color:var(--text-dim);">{{ log.created_at }}</td>
+          <td style="padding:8px 6px;">{{ log.username }}</td>
+          <td style="padding:8px 6px; color: {{ 'var(--danger)' if log.action == 'login_failed' else 'var(--text)' }};">{{ log.label }}</td>
+          <td style="padding:8px 6px; color:var(--text-dim);">{{ log.ip_address or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" style="padding:12px 6px; color:var(--text-dim);">目前沒有紀錄</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}
