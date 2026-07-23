@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>諸神的黃昏</title>
+  <style>
+    body { font-family: "Microsoft JhengHei", sans-serif; max-width: 720px; margin: 60px auto; padding: 0 20px; color: #222; }
+    h1 { font-size: 26px; margin-bottom: 4px; }
+    .subtitle { color: #888; margin-bottom: 32px; }
+    .countries { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+    .country { border: 1px solid #ddd; border-radius: 8px; padding: 16px; }
+    .country .element { font-size: 13px; color: #b45309; font-weight: 600; }
+    .country h3 { margin: 6px 0; font-size: 16px; }
+    .country p { margin: 0; font-size: 13px; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>諸神的黃昏</h1>
+  <p class="subtitle">選擇你的國家，展開屬於你的冒險</p>
+
+  <div class="countries">
+    {% for c in countries %}
+    <div class="country">
+      <div class="element">屬性：{{ c.element }}</div>
+      <h3>{{ c.name }}</h3>
+      <p>{{ c.desc }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</body>
+</html>
