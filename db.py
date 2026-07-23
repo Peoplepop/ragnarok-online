@@ -63,12 +63,19 @@ def _ensure_session_columns(conn):
         conn.execute("ALTER TABLE users ADD COLUMN is_online INTEGER NOT NULL DEFAULT 0")
 
 
+def _ensure_character_columns(conn):
+    cols = [row["name"] for row in conn.execute("PRAGMA table_info(characters)")]
+    if "current_tile_id" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN current_tile_id INTEGER")
+
+
 def init_db():
     conn = get_db()
     with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
         conn.executescript(f.read())
     _ensure_is_admin_column(conn)
     _ensure_session_columns(conn)
+    _ensure_character_columns(conn)
     conn.commit()
     conn.close()
 
@@ -106,21 +113,28 @@ def seed_defaults():
             (DEFAULT_ADMIN_USERNAME, generate_password_hash(DEFAULT_ADMIN_PASSWORD)),
         )
 
-    _seed_map_tiles(conn)
+    map_regenerated = _seed_map_tiles(conn)
+    if map_regenerated:
+        conn.execute("UPDATE characters SET current_tile_id = NULL")
+    _backfill_character_positions(conn)
 
     conn.commit()
     conn.close()
 
 
 def _seed_map_tiles(conn):
-    if conn.execute("SELECT COUNT(*) AS c FROM map_tiles").fetchone()["c"] > 0:
-        return
+    layout = generate_layout()
+    current_count = conn.execute("SELECT COUNT(*) AS c FROM map_tiles").fetchone()["c"]
+    if current_count == len(layout):
+        return False
+
+    conn.execute("DELETE FROM map_tiles")
 
     country_ids = [
         row["id"] for row in conn.execute("SELECT id FROM countries ORDER BY id")
     ]
 
-    for tile in generate_layout():
+    for tile in layout:
         country_id = (
             country_ids[tile["country_index"]] if tile["country_index"] is not None else None
         )
@@ -128,3 +142,17 @@ def _seed_map_tiles(conn):
             "INSERT INTO map_tiles (q, r, tile_type, name, country_id) VALUES (?, ?, ?, ?, ?)",
             (tile["q"], tile["r"], tile["tile_type"], tile["name"], country_id),
         )
+    return True
+
+
+def _backfill_character_positions(conn):
+    conn.execute(
+        """UPDATE characters
+           SET current_tile_id = (
+               SELECT map_tiles.id FROM map_tiles
+               WHERE map_tiles.country_id = characters.country_id
+                 AND map_tiles.tile_type = 'fortress'
+               LIMIT 1
+           )
+           WHERE current_tile_id IS NULL"""
+    )

@@ -2,8 +2,9 @@
 
 Countries are seeded in this fixed order (matches db.DEFAULT_COUNTRIES):
 金 百鍊流金國, 木 翡翠靈木國, 水 蔚藍千泉國, 火 紅蓮業火國, 土 萬物母育國.
-Each country gets 1 fortress + 2 preset towns; the rest of the map is
-filled with 20 unclaimed neutral towns.
+Each country gets 1 fortress + 2 preset towns; every remaining cell in
+the hex disk is filled with an unclaimed neutral town, so the map reads
+as one complete, gap-free hexagon rather than a scattered cluster.
 """
 
 import math
@@ -18,12 +19,20 @@ COUNTRY_TILE_NAMES = [
     ("母育城", ["沃土村", "大地灣"]),   # 土 萬物母育國
 ]
 
-NEUTRAL_NAMES = [
-    f"廢墟{n}" for n in [
-        "一", "二", "三", "四", "五", "六", "七", "八", "九", "十",
-        "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
-    ]
-]
+_CN_DIGITS = "〇一二三四五六七八九"
+
+
+def _cn_number(n):
+    """Chinese numeral for 1-99, e.g. 11 -> 十一, 20 -> 二十."""
+    if n < 10:
+        return _CN_DIGITS[n]
+    tens, ones = divmod(n, 10)
+    prefix = "" if tens == 1 else _CN_DIGITS[tens]
+    return prefix + "十" + (_CN_DIGITS[ones] if ones else "")
+
+
+def _neutral_name(i):
+    return f"廢墟{_cn_number(i)}"
 
 
 def axial_to_pixel(q, r, size):
@@ -103,12 +112,14 @@ def generate_layout():
             })
 
     remaining = [c for c in cells if c not in assigned]
-    remaining.sort(key=lambda c: (_axial_distance(origin, c), _angle_of(c)))
+    remaining.sort(
+        key=lambda c: (min(_axial_distance(c, a) for a in assigned), _angle_of(c))
+    )
 
-    for name, c in zip(NEUTRAL_NAMES, remaining[:20]):
+    for i, c in enumerate(remaining, start=1):
         tiles.append({
             "q": c[0], "r": c[1],
-            "tile_type": "neutral", "name": name, "country_index": None,
+            "tile_type": "neutral", "name": _neutral_name(i), "country_index": None,
         })
 
     return tiles

@@ -29,7 +29,9 @@
         radial-gradient(circle at 90% 10%, rgba(120, 60, 160, 0.15), transparent 45%),
         var(--bg);
       min-height: 100vh;
+      transition: max-width 0.15s;
     }
+    body.wide { max-width: 1400px; }
 
     h1 {
       font-size: 28px;
@@ -122,7 +124,7 @@
     .country p { margin: 0; font-size: 13px; color: var(--text-dim); }
   </style>
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
   <nav class="topbar">
     <h1 style="margin:0; font-size:18px; letter-spacing:2px;">諸神的黃昏</h1>
     <div class="links">

@@ -36,9 +36,11 @@ CREATE TABLE IF NOT EXISTS characters (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER UNIQUE NOT NULL,
     country_id INTEGER NOT NULL,
+    current_tile_id INTEGER,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (country_id) REFERENCES countries(id)
+    FOREIGN KEY (country_id) REFERENCES countries(id),
+    FOREIGN KEY (current_tile_id) REFERENCES map_tiles(id)
 );
 
 CREATE TABLE IF NOT EXISTS map_tiles (

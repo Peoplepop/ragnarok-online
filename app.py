@@ -27,11 +27,11 @@ ACTION_LABELS = {
 
 HEX_SIZE = 42
 ELEMENT_COLORS = {
-    "金": "#cbbf8c",
+    "金": "#f0c419",
     "木": "#4c8c5c",
     "水": "#3b7dc4",
     "火": "#c0453f",
-    "土": "#a97c50",
+    "土": "#8b5a2b",
 }
 NEUTRAL_TILE_COLOR = "#5a5a5a"
 
@@ -255,9 +255,14 @@ def character_create():
         flash("請選擇一個有效的國家")
         return redirect(url_for("character_create"))
 
+    fortress = db.execute(
+        "SELECT id FROM map_tiles WHERE country_id = ? AND tile_type = 'fortress'",
+        (country["id"],),
+    ).fetchone()
+
     db.execute(
-        "INSERT INTO characters (user_id, country_id) VALUES (?, ?)",
-        (session["user_id"], country["id"]),
+        "INSERT INTO characters (user_id, country_id, current_tile_id) VALUES (?, ?, ?)",
+        (session["user_id"], country["id"], fortress["id"] if fortress else None),
     )
     log_activity(
         db, session["user_id"], session["username"], "character_create",
@@ -275,15 +280,16 @@ def character_create():
 def game():
     db = get_db()
     character = db.execute(
-        """SELECT characters.id AS character_id, countries.*
+        """SELECT characters.id AS character_id, characters.current_tile_id, countries.*
            FROM characters JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
         (session["user_id"],),
     ).fetchone()
 
     tiles = db.execute(
-        """SELECT map_tiles.q, map_tiles.r, map_tiles.tile_type, map_tiles.name,
-                  map_tiles.country_id, countries.element, countries.name AS country_name
+        """SELECT map_tiles.id AS tile_id, map_tiles.q, map_tiles.r, map_tiles.tile_type,
+                  map_tiles.name, map_tiles.country_id,
+                  countries.element, countries.name AS country_name
            FROM map_tiles LEFT JOIN countries ON countries.id = map_tiles.country_id"""
     ).fetchall()
     db.close()
@@ -305,6 +311,7 @@ def game():
             "name": t["name"],
             "country_name": t["country_name"],
             "is_own_country": t["country_id"] == character["id"] if t["country_id"] else False,
+            "is_player_here": t["tile_id"] == character["current_tile_id"],
         })
 
     padding = HEX_SIZE

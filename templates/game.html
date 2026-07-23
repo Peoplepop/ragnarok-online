@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ character.name }} - 諸神的黃昏{% endblock %}
+{% block body_class %}wide{% endblock %}
 
 {% block content %}
   <div class="panel" style="margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
@@ -19,7 +20,7 @@
   </div>
 
   <div class="panel" style="padding:0; overflow:auto;">
-    <svg viewBox="{{ view_box }}" style="width:100%; min-width:900px; height:auto; display:block;">
+    <svg viewBox="{{ view_box }}" style="width:100%; height:auto; display:block;">
       {% for h in hexes %}
       <g>
         <polygon
@@ -37,6 +38,13 @@
           font-weight="{{ '700' if h.tile_type == 'fortress' else '400' }}"
           fill="{{ '#1a1408' if h.tile_type != 'neutral' else 'var(--text-dim)' }}"
         >{{ h.name }}</text>
+        {% if h.is_player_here %}
+        <circle cx="{{ h.cx }}" cy="{{ h.cy - 18 }}" r="9" fill="none" stroke="#ffffff" stroke-width="2.5">
+          <animate attributeName="r" values="8;16;8" dur="1.6s" repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0.9;0;0.9" dur="1.6s" repeatCount="indefinite" />
+        </circle>
+        <circle cx="{{ h.cx }}" cy="{{ h.cy - 18 }}" r="5" fill="#ffffff" stroke="#1a1408" stroke-width="1.5" />
+        {% endif %}
       </g>
       {% endfor %}
     </svg>
@@ -46,5 +54,6 @@
     <span>🔶 粗金框 = 國家要塞</span>
     <span>▫️ 虛線灰框 = 待佔領城鎮</span>
     <span>✨ 金色外框 = 我的國家領地</span>
+    <span>⚪ 閃爍白點 = 你目前所在位置</span>
   </div>
 {% endblock %}
