@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}管理後台 - 諸神的黃昏{% endblock %}
+
+{% block content %}
+  <h2 style="color: var(--gold-bright); font-size: 18px; margin-top:0;">國家管理</h2>
+  <p class="hint" style="margin-top:-8px; margin-bottom:20px;">調整各國名稱、屬性介紹與六圍數值加成</p>
+
+  {% for c in countries %}
+  <div class="panel" style="margin-bottom: 18px;">
+    <form method="post" action="{{ url_for('admin_update_country', country_id=c.id) }}">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label>國家名稱</label>
+          <input type="text" name="name" value="{{ c.name }}" required>
+        </div>
+        <div>
+          <label>主屬性</label>
+          <input type="text" name="element" value="{{ c.element }}" required>
+        </div>
+      </div>
+
+      <label>介紹文字</label>
+      <input type="text" name="description" value="{{ c.description }}">
+
+      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+        <div>
+          <label>HP 加成</label>
+          <input type="text" inputmode="numeric" name="hp_bonus" value="{{ c.hp_bonus }}">
+        </div>
+        <div>
+          <label>MP 加成</label>
+          <input type="text" inputmode="numeric" name="mp_bonus" value="{{ c.mp_bonus }}">
+        </div>
+        <div>
+          <label>力量加成</label>
+          <input type="text" inputmode="numeric" name="str_bonus" value="{{ c.str_bonus }}">
+        </div>
+        <div>
+          <label>防禦加成</label>
+          <input type="text" inputmode="numeric" name="def_bonus" value="{{ c.def_bonus }}">
+        </div>
+        <div>
+          <label>敏捷加成</label>
+          <input type="text" inputmode="numeric" name="agi_bonus" value="{{ c.agi_bonus }}">
+        </div>
+        <div>
+          <label>幸運加成</label>
+          <input type="text" inputmode="numeric" name="luk_bonus" value="{{ c.luk_bonus }}">
+        </div>
+      </div>
+
+      <button type="submit">儲存「{{ c.name }}」</button>
+    </form>
+  </div>
+  {% endfor %}
+{% endblock %}

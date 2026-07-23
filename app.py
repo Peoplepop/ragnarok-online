@@ -5,24 +5,17 @@ from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from db import get_db, init_db
+from db import get_db, init_db, seed_defaults
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-only-secret-change-me")
 
-COUNTRIES = [
-    {"name": "百鍊流金國", "element": "金", "desc": "初始幸運值較高，閃避與命中俱佳"},
-    {"name": "翡翠靈木國", "element": "木", "desc": "生生不息之地"},
-    {"name": "蔚藍千泉國", "element": "水", "desc": "以柔克剛之邦"},
-    {"name": "紅蓮業火國", "element": "火", "desc": "烈焰焚天之國"},
-    {"name": "萬物母育國", "element": "土", "desc": "厚德載物之土"},
-]
-
 MIN_USERNAME_LEN = 3
 MIN_PASSWORD_LEN = 6
+STAT_FIELDS = ["hp_bonus", "mp_bonus", "str_bonus", "def_bonus", "agi_bonus", "luk_bonus"]
 
-if not os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), "game.db")):
-    init_db()
+init_db()
+seed_defaults()
 
 
 def login_required(view):
@@ -35,9 +28,25 @@ def login_required(view):
     return wrapped
 
 
+def admin_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not session.get("user_id"):
+            flash("請先登入")
+            return redirect(url_for("login"))
+        if not session.get("is_admin"):
+            flash("沒有權限")
+            return redirect(url_for("index"))
+        return view(*args, **kwargs)
+    return wrapped
+
+
 @app.route("/")
 def index():
-    return render_template("index.html", countries=COUNTRIES)
+    db = get_db()
+    countries = db.execute("SELECT * FROM countries ORDER BY id").fetchall()
+    db.close()
+    return render_template("index.html", countries=countries)
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -94,6 +103,7 @@ def login():
 
     session["user_id"] = user["id"]
     session["username"] = user["username"]
+    session["is_admin"] = bool(user["is_admin"])
     flash(f"歡迎回來，{user['username']}")
     return redirect(url_for("index"))
 
@@ -102,6 +112,61 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("index"))
+
+
+@app.route("/admin")
+@admin_required
+def admin():
+    db = get_db()
+    countries = db.execute("SELECT * FROM countries ORDER BY id").fetchall()
+    db.close()
+    return render_template("admin.html", countries=countries)
+
+
+@app.route("/admin/countries/<int:country_id>", methods=["POST"])
+@admin_required
+def admin_update_country(country_id):
+    name = request.form.get("name", "").strip()
+    element = request.form.get("element", "").strip()
+    description = request.form.get("description", "").strip()
+
+    if not name or not element:
+        flash("國家名稱與屬性不可以是空的")
+        return redirect(url_for("admin"))
+
+    bonuses = {}
+    for field in STAT_FIELDS:
+        raw = request.form.get(field, "0").strip()
+        try:
+            bonuses[field] = int(raw)
+        except ValueError:
+            flash(f"{field} 必須是整數")
+            return redirect(url_for("admin"))
+
+    db = get_db()
+    try:
+        db.execute(
+            """UPDATE countries SET
+                 name = ?, element = ?, description = ?,
+                 hp_bonus = ?, mp_bonus = ?, str_bonus = ?,
+                 def_bonus = ?, agi_bonus = ?, luk_bonus = ?
+               WHERE id = ?""",
+            (
+                name, element, description,
+                bonuses["hp_bonus"], bonuses["mp_bonus"], bonuses["str_bonus"],
+                bonuses["def_bonus"], bonuses["agi_bonus"], bonuses["luk_bonus"],
+                country_id,
+            ),
+        )
+        db.commit()
+    except sqlite3.IntegrityError:
+        flash("這個國家名稱已經被使用了")
+        db.close()
+        return redirect(url_for("admin"))
+    db.close()
+
+    flash(f"已更新「{name}」")
+    return redirect(url_for("admin"))
 
 
 if __name__ == "__main__":
