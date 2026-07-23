@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>{% block title %}諸神的黃昏{% endblock %}</title>
+  <style>
+    :root {
+      --bg: #0b0a14;
+      --panel: #15131f;
+      --panel-2: #0f0e18;
+      --border: rgba(212, 175, 55, 0.25);
+      --gold: #d4af37;
+      --gold-bright: #f2d374;
+      --text: #e8e2d0;
+      --text-dim: #8a8474;
+      --danger: #e0555a;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: "Noto Serif TC", "Microsoft JhengHei", serif;
+      max-width: 780px;
+      margin: 48px auto;
+      padding: 0 20px;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 15% -10%, rgba(212, 175, 55, 0.12), transparent 40%),
+        radial-gradient(circle at 90% 10%, rgba(120, 60, 160, 0.15), transparent 45%),
+        var(--bg);
+      min-height: 100vh;
+    }
+
+    h1 {
+      font-size: 28px;
+      letter-spacing: 4px;
+      color: var(--gold-bright);
+      text-shadow: 0 0 12px rgba(212, 175, 55, 0.4);
+      margin-bottom: 4px;
+    }
+    .subtitle { color: var(--text-dim); margin-bottom: 20px; font-size: 14px; letter-spacing: 1px; }
+
+    nav.topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 14px;
+      margin-bottom: 24px;
+    }
+    nav.topbar .links a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 14px;
+      margin-left: 16px;
+      transition: color 0.15s;
+    }
+    nav.topbar .links a:hover { color: var(--gold-bright); }
+    nav.topbar .user { color: var(--gold); font-size: 14px; }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 28px;
+      box-shadow: 0 0 30px rgba(212, 175, 55, 0.06);
+    }
+
+    label { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
+    input[type=text], input[type=password] {
+      width: 100%;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      margin-bottom: 16px;
+      font-family: inherit;
+    }
+    input[type=text]:focus, input[type=password]:focus {
+      outline: none;
+      border-color: var(--gold);
+    }
+
+    button, .btn {
+      background: linear-gradient(135deg, var(--gold), #9c6b1f);
+      color: #1a1408;
+      font-weight: 700;
+      border: none;
+      padding: 10px 26px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      letter-spacing: 1px;
+      box-shadow: 0 0 14px rgba(212, 175, 55, 0.3);
+      transition: transform 0.15s, box-shadow 0.15s;
+      text-decoration: none;
+      display: inline-block;
+    }
+    button:hover, .btn:hover { box-shadow: 0 0 20px rgba(212, 175, 55, 0.5); transform: translateY(-1px); }
+
+    .flash {
+      background: rgba(224, 85, 90, 0.08);
+      color: var(--danger);
+      border: 1px solid rgba(224, 85, 90, 0.4);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-bottom: 16px;
+    }
+    .flash.success { color: var(--gold-bright); border-color: rgba(212, 175, 55, 0.4); background: rgba(212, 175, 55, 0.08); }
+
+    .hint { color: var(--text-dim); font-size: 13px; margin-top: 14px; }
+    .hint a { color: var(--gold); text-decoration: none; }
+    .hint a:hover { text-decoration: underline; }
+
+    .countries { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-top: 20px; }
+    .country { border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: var(--panel); }
+    .country .element { font-size: 13px; color: var(--gold); font-weight: 600; }
+    .country h3 { margin: 6px 0; font-size: 16px; color: var(--text); }
+    .country p { margin: 0; font-size: 13px; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <nav class="topbar">
+    <h1 style="margin:0; font-size:18px; letter-spacing:2px;">諸神的黃昏</h1>
+    <div class="links">
+      {% if session.get('username') %}
+        <span class="user">{{ session['username'] }}</span>
+        <a href="{{ url_for('logout') }}">登出</a>
+      {% else %}
+        <a href="{{ url_for('login') }}">登入</a>
+        <a href="{{ url_for('register') }}">註冊</a>
+      {% endif %}
+    </div>
+  </nav>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      {% for m in messages %}
+      <div class="flash">{{ m }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+</body>
+</html>

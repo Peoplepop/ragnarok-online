@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}登入 - 諸神的黃昏{% endblock %}
+
+{% block content %}
+  <div class="panel" style="max-width: 360px; margin: 0 auto;">
+    <h2 style="margin-top:0; color: var(--gold-bright); font-size: 18px;">登入</h2>
+    <form method="post" action="{{ url_for('login') }}">
+      <label for="username">帳號</label>
+      <input type="text" id="username" name="username" required autofocus>
+
+      <label for="password">密碼</label>
+      <input type="password" id="password" name="password" required>
+
+      <button type="submit">登入</button>
+    </form>
+    <p class="hint">還沒有帳號？<a href="{{ url_for('register') }}">前往註冊</a></p>
+  </div>
+{% endblock %}
