@@ -3,6 +3,8 @@ import sqlite3
 
 from werkzeug.security import generate_password_hash
 
+from map_layout import generate_layout
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "game.db")
 SCHEMA_PATH = os.path.join(BASE_DIR, "schema.sql")
@@ -104,5 +106,25 @@ def seed_defaults():
             (DEFAULT_ADMIN_USERNAME, generate_password_hash(DEFAULT_ADMIN_PASSWORD)),
         )
 
+    _seed_map_tiles(conn)
+
     conn.commit()
     conn.close()
+
+
+def _seed_map_tiles(conn):
+    if conn.execute("SELECT COUNT(*) AS c FROM map_tiles").fetchone()["c"] > 0:
+        return
+
+    country_ids = [
+        row["id"] for row in conn.execute("SELECT id FROM countries ORDER BY id")
+    ]
+
+    for tile in generate_layout():
+        country_id = (
+            country_ids[tile["country_index"]] if tile["country_index"] is not None else None
+        )
+        conn.execute(
+            "INSERT INTO map_tiles (q, r, tile_type, name, country_id) VALUES (?, ?, ?, ?, ?)",
+            (tile["q"], tile["r"], tile["tile_type"], tile["name"], country_id),
+        )

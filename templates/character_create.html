@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}選擇國家 - 諸神的黃昏{% endblock %}
+
+{% block content %}
+  <h2 style="color: var(--gold-bright); font-size:20px; margin-top:0;">選擇你的國家</h2>
+  <p class="hint" style="margin-top:-8px; margin-bottom:22px;">
+    請謹慎選擇——一旦決定加入，將無法再更換國家。
+  </p>
+
+  <div class="countries">
+    {% for c in countries %}
+    <form method="post" class="country" style="display:flex; flex-direction:column; gap:10px;">
+      <input type="hidden" name="country_id" value="{{ c.id }}">
+      <div class="element">屬性：{{ c.element }}</div>
+      <h3>{{ c.name }}</h3>
+      <p>{{ c.description }}</p>
+      <button type="submit">加入{{ c.name }}</button>
+    </form>
+    {% endfor %}
+  </div>
+{% endblock %}

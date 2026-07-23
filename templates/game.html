@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ character.name }} - 諸神的黃昏{% endblock %}
+
+{% block content %}
+  <div class="panel" style="margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+    <div>
+      <div class="element" style="font-size:13px;">屬性：{{ character.element }}</div>
+      <h2 style="margin:4px 0; color:var(--gold-bright);">{{ character.name }}</h2>
+      <p style="margin:0; color:var(--text-dim); font-size:13px;">{{ character.description }}</p>
+    </div>
+    <div style="display:flex; gap:14px; font-size:13px; color:var(--text-dim);">
+      <span>HP+{{ character.hp_bonus }}</span>
+      <span>MP+{{ character.mp_bonus }}</span>
+      <span>力量+{{ character.str_bonus }}</span>
+      <span>防禦+{{ character.def_bonus }}</span>
+      <span>敏捷+{{ character.agi_bonus }}</span>
+      <span>幸運+{{ character.luk_bonus }}</span>
+    </div>
+  </div>
+
+  <div class="panel" style="padding:0; overflow:auto;">
+    <svg viewBox="{{ view_box }}" style="width:100%; min-width:900px; height:auto; display:block;">
+      {% for h in hexes %}
+      <g>
+        <polygon
+          points="{{ h.points }}"
+          fill="{{ h.color }}"
+          fill-opacity="{{ '0.55' if h.tile_type == 'town' else ('0.30' if h.tile_type == 'neutral' else '0.85') }}"
+          stroke="{{ 'var(--gold-bright)' if h.is_own_country else 'rgba(232,226,208,0.35)' }}"
+          stroke-width="{{ '3' if h.tile_type == 'fortress' else '1.2' }}"
+          stroke-dasharray="{{ '4,3' if h.tile_type == 'neutral' else 'none' }}"
+        />
+        <text
+          x="{{ h.cx }}" y="{{ h.cy }}"
+          text-anchor="middle" dominant-baseline="middle"
+          font-size="{{ '13' if h.tile_type == 'fortress' else '11' }}"
+          font-weight="{{ '700' if h.tile_type == 'fortress' else '400' }}"
+          fill="{{ '#1a1408' if h.tile_type != 'neutral' else 'var(--text-dim)' }}"
+        >{{ h.name }}</text>
+      </g>
+      {% endfor %}
+    </svg>
+  </div>
+
+  <div style="display:flex; gap:18px; margin-top:14px; font-size:12px; color:var(--text-dim); flex-wrap:wrap;">
+    <span>🔶 粗金框 = 國家要塞</span>
+    <span>▫️ 虛線灰框 = 待佔領城鎮</span>
+    <span>✨ 金色外框 = 我的國家領地</span>
+  </div>
+{% endblock %}

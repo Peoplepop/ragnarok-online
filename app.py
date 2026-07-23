@@ -7,6 +7,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from db import get_db, init_db, seed_defaults, log_activity
+from map_layout import axial_to_pixel, hex_corners
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-only-secret-change-me")
@@ -21,7 +22,18 @@ ACTION_LABELS = {
     "login_failed": "登入失敗",
     "logout": "登出",
     "auto_logout": "閒置自動登出",
+    "character_create": "建立角色",
 }
+
+HEX_SIZE = 42
+ELEMENT_COLORS = {
+    "金": "#cbbf8c",
+    "木": "#4c8c5c",
+    "水": "#3b7dc4",
+    "火": "#c0453f",
+    "土": "#a97c50",
+}
+NEUTRAL_TILE_COLOR = "#5a5a5a"
 
 init_db()
 seed_defaults()
@@ -69,6 +81,23 @@ def admin_required(view):
     return wrapped
 
 
+def character_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not session.get("user_id"):
+            flash("請先登入")
+            return redirect(url_for("login"))
+        db = get_db()
+        character = db.execute(
+            "SELECT id FROM characters WHERE user_id = ?", (session["user_id"],)
+        ).fetchone()
+        db.close()
+        if character is None:
+            return redirect(url_for("character_create"))
+        return view(*args, **kwargs)
+    return wrapped
+
+
 @app.before_request
 def _session_activity():
     if request.endpoint == "static":
@@ -99,6 +128,16 @@ def _session_activity():
 
 @app.route("/")
 def index():
+    if session.get("user_id"):
+        db = get_db()
+        character = db.execute(
+            "SELECT id FROM characters WHERE user_id = ?", (session["user_id"],)
+        ).fetchone()
+        db.close()
+        if character is None:
+            return redirect(url_for("character_create"))
+        return redirect(url_for("game"))
+
     db = get_db()
     countries = db.execute("SELECT * FROM countries ORDER BY id").fetchall()
     db.close()
@@ -190,6 +229,94 @@ def logout():
         db.close()
     session.clear()
     return redirect(url_for("index"))
+
+
+@app.route("/character/create", methods=["GET", "POST"])
+@login_required
+def character_create():
+    db = get_db()
+    existing = db.execute(
+        "SELECT id FROM characters WHERE user_id = ?", (session["user_id"],)
+    ).fetchone()
+    if existing:
+        db.close()
+        return redirect(url_for("game"))
+
+    if request.method == "GET":
+        countries = db.execute("SELECT * FROM countries ORDER BY id").fetchall()
+        db.close()
+        return render_template("character_create.html", countries=countries)
+
+    country = db.execute(
+        "SELECT * FROM countries WHERE id = ?", (request.form.get("country_id", ""),)
+    ).fetchone()
+    if country is None:
+        db.close()
+        flash("請選擇一個有效的國家")
+        return redirect(url_for("character_create"))
+
+    db.execute(
+        "INSERT INTO characters (user_id, country_id) VALUES (?, ?)",
+        (session["user_id"], country["id"]),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "character_create",
+        detail=country["name"], ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    flash(f"歡迎來到{country['name']}！")
+    return redirect(url_for("game"))
+
+
+@app.route("/game")
+@character_required
+def game():
+    db = get_db()
+    character = db.execute(
+        """SELECT characters.id AS character_id, countries.*
+           FROM characters JOIN countries ON countries.id = characters.country_id
+           WHERE characters.user_id = ?""",
+        (session["user_id"],),
+    ).fetchone()
+
+    tiles = db.execute(
+        """SELECT map_tiles.q, map_tiles.r, map_tiles.tile_type, map_tiles.name,
+                  map_tiles.country_id, countries.element, countries.name AS country_name
+           FROM map_tiles LEFT JOIN countries ON countries.id = map_tiles.country_id"""
+    ).fetchall()
+    db.close()
+
+    hexes = []
+    xs, ys = [], []
+    for t in tiles:
+        cx, cy = axial_to_pixel(t["q"], t["r"], HEX_SIZE)
+        color = ELEMENT_COLORS.get(t["element"], NEUTRAL_TILE_COLOR)
+        points = " ".join(f"{px:.1f},{py:.1f}" for px, py in hex_corners(cx, cy, HEX_SIZE))
+        xs += [cx - HEX_SIZE, cx + HEX_SIZE]
+        ys += [cy - HEX_SIZE, cy + HEX_SIZE]
+        hexes.append({
+            "points": points,
+            "cx": cx,
+            "cy": cy,
+            "color": color,
+            "tile_type": t["tile_type"],
+            "name": t["name"],
+            "country_name": t["country_name"],
+            "is_own_country": t["country_id"] == character["id"] if t["country_id"] else False,
+        })
+
+    padding = HEX_SIZE
+    min_x, max_x = min(xs) - padding, max(xs) + padding
+    min_y, max_y = min(ys) - padding, max(ys) + padding
+
+    return render_template(
+        "game.html",
+        character=character,
+        hexes=hexes,
+        view_box=f"{min_x:.1f} {min_y:.1f} {max_x - min_x:.1f} {max_y - min_y:.1f}",
+    )
 
 
 @app.route("/admin")

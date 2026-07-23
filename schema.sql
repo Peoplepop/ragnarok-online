@@ -31,3 +31,22 @@ CREATE TABLE IF NOT EXISTS countries (
     agi_bonus INTEGER NOT NULL DEFAULT 0,
     luk_bonus INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS characters (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER UNIQUE NOT NULL,
+    country_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (country_id) REFERENCES countries(id)
+);
+
+CREATE TABLE IF NOT EXISTS map_tiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    q INTEGER NOT NULL,
+    r INTEGER NOT NULL,
+    tile_type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    country_id INTEGER,
+    FOREIGN KEY (country_id) REFERENCES countries(id)
+);
