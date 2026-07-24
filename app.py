@@ -36,6 +36,25 @@ ELEMENT_COLORS = {
 NEUTRAL_TILE_COLOR = "#5a5a5a"
 MOUNTAIN_TILE_COLOR = "#3e3830"
 
+# Every character starts from the same base stats; country bonuses are a
+# percentage applied on top (countries.*_bonus stores the percent, e.g. 1 = 1%).
+BASE_STATS = {
+    "hp": ("hp_bonus", 500),
+    "mp": ("mp_bonus", 500),
+    "str": ("str_bonus", 30),
+    "def": ("def_bonus", 30),
+    "agi": ("agi_bonus", 30),
+    "luk": ("luk_bonus", 30),
+}
+
+
+def compute_final_stats(country):
+    return {
+        key: round(base * (1 + country[bonus_field] / 100))
+        for key, (bonus_field, base) in BASE_STATS.items()
+    }
+
+
 init_db()
 seed_defaults()
 
@@ -295,6 +314,8 @@ def game():
     ).fetchall()
     db.close()
 
+    stats = compute_final_stats(character)
+
     hexes = []
     xs, ys = [], []
     for t in tiles:
@@ -325,6 +346,7 @@ def game():
     return render_template(
         "game.html",
         character=character,
+        stats=stats,
         hexes=hexes,
         view_box=f"{min_x:.1f} {min_y:.1f} {max_x - min_x:.1f} {max_y - min_y:.1f}",
     )

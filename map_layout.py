@@ -37,9 +37,40 @@ def _neutral_name(i):
 
 # Manual overrides layered on top of the procedural layout below, per the
 # user's explicit map design calls (not derivable from the generation rules).
-_MOUNTAIN_CELLS = {(2, -1), (0, 0)}  # was 廢墟九 / 廢墟十九 -> impassable, unclaimable
-_EARTH_COUNTRY_INDEX = 4  # 萬物母育國
-_EARTH_SHIFT = (-1, 0)  # whole territory moves one step 左上 (up-left)
+# Axial shift directions (dq, dr) as they read on screen, per axial_to_pixel:
+#   (0,-1) up, (0,1) down, (-1,0) up-left, (1,0) down-right,
+#   (1,-1) up-right, (-1,1) down-left.
+_MOUNTAIN_CELLS = {(2, -1), (0, 0), (0, 1)}  # was 廢墟九 / 十九 / 十四
+_TERRITORY_SHIFTS = [
+    (4, (-1, 0)),  # 萬物母育國 moves one step 左上 (up-left), onto 廢墟十五/十六
+    (0, (0, 1)),   # 百鍊流金國 moves one step 下 (down)
+]
+
+
+def _shift_country_territory(tiles, country_index, shift):
+    dq, dr = shift
+    moving = [t for t in tiles if t["country_index"] == country_index]
+    old_cells = {(t["q"], t["r"]) for t in moving}
+    for t in moving:
+        t["q"] += dq
+        t["r"] += dr
+    new_cells = {(t["q"], t["r"]) for t in moving}
+
+    reclaimed = sorted(new_cells - old_cells)  # cells taken over from former neutral ruins
+    vacated = sorted(old_cells - new_cells)  # cells the country left behind
+
+    freed_names = [
+        t["name"] for c in reclaimed
+        for t in tiles
+        if (t["q"], t["r"]) == c and t["country_index"] != country_index
+    ]
+
+    tiles[:] = [
+        t for t in tiles
+        if (t["q"], t["r"]) not in reclaimed or t["country_index"] == country_index
+    ]
+    for (q, r), name in zip(vacated, freed_names):
+        tiles.append({"q": q, "r": r, "tile_type": "neutral", "name": name, "country_index": None})
 
 
 def _apply_manual_overrides(tiles):
@@ -49,24 +80,8 @@ def _apply_manual_overrides(tiles):
             tile["name"] = "山嶺"
             tile["country_index"] = None
 
-    dq, dr = _EARTH_SHIFT
-    earth_tiles = [t for t in tiles if t["country_index"] == _EARTH_COUNTRY_INDEX]
-    old_cells = {(t["q"], t["r"]) for t in earth_tiles}
-    for t in earth_tiles:
-        t["q"] += dq
-        t["r"] += dr
-    new_cells = {(t["q"], t["r"]) for t in earth_tiles}
-
-    reclaimed = new_cells - old_cells  # cells taken over from former neutral ruins
-    vacated = sorted(old_cells - new_cells)  # cells the country left behind
-    tiles[:] = [
-        t for t in tiles
-        if (t["q"], t["r"]) not in reclaimed or t["country_index"] == _EARTH_COUNTRY_INDEX
-    ]
-
-    freed_names = ["廢墟十五", "廢墟十六"]  # reuse the numbers the reclaimed ruins vacate
-    for (q, r), name in zip(vacated, freed_names):
-        tiles.append({"q": q, "r": r, "tile_type": "neutral", "name": name, "country_index": None})
+    for country_index, shift in _TERRITORY_SHIFTS:
+        _shift_country_territory(tiles, country_index, shift)
 
 
 def axial_to_pixel(q, r, size):

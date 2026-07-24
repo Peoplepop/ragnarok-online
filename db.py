@@ -16,27 +16,27 @@ DEFAULT_COUNTRIES = [
     {
         "name": "百鍊流金國", "element": "金",
         "description": "初始幸運值較高，閃避與命中俱佳",
-        "hp_bonus": 0, "mp_bonus": 0, "str_bonus": 0, "def_bonus": 0, "agi_bonus": 0, "luk_bonus": 15,
+        "hp_bonus": 0, "mp_bonus": 0, "str_bonus": 0, "def_bonus": 0, "agi_bonus": 0, "luk_bonus": 1,
     },
     {
         "name": "翡翠靈木國", "element": "木",
         "description": "防禦與生命力驚人，減傷效果顯著",
-        "hp_bonus": 20, "mp_bonus": 0, "str_bonus": 0, "def_bonus": 15, "agi_bonus": 0, "luk_bonus": 0,
+        "hp_bonus": 1, "mp_bonus": 0, "str_bonus": 0, "def_bonus": 1, "agi_bonus": 0, "luk_bonus": 0,
     },
     {
         "name": "蔚藍千泉國", "element": "水",
         "description": "身法飄逸，擅長先發制人與連續攻擊",
-        "hp_bonus": 0, "mp_bonus": 0, "str_bonus": 0, "def_bonus": 0, "agi_bonus": 15, "luk_bonus": 0,
+        "hp_bonus": 0, "mp_bonus": 0, "str_bonus": 0, "def_bonus": 0, "agi_bonus": 1, "luk_bonus": 0,
     },
     {
         "name": "紅蓮業火國", "element": "火",
         "description": "烈焰焚天，魔力與傷害兼備",
-        "hp_bonus": 0, "mp_bonus": 10, "str_bonus": 15, "def_bonus": 0, "agi_bonus": 0, "luk_bonus": 0,
+        "hp_bonus": 0, "mp_bonus": 1, "str_bonus": 1, "def_bonus": 0, "agi_bonus": 0, "luk_bonus": 0,
     },
     {
         "name": "萬物母育國", "element": "土",
         "description": "厚德載物，六圍均衡發展",
-        "hp_bonus": 5, "mp_bonus": 5, "str_bonus": 5, "def_bonus": 5, "agi_bonus": 5, "luk_bonus": 5,
+        "hp_bonus": 1, "mp_bonus": 1, "str_bonus": 1, "def_bonus": 1, "agi_bonus": 1, "luk_bonus": 1,
     },
 ]
 

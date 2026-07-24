@@ -10,12 +10,12 @@
       <p style="margin:0; color:var(--text-dim); font-size:13px;">{{ character.description }}</p>
     </div>
     <div style="display:flex; gap:14px; font-size:13px; color:var(--text-dim);">
-      <span>HP+{{ character.hp_bonus }}</span>
-      <span>MP+{{ character.mp_bonus }}</span>
-      <span>力量+{{ character.str_bonus }}</span>
-      <span>防禦+{{ character.def_bonus }}</span>
-      <span>敏捷+{{ character.agi_bonus }}</span>
-      <span>幸運+{{ character.luk_bonus }}</span>
+      <span>HP {{ stats.hp }}{% if character.hp_bonus %} (+{{ character.hp_bonus }}%){% endif %}</span>
+      <span>MP {{ stats.mp }}{% if character.mp_bonus %} (+{{ character.mp_bonus }}%){% endif %}</span>
+      <span>力量 {{ stats.str }}{% if character.str_bonus %} (+{{ character.str_bonus }}%){% endif %}</span>
+      <span>防禦 {{ stats.def }}{% if character.def_bonus %} (+{{ character.def_bonus }}%){% endif %}</span>
+      <span>敏捷 {{ stats.agi }}{% if character.agi_bonus %} (+{{ character.agi_bonus }}%){% endif %}</span>
+      <span>幸運 {{ stats.luk }}{% if character.luk_bonus %} (+{{ character.luk_bonus }}%){% endif %}</span>
     </div>
   </div>
 
