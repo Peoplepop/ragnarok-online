@@ -61,6 +61,31 @@ DEFAULT_ITEMS = [
     {"shop_type": "accessory", "name": "金戒指", "price": 800, "stat": "luk", "stat_bonus": 20},
 ]
 
+# Monster stats are tuned to be roughly fair for a character right at the
+# start of that ground's level range (base stats + LEVEL_STAT_GROWTH from
+# app.py, before any gear) -- they get easier as you outlevel the tier.
+DEFAULT_MONSTERS = [
+    {"tier": "beginner", "name": "潑皮野狼", "is_boss": 0, "hp": 70, "atk": 14, "def": 5, "agi": 10, "currency_reward": 15},
+    {"tier": "beginner", "name": "荒野土狼", "is_boss": 0, "hp": 85, "atk": 16, "def": 6, "agi": 12, "currency_reward": 18},
+    {"tier": "beginner", "name": "銹刃盜賊", "is_boss": 0, "hp": 75, "atk": 15, "def": 7, "agi": 14, "currency_reward": 20},
+    {"tier": "beginner", "name": "荒原狼王", "is_boss": 1, "hp": 300, "atk": 30, "def": 12, "agi": 20, "currency_reward": 100},
+
+    {"tier": "intermediate", "name": "赤鱗蜥蜴", "is_boss": 0, "hp": 160, "atk": 26, "def": 13, "agi": 18, "currency_reward": 35},
+    {"tier": "intermediate", "name": "岩甲蟹", "is_boss": 0, "hp": 200, "atk": 24, "def": 18, "agi": 14, "currency_reward": 38},
+    {"tier": "intermediate", "name": "黑霧遊魂", "is_boss": 0, "hp": 150, "atk": 30, "def": 10, "agi": 26, "currency_reward": 36},
+    {"tier": "intermediate", "name": "熔岩巨蠍王", "is_boss": 1, "hp": 650, "atk": 55, "def": 25, "agi": 32, "currency_reward": 220},
+
+    {"tier": "advanced", "name": "鋼骨巨魔", "is_boss": 0, "hp": 320, "atk": 50, "def": 28, "agi": 26, "currency_reward": 70},
+    {"tier": "advanced", "name": "幽冥劍靈", "is_boss": 0, "hp": 280, "atk": 58, "def": 22, "agi": 38, "currency_reward": 75},
+    {"tier": "advanced", "name": "血眸狂虎", "is_boss": 0, "hp": 350, "atk": 52, "def": 25, "agi": 34, "currency_reward": 72},
+    {"tier": "advanced", "name": "深淵魔狼王", "is_boss": 1, "hp": 1100, "atk": 90, "def": 45, "agi": 45, "currency_reward": 450},
+
+    {"tier": "ultimate", "name": "天穹巨龍裔", "is_boss": 0, "hp": 600, "atk": 85, "def": 40, "agi": 42, "currency_reward": 150},
+    {"tier": "ultimate", "name": "虛空吞噬者", "is_boss": 0, "hp": 550, "atk": 95, "def": 35, "agi": 50, "currency_reward": 160},
+    {"tier": "ultimate", "name": "混沌石像鬼", "is_boss": 0, "hp": 700, "atk": 75, "def": 50, "agi": 35, "currency_reward": 155},
+    {"tier": "ultimate", "name": "終焉魔神", "is_boss": 1, "hp": 2000, "atk": 150, "def": 70, "agi": 60, "currency_reward": 900},
+]
+
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -102,12 +127,31 @@ def _ensure_character_columns(conn):
         conn.execute("ALTER TABLE characters ADD COLUMN equipped_armor_id INTEGER")
     if "equipped_accessory_id" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN equipped_accessory_id INTEGER")
+    if "current_hp" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN current_hp INTEGER")
+    if "current_mp" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN current_mp INTEGER")
+    if "name" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN name TEXT")
+        conn.execute(
+            """UPDATE characters SET name = (
+                   SELECT username FROM users WHERE users.id = characters.user_id
+               ) WHERE name IS NULL"""
+        )
+        try:
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_characters_name ON characters(name)")
+        except sqlite3.IntegrityError:
+            pass
 
 
 def _ensure_game_settings_columns(conn):
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(game_settings)")]
     if "sell_back_percent" not in cols:
         conn.execute("ALTER TABLE game_settings ADD COLUMN sell_back_percent REAL NOT NULL DEFAULT 75")
+    if "boss_encounter_percent" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN boss_encounter_percent REAL NOT NULL DEFAULT 15")
+    if "boss_exp_multiplier" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN boss_exp_multiplier REAL NOT NULL DEFAULT 5")
 
 
 def init_db():
@@ -177,6 +221,21 @@ def seed_defaults():
                 """INSERT INTO items (shop_type, name, price, stat, stat_bonus)
                    VALUES (?, ?, ?, ?, ?)""",
                 (i["shop_type"], i["name"], i["price"], i["stat"], i["stat_bonus"]),
+            )
+
+    if conn.execute("SELECT COUNT(*) AS c FROM monsters").fetchone()["c"] == 0:
+        ground_ids = {
+            row["tier"]: row["id"]
+            for row in conn.execute("SELECT id, tier FROM hunting_grounds")
+        }
+        for m in DEFAULT_MONSTERS:
+            conn.execute(
+                """INSERT INTO monsters (hunting_ground_id, name, is_boss, hp, atk, def, agi, currency_reward)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    ground_ids[m["tier"]], m["name"], m["is_boss"],
+                    m["hp"], m["atk"], m["def"], m["agi"], m["currency_reward"],
+                ),
             )
 
     conn.commit()

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ monster.name }} 戰鬥 - 諸神的黃昏{% endblock %}
+
+{% block content %}
+  <div class="panel" style="margin-bottom:20px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+      <h2 style="margin:0; color:var(--gold-bright); font-size:18px;">
+        {{ ground.name }}
+        {% if monster.is_boss %}
+        <span style="color:var(--danger); font-size:13px; border:1px solid var(--danger); border-radius:6px; padding:2px 8px; margin-left:8px; vertical-align:middle;">首領</span>
+        {% endif %}
+      </h2>
+      <span style="font-size:13px; color:var(--text-dim);">遭遇了「{{ monster.name }}」</span>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:20px;">
+    <div id="battle-log" style="max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; font-size:13px;"></div>
+  </div>
+
+  <div class="panel" id="battle-result" style="margin-bottom:20px; display:none;">
+    {% if won %}
+      <h3 style="margin:0 0 8px; color:var(--gold-bright);">🎉 戰鬥勝利！</h3>
+      <p style="margin:0; font-size:13px; color:var(--text-dim);">
+        擊敗了「{{ monster.name }}」，獲得 {{ exp_gain }} 經驗值、{{ currency_gain }} 諸神幣
+        {% if leveled_up %}，升到 Lv.{{ new_level }}！{% endif %}
+      </p>
+    {% else %}
+      <h3 style="margin:0 0 8px; color:var(--danger);">💀 戰鬥失敗</h3>
+      <p style="margin:0; font-size:13px; color:var(--text-dim);">
+        被「{{ monster.name }}」擊敗了，沒有獲得任何獎勵
+        {% if player_hp <= 0 %}，HP 已耗盡，請回到要塞選擇「回復」{% endif %}
+      </p>
+    {% endif %}
+    <p style="margin:10px 0 0; font-size:13px; color:var(--text-dim);">你目前 HP {{ player_hp }}/{{ max_hp }}</p>
+  </div>
+
+  <a href="{{ url_for('game') }}" class="btn">← 返回主畫面</a>
+
+  <script>
+    (function () {
+      var log = {{ log | tojson }};
+      var container = document.getElementById("battle-log");
+      var result = document.getElementById("battle-result");
+      var i = 0;
+
+      function appendLine() {
+        if (i >= log.length) {
+          result.style.display = "";
+          return;
+        }
+        var line = document.createElement("div");
+        line.textContent = log[i];
+        line.style.color = "var(--text-dim)";
+        container.appendChild(line);
+        container.scrollTop = container.scrollHeight;
+        i += 1;
+        setTimeout(appendLine, 220);
+      }
+
+      appendLine();
+    })();
+  </script>
+{% endblock %}

@@ -149,7 +149,7 @@
     <h1 style="margin:0; font-size:18px; letter-spacing:2px;">諸神的黃昏</h1>
     <div class="links">
       {% if session.get('username') %}
-        <span class="user">{{ session['username'] }}</span>
+        <span class="user">{{ nav_display_name }}</span>
         {% if session.get('is_admin') %}
         <a href="{{ url_for('admin') }}">管理後台</a>
         {% endif %}

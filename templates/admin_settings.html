@@ -25,9 +25,18 @@
           <label>裝備回收比例 (%)</label>
           <input type="text" inputmode="decimal" name="sell_back_percent" value="{{ settings.sell_back_percent }}">
         </div>
+        <div>
+          <label>首領遭遇機率 (%)</label>
+          <input type="text" inputmode="decimal" name="boss_encounter_percent" value="{{ settings.boss_encounter_percent }}">
+        </div>
+        <div>
+          <label>首領經驗倍率</label>
+          <input type="text" inputmode="decimal" name="boss_exp_multiplier" value="{{ settings.boss_exp_multiplier }}">
+        </div>
       </div>
       <p class="hint" style="margin-bottom:16px;">
-        第 N 級所需經驗 = 基礎經驗值 ×（1 + 成長幅度%）^(N-1)，逐級複利成長；出售裝備可回收「原價 × 回收比例%」的諸神幣
+        第 N 級所需經驗 = 基礎經驗值 ×（1 + 成長幅度%）^(N-1)，逐級複利成長；出售裝備可回收「原價 × 回收比例%」的諸神幣；
+        每次打怪有「首領遭遇機率%」的機率遇到該場地的首領，擊敗首領可得「一般怪物經驗 × 首領經驗倍率」的經驗值
       </p>
       <button type="submit">儲存設定</button>
     </form>

@@ -6,7 +6,7 @@
 
   {% if session.get('username') %}
     <div class="panel">
-      <p>歡迎回來，<strong style="color: var(--gold-bright);">{{ session['username'] }}</strong>。</p>
+      <p>歡迎回來，<strong style="color: var(--gold-bright);">{{ nav_display_name }}</strong>。</p>
       <p class="hint">角色創建功能即將推出。</p>
     </div>
   {% endif %}

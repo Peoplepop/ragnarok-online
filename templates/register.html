@@ -14,6 +14,9 @@
       <label for="confirm">確認密碼</label>
       <input type="password" id="confirm" name="confirm" required minlength="6">
 
+      <label for="character_name">角色名稱（遊戲內顯示，不能跟帳號相同）</label>
+      <input type="text" id="character_name" name="character_name" required minlength="2" maxlength="20">
+
       <button type="submit">註冊</button>
     </form>
     <p class="hint">已經有帳號了嗎？<a href="{{ url_for('login') }}">前往登入</a></p>

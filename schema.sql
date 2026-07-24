@@ -98,3 +98,16 @@ CREATE TABLE IF NOT EXISTS inventory (
     FOREIGN KEY (character_id) REFERENCES characters(id),
     FOREIGN KEY (item_id) REFERENCES items(id)
 );
+
+CREATE TABLE IF NOT EXISTS monsters (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    hunting_ground_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    is_boss INTEGER NOT NULL DEFAULT 0,
+    hp INTEGER NOT NULL,
+    atk INTEGER NOT NULL,
+    def INTEGER NOT NULL,
+    agi INTEGER NOT NULL,
+    currency_reward INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (hunting_ground_id) REFERENCES hunting_grounds(id)
+);

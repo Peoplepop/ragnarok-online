@@ -1,4 +1,5 @@
 import os
+import random
 import sqlite3
 from datetime import datetime, timedelta
 from functools import wraps
@@ -14,6 +15,8 @@ app.secret_key = os.environ.get("SECRET_KEY", "dev-only-secret-change-me")
 
 MIN_USERNAME_LEN = 3
 MIN_PASSWORD_LEN = 6
+MIN_CHARACTER_NAME_LEN = 2
+MAX_CHARACTER_NAME_LEN = 20
 STAT_FIELDS = ["hp_bonus", "mp_bonus", "str_bonus", "def_bonus", "agi_bonus", "luk_bonus"]
 IDLE_THRESHOLD_MINUTES = 15
 ACTION_LABELS = {
@@ -29,6 +32,7 @@ ACTION_LABELS = {
     "shop_sell": "出售裝備",
     "equip": "裝備",
     "unequip": "卸下裝備",
+    "recover": "回復",
 }
 
 SHOP_TYPE_LABELS = {
@@ -73,16 +77,31 @@ BASE_STATS = {
     "luk": ("luk_bonus", 30),
 }
 
+# Flat stat growth per level above 1, so higher-level hunting grounds are
+# actually harder/beatable -- gear alone was the only source of growth before.
+LEVEL_STAT_GROWTH = {"hp": 5, "mp": 5, "str": 1, "def": 1, "agi": 1, "luk": 1}
 
-def compute_final_stats(country, equipped_items=()):
+
+def compute_final_stats(country, equipped_items=(), level=1):
     equip_bonus = {}
     for item in equipped_items:
         if item:
             equip_bonus[item["stat"]] = equip_bonus.get(item["stat"], 0) + item["stat_bonus"]
+    level_bonus = max(0, level - 1)
     return {
-        key: round(base * (1 + country[bonus_field] / 100)) + equip_bonus.get(key, 0)
+        key: round(base * (1 + country[bonus_field] / 100))
+        + equip_bonus.get(key, 0)
+        + LEVEL_STAT_GROWTH[key] * level_bonus
         for key, (bonus_field, base) in BASE_STATS.items()
     }
+
+
+def _current_hp_mp(character, stats):
+    """current_hp/current_mp of NULL means "untouched, full" -- battles and
+    /game/recover are the only things that ever write a concrete number."""
+    hp = character["current_hp"] if character["current_hp"] is not None else stats["hp"]
+    mp = character["current_mp"] if character["current_mp"] is not None else stats["mp"]
+    return max(0, min(hp, stats["hp"])), max(0, min(mp, stats["mp"]))
 
 
 def exp_required_for_level(level, settings):
@@ -104,6 +123,53 @@ def apply_exp(level, exp, gained, settings):
     if level >= LEVEL_CAP:
         level, exp = LEVEL_CAP, 0
     return level, exp
+
+
+def _combat_hit(attacker_name, attacker_atk, attacker_luk, defender_name, defender_def, defender_luk):
+    dodge_chance = min(25, defender_luk * 0.3)
+    if random.random() * 100 < dodge_chance:
+        return 0, f"{defender_name} 閃避了 {attacker_name} 的攻擊！"
+    raw_damage = max(1, round(attacker_atk - defender_def / 2))
+    is_crit = random.random() * 100 < min(35, attacker_luk * 0.5)
+    damage = round(raw_damage * 1.5) if is_crit else raw_damage
+    suffix = "（會心一擊！）" if is_crit else ""
+    return damage, f"{attacker_name} 攻擊 {defender_name}，造成 {damage} 點傷害{suffix}"
+
+
+BATTLE_ROUND_CAP = 60
+
+
+def run_battle(player_name, player_stats, player_hp, monster):
+    """Resolves an entire fight in one shot (no monster LUK -- monsters
+    never crit or dodge, only the player's LUK matters for those rolls)."""
+    log = []
+    p_hp, m_hp = player_hp, monster["hp"]
+    order = ("player", "monster") if player_stats["agi"] >= monster["agi"] else ("monster", "player")
+
+    for _round in range(BATTLE_ROUND_CAP):
+        if p_hp <= 0 or m_hp <= 0:
+            break
+        for attacker in order:
+            if attacker == "player":
+                dmg, line = _combat_hit(
+                    player_name, player_stats["str"], player_stats["luk"],
+                    monster["name"], monster["def"], 0,
+                )
+                m_hp = max(0, m_hp - dmg)
+                log.append(f"{line}（{monster['name']} 剩餘 HP {m_hp}）")
+                if m_hp <= 0:
+                    break
+            else:
+                dmg, line = _combat_hit(
+                    monster["name"], monster["atk"], 0,
+                    player_name, player_stats["def"], player_stats["luk"],
+                )
+                p_hp = max(0, p_hp - dmg)
+                log.append(f"{line}（{player_name} 剩餘 HP {p_hp}）")
+                if p_hp <= 0:
+                    break
+
+    return {"log": log, "won": m_hp <= 0 and p_hp > 0, "player_hp": p_hp, "monster_hp": m_hp}
 
 
 init_db()
@@ -244,6 +310,11 @@ def _session_activity():
     db.close()
 
 
+@app.context_processor
+def _inject_nav_display_name():
+    return {"nav_display_name": session.get("character_name") or session.get("username")}
+
+
 @app.route("/")
 def index():
     if session.get("user_id"):
@@ -262,6 +333,19 @@ def index():
     return render_template("index.html", countries=countries)
 
 
+def _validate_character_name(db, name, username):
+    if len(name) < MIN_CHARACTER_NAME_LEN or len(name) > MAX_CHARACTER_NAME_LEN:
+        return f"角色名稱需要 {MIN_CHARACTER_NAME_LEN}～{MAX_CHARACTER_NAME_LEN} 個字元"
+    if name.lower() == username.lower():
+        return "角色名稱不能跟帳號相同"
+    taken = db.execute(
+        "SELECT id FROM characters WHERE lower(name) = lower(?)", (name,)
+    ).fetchone()
+    if taken:
+        return "這個角色名稱已經被使用了"
+    return None
+
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "GET":
@@ -270,6 +354,7 @@ def register():
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
     confirm = request.form.get("confirm", "")
+    character_name = request.form.get("character_name", "").strip()
 
     if len(username) < MIN_USERNAME_LEN:
         flash(f"帳號至少需要 {MIN_USERNAME_LEN} 個字元")
@@ -282,6 +367,12 @@ def register():
         return render_template("register.html")
 
     db = get_db()
+    name_error = _validate_character_name(db, character_name, username)
+    if name_error:
+        db.close()
+        flash(name_error)
+        return render_template("register.html")
+
     try:
         cur = db.execute(
             "INSERT INTO users (username, password_hash) VALUES (?, ?)",
@@ -295,6 +386,7 @@ def register():
     finally:
         db.close()
 
+    session["pending_character_name"] = character_name
     flash("註冊成功，請登入")
     return redirect(url_for("login"))
 
@@ -326,12 +418,16 @@ def login():
     )
     log_activity(db, user["id"], user["username"], "login", ip_address=request.remote_addr)
     db.commit()
+    character = db.execute(
+        "SELECT name FROM characters WHERE user_id = ?", (user["id"],)
+    ).fetchone()
     db.close()
 
     session["user_id"] = user["id"]
     session["username"] = user["username"]
     session["is_admin"] = bool(user["is_admin"])
-    flash(f"歡迎回來，{user['username']}")
+    session["character_name"] = character["name"] if character else None
+    flash(f"歡迎回來，{character['name'] if character else user['username']}")
     return redirect(url_for("index"))
 
 
@@ -360,10 +456,20 @@ def character_create():
         db.close()
         return redirect(url_for("game"))
 
+    character_name = session.get("pending_character_name")
+    if not character_name:
+        character_name = f"{session['username']}的角色"
+        suffix = 2
+        while db.execute(
+            "SELECT id FROM characters WHERE lower(name) = lower(?)", (character_name,)
+        ).fetchone():
+            character_name = f"{session['username']}的角色{suffix}"
+            suffix += 1
+
     if request.method == "GET":
         countries = db.execute("SELECT * FROM countries ORDER BY id").fetchall()
         db.close()
-        return render_template("character_create.html", countries=countries)
+        return render_template("character_create.html", countries=countries, character_name=character_name)
 
     country = db.execute(
         "SELECT * FROM countries WHERE id = ?", (request.form.get("country_id", ""),)
@@ -378,18 +484,27 @@ def character_create():
         (country["id"],),
     ).fetchone()
 
-    db.execute(
-        "INSERT INTO characters (user_id, country_id, current_tile_id) VALUES (?, ?, ?)",
-        (session["user_id"], country["id"], fortress["id"] if fortress else None),
-    )
+    try:
+        db.execute(
+            "INSERT INTO characters (user_id, country_id, current_tile_id, name) VALUES (?, ?, ?, ?)",
+            (session["user_id"], country["id"], fortress["id"] if fortress else None, character_name),
+        )
+        db.commit()
+    except sqlite3.IntegrityError:
+        db.close()
+        flash("這個角色名稱剛好被用掉了，請重新整理再試一次")
+        return redirect(url_for("character_create"))
+
     log_activity(
         db, session["user_id"], session["username"], "character_create",
-        detail=country["name"], ip_address=request.remote_addr,
+        detail=f"{character_name}（{country['name']}）", ip_address=request.remote_addr,
     )
     db.commit()
     db.close()
 
-    flash(f"歡迎來到{country['name']}！")
+    session.pop("pending_character_name", None)
+    session["character_name"] = character_name
+    flash(f"歡迎來到{country['name']}，{character_name}！")
     return redirect(url_for("game"))
 
 
@@ -401,7 +516,8 @@ def game():
         """SELECT characters.id AS character_id, characters.current_tile_id,
                   characters.currency, characters.level, characters.exp, characters.next_action_at,
                   characters.equipped_weapon_id, characters.equipped_armor_id,
-                  characters.equipped_accessory_id, countries.*
+                  characters.equipped_accessory_id, characters.name AS character_name,
+                  characters.current_hp, characters.current_mp, countries.*
            FROM characters JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
         (session["user_id"],),
@@ -427,7 +543,8 @@ def game():
     ]
     db.close()
 
-    stats = compute_final_stats(character, equipped_items)
+    stats = compute_final_stats(character, equipped_items, character["level"])
+    current_hp, current_mp = _current_hp_mp(character, stats)
 
     exp_needed = (
         exp_required_for_level(character["level"], settings)
@@ -474,6 +591,8 @@ def game():
         "game.html",
         character=character,
         stats=stats,
+        current_hp=current_hp,
+        current_mp=current_mp,
         level_cap=LEVEL_CAP,
         exp_needed=exp_needed,
         current_tile=current_tile,
@@ -538,9 +657,13 @@ def game_move():
 def game_hunt():
     db = get_db()
     character = db.execute(
-        """SELECT characters.id, characters.level, characters.exp, characters.next_action_at,
-                  map_tiles.tile_type
-           FROM characters JOIN map_tiles ON map_tiles.id = characters.current_tile_id
+        """SELECT characters.id AS character_id, characters.level, characters.exp, characters.next_action_at,
+                  characters.current_hp, characters.current_mp, characters.name AS character_name,
+                  characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id,
+                  map_tiles.tile_type, countries.*
+           FROM characters
+           JOIN map_tiles ON map_tiles.id = characters.current_tile_id
+           JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
         (session["user_id"],),
     ).fetchone()
@@ -563,24 +686,130 @@ def game_hunt():
         flash("請選擇一個有效的打怪場")
         return redirect(url_for("game"))
 
+    equipped_ids = [
+        character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
+    ]
+    equipped_items = [
+        db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        for item_id in equipped_ids if item_id
+    ]
+    stats = compute_final_stats(character, equipped_items, character["level"])
+    current_hp, _current_mp = _current_hp_mp(character, stats)
+
+    if current_hp <= 0:
+        db.close()
+        flash("HP 已耗盡，無法戰鬥，請先回到要塞回復")
+        return redirect(url_for("game"))
+
     settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
-    new_level, new_exp = apply_exp(character["level"], character["exp"], ground["monster_exp"], settings)
+
+    monsters = db.execute(
+        "SELECT * FROM monsters WHERE hunting_ground_id = ?", (ground["id"],)
+    ).fetchall()
+    regulars = [m for m in monsters if not m["is_boss"]]
+    bosses = [m for m in monsters if m["is_boss"]]
+    is_boss_fight = bool(bosses) and random.random() * 100 < settings["boss_encounter_percent"]
+    pool = bosses if is_boss_fight else (regulars or bosses)
+    if not pool:
+        db.close()
+        flash("這個打怪場目前還沒有設定怪物")
+        return redirect(url_for("game"))
+    monster = random.choice(pool)
+
+    result = run_battle(character["character_name"], stats, current_hp, monster)
+
+    exp_gain = 0
+    currency_gain = 0
+    new_level, new_exp = character["level"], character["exp"]
+    if result["won"]:
+        exp_gain = ground["monster_exp"]
+        if monster["is_boss"]:
+            exp_gain = round(exp_gain * settings["boss_exp_multiplier"])
+        currency_gain = monster["currency_reward"]
+        new_level, new_exp = apply_exp(character["level"], character["exp"], exp_gain, settings)
 
     db.execute(
-        "UPDATE characters SET level = ?, exp = ?, next_action_at = ? WHERE id = ?",
-        (new_level, new_exp, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+        """UPDATE characters
+           SET level = ?, exp = ?, currency = currency + ?, current_hp = ?, next_action_at = ?
+           WHERE id = ?""",
+        (
+            new_level, new_exp, currency_gain, result["player_hp"],
+            _next_action_at(settings["turn_wait_seconds"]), character["character_id"],
+        ),
+    )
+    outcome_detail = (
+        f"擊敗{monster['name']}，+{exp_gain} EXP +{currency_gain} 諸神幣"
+        if result["won"] else f"敗給{monster['name']}"
     )
     log_activity(
         db, session["user_id"], session["username"], "hunt",
-        detail=f"{ground['name']} +{ground['monster_exp']} EXP", ip_address=request.remote_addr,
+        detail=f"{ground['name']} {outcome_detail}", ip_address=request.remote_addr,
     )
     db.commit()
     db.close()
 
-    if new_level > character["level"]:
-        flash(f"在{ground['name']}擊敗了怪物，獲得 {ground['monster_exp']} 經驗值，升到 Lv.{new_level}！")
-    else:
-        flash(f"在{ground['name']}擊敗了怪物，獲得 {ground['monster_exp']} 經驗值")
+    return render_template(
+        "battle.html",
+        ground=ground,
+        monster=monster,
+        log=result["log"],
+        won=result["won"],
+        leveled_up=new_level > character["level"],
+        new_level=new_level,
+        exp_gain=exp_gain,
+        currency_gain=currency_gain,
+        player_hp=result["player_hp"],
+        max_hp=stats["hp"],
+    )
+
+
+@app.route("/game/recover", methods=["POST"])
+@character_required
+def game_recover():
+    db = get_db()
+    character = db.execute(
+        """SELECT characters.id, characters.level, characters.next_action_at, map_tiles.tile_type,
+                  characters.equipped_weapon_id, characters.equipped_armor_id,
+                  characters.equipped_accessory_id, countries.*
+           FROM characters
+           JOIN map_tiles ON map_tiles.id = characters.current_tile_id
+           JOIN countries ON countries.id = characters.country_id
+           WHERE characters.user_id = ?""",
+        (session["user_id"],),
+    ).fetchone()
+
+    if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
+        db.close()
+        flash("還在冷卻中，請稍候再行動")
+        return redirect(url_for("game"))
+
+    if character["tile_type"] != "fortress":
+        db.close()
+        flash("只能在要塞內回復 HP／MP")
+        return redirect(url_for("game"))
+
+    equipped_ids = [
+        character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
+    ]
+    equipped_items = [
+        db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        for item_id in equipped_ids if item_id
+    ]
+    stats = compute_final_stats(character, equipped_items, character["level"])
+
+    settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
+    db.execute(
+        "UPDATE characters SET current_hp = ?, current_mp = ?, next_action_at = ? WHERE id = ?",
+        (stats["hp"], stats["mp"], _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "recover",
+        ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    flash("HP／MP 已完全回復")
     return redirect(url_for("game"))
 
 
@@ -784,6 +1013,17 @@ def game_shop_sell():
     return redirect(url_for("game_shop"))
 
 
+EQUIPMENT_RETURN_ENDPOINTS = {
+    "shop": "game_shop",
+    "character": "character_page",
+}
+
+
+def _equipment_return_redirect(request):
+    endpoint = EQUIPMENT_RETURN_ENDPOINTS.get(request.form.get("next", "shop"), "game_shop")
+    return redirect(url_for(endpoint))
+
+
 @app.route("/game/equip", methods=["POST"])
 @character_required
 def game_equip():
@@ -793,12 +1033,7 @@ def game_equip():
     if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
         db.close()
         flash("還在冷卻中，請稍候再行動")
-        return redirect(url_for("game_shop"))
-
-    if character["tile_type"] != "fortress":
-        db.close()
-        flash("只能在要塞內裝備背包裡的物品")
-        return redirect(url_for("game"))
+        return _equipment_return_redirect(request)
 
     item = db.execute(
         "SELECT * FROM items WHERE id = ?", (request.form.get("item_id", ""),)
@@ -806,12 +1041,12 @@ def game_equip():
     if item is None:
         db.close()
         flash("請選擇一個有效的裝備")
-        return redirect(url_for("game_shop"))
+        return _equipment_return_redirect(request)
 
     if not _remove_from_inventory(db, character["id"], item["id"], 1):
         db.close()
         flash("背包裡沒有這件裝備")
-        return redirect(url_for("game_shop"))
+        return _equipment_return_redirect(request)
 
     slot_column = EQUIP_SLOT_COLUMNS[item["shop_type"]]
     old_item_id = character[slot_column]
@@ -831,7 +1066,7 @@ def game_equip():
     db.close()
 
     flash(f"已裝備「{item['name']}」")
-    return redirect(url_for("game_shop"))
+    return _equipment_return_redirect(request)
 
 
 @app.route("/game/unequip", methods=["POST"])
@@ -843,25 +1078,20 @@ def game_unequip():
     if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
         db.close()
         flash("還在冷卻中，請稍候再行動")
-        return redirect(url_for("game_shop"))
-
-    if character["tile_type"] != "fortress":
-        db.close()
-        flash("只能在要塞內卸下裝備")
-        return redirect(url_for("game"))
+        return _equipment_return_redirect(request)
 
     slot = request.form.get("slot", "")
     slot_column = EQUIP_SLOT_COLUMNS.get(slot)
     if slot_column is None:
         db.close()
         flash("請選擇一個有效的裝備部位")
-        return redirect(url_for("game_shop"))
+        return _equipment_return_redirect(request)
 
     item_id = character[slot_column]
     if not item_id:
         db.close()
         flash("該部位目前沒有裝備任何東西")
-        return redirect(url_for("game_shop"))
+        return _equipment_return_redirect(request)
 
     item = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
     _add_to_inventory(db, character["id"], item_id, 1)
@@ -879,7 +1109,7 @@ def game_unequip():
     db.close()
 
     flash(f"已卸下「{item['name']}」，放回背包")
-    return redirect(url_for("game_shop"))
+    return _equipment_return_redirect(request)
 
 
 @app.route("/character")
@@ -888,6 +1118,8 @@ def character_page():
     db = get_db()
     character = db.execute(
         """SELECT characters.id AS character_id, characters.level, characters.exp,
+                  characters.next_action_at, characters.name AS character_name,
+                  characters.current_hp, characters.current_mp,
                   characters.equipped_weapon_id, characters.equipped_armor_id,
                   characters.equipped_accessory_id, countries.*
            FROM characters JOIN countries ON countries.id = characters.country_id
@@ -903,9 +1135,28 @@ def character_page():
         db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
         for item_id in equipped_ids if item_id
     ]
+
+    equipped_slots = []
+    for shop_type, label in SLOT_LABELS.items():
+        item_id = character[EQUIP_SLOT_COLUMNS[shop_type]]
+        item = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone() if item_id else None
+        equipped_slots.append({"slot": shop_type, "label": label, "item": item})
+
+    inventory_rows = db.execute(
+        """SELECT items.*, inventory.quantity AS quantity
+           FROM inventory JOIN items ON items.id = inventory.item_id
+           WHERE inventory.character_id = ?
+           ORDER BY items.shop_type, items.price""",
+        (character["character_id"],),
+    ).fetchall()
+    inventory_items = {shop_type: [] for shop_type in SHOP_TYPE_LABELS}
+    for row in inventory_rows:
+        inventory_items[row["shop_type"]].append(row)
+
     db.close()
 
-    stats = compute_final_stats(character, equipped_items)
+    stats = compute_final_stats(character, equipped_items, character["level"])
+    current_hp, current_mp = _current_hp_mp(character, stats)
     exp_needed = (
         exp_required_for_level(character["level"], settings)
         if character["level"] < LEVEL_CAP else None
@@ -915,9 +1166,15 @@ def character_page():
         "character.html",
         character=character,
         stats=stats,
+        current_hp=current_hp,
+        current_mp=current_mp,
         level_cap=LEVEL_CAP,
         exp_needed=exp_needed,
         equipped_items=equipped_items,
+        equipped_slots=equipped_slots,
+        inventory_items=inventory_items,
+        shop_type_labels=SHOP_TYPE_LABELS,
+        cooldown_seconds=_cooldown_remaining_seconds(character["next_action_at"]),
     )
 
 
@@ -1059,6 +1316,8 @@ def admin_update_game_settings():
         exp_base = int(request.form.get("exp_base", ""))
         exp_growth_percent = float(request.form.get("exp_growth_percent", ""))
         sell_back_percent = float(request.form.get("sell_back_percent", ""))
+        boss_encounter_percent = float(request.form.get("boss_encounter_percent", ""))
+        boss_exp_multiplier = float(request.form.get("boss_exp_multiplier", ""))
     except ValueError:
         flash("設定值格式不正確")
         return redirect(url_for("admin_settings"))
@@ -1071,12 +1330,20 @@ def admin_update_game_settings():
         flash("裝備回收比例必須介於 0 到 100 之間")
         return redirect(url_for("admin_settings"))
 
+    if boss_encounter_percent < 0 or boss_encounter_percent > 100 or boss_exp_multiplier < 1:
+        flash("首領遭遇機率須介於 0 到 100，經驗倍率須大於等於 1")
+        return redirect(url_for("admin_settings"))
+
     db = get_db()
     db.execute(
         """UPDATE game_settings
-           SET turn_wait_seconds = ?, exp_base = ?, exp_growth_percent = ?, sell_back_percent = ?
+           SET turn_wait_seconds = ?, exp_base = ?, exp_growth_percent = ?, sell_back_percent = ?,
+               boss_encounter_percent = ?, boss_exp_multiplier = ?
            WHERE id = 1""",
-        (turn_wait_seconds, exp_base, exp_growth_percent, sell_back_percent),
+        (
+            turn_wait_seconds, exp_base, exp_growth_percent, sell_back_percent,
+            boss_encounter_percent, boss_exp_multiplier,
+        ),
     )
     db.commit()
     db.close()
