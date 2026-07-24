@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}要塞商店 - 諸神的黃昏{% endblock %}
+{% block body_class %}wide{% endblock %}
+
+{% block content %}
+  <div class="panel" style="margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+    <h2 style="margin:0; color:var(--gold-bright); font-size:18px;">🏪 要塞商店</h2>
+    <div style="display:flex; align-items:center; gap:14px;">
+      <span style="color:var(--gold); font-size:14px;">💰 {{ character.currency }} 諸神幣</span>
+      <a href="{{ url_for('game') }}" class="btn" style="padding:6px 14px; font-size:13px;">← 返回主畫面</a>
+    </div>
+  </div>
+
+  <p class="hint" id="cooldown-display" style="margin-top:-10px; margin-bottom:16px; {% if cooldown_seconds <= 0 %}display:none;{% endif %}">
+    冷卻中，還需等待 <span id="cooldown-seconds">{{ cooldown_seconds }}</span> 秒才能行動
+  </p>
+
+  {% if suggestions %}
+  <div class="panel" style="margin-bottom:20px; border-color: rgba(212, 175, 55, 0.5);">
+    <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">✨ 背包裡有更好的裝備，要換上嗎？</h3>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      {% for s in suggestions %}
+      <form method="post" action="{{ url_for('game_equip') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <input type="hidden" name="item_id" value="{{ s.item.id }}">
+        <span style="font-size:13px; color:var(--text-dim); min-width:40px;">{{ s.label }}</span>
+        <span style="font-size:13px;">
+          {{ s.item.name }}（{{ s.item.stat }}+{{ s.item.stat_bonus }}）
+          {% if s.current %}
+          取代目前的「{{ s.current.name }}」（{{ s.current.stat }}+{{ s.current.stat_bonus }}）
+          {% else %}
+          （目前該部位尚未裝備任何東西）
+          {% endif %}
+        </span>
+        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">裝備</button>
+      </form>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="panel" style="margin-bottom:20px;">
+    <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">目前裝備</h3>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      {% for s in equipped_slots %}
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <span style="font-size:13px; color:var(--text-dim); min-width:40px;">{{ s.label }}</span>
+        {% if s.item %}
+        <span style="font-size:13px;">{{ s.item.name }}（{{ s.item.stat }}+{{ s.item.stat_bonus }}）</span>
+        <form method="post" action="{{ url_for('game_unequip') }}">
+          <input type="hidden" name="slot" value="{{ s.slot }}">
+          <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">卸下</button>
+        </form>
+        {% else %}
+        <span class="hint" style="margin:0;">尚未裝備</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:20px;">
+    <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">購買裝備</h3>
+    <form method="post" action="{{ url_for('game_shop_buy') }}">
+      {% for shop_type, label in shop_type_labels.items() %}
+      {% if shop_items[shop_type] %}
+      <div style="margin-bottom:14px;">
+        <div style="font-size:13px; color:var(--text-dim); margin-bottom:6px;">{{ label }}</div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          {% for item in shop_items[shop_type] %}
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
+            <input type="checkbox" name="item_ids" value="{{ item.id }}" class="turn-action-control">
+            {{ item.name }}（{{ item.stat }}+{{ item.stat_bonus }}，{{ item.price }} 諸神幣）
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+      {% endfor %}
+      <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px; margin-top:6px;">購買所選</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin:0 0 4px; color:var(--gold-bright); font-size:15px;">背包（出售裝備）</h3>
+    <p class="hint" style="margin-top:0;">出售可回收原價的 {{ sell_back_percent }}%，身上穿著的裝備不會出現在背包裡，請先卸下再出售</p>
+    {% set has_inventory = inventory_items.values() | map('length') | sum > 0 %}
+    {% if has_inventory %}
+    <form method="post" action="{{ url_for('game_shop_sell') }}">
+      {% for shop_type, label in shop_type_labels.items() %}
+      {% if inventory_items[shop_type] %}
+      <div style="margin-bottom:14px;">
+        <div style="font-size:13px; color:var(--text-dim); margin-bottom:6px;">{{ label }}</div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          {% for item in inventory_items[shop_type] %}
+          <div style="display:flex; align-items:center; gap:8px; font-size:13px; flex-wrap:wrap;">
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+              <input type="checkbox" name="item_ids" value="{{ item.id }}" class="turn-action-control">
+              {{ item.name }}（{{ item.stat }}+{{ item.stat_bonus }}）持有 {{ item.quantity }} 件
+            </label>
+            <span style="color:var(--text-dim);">數量</span>
+            <input type="text" inputmode="numeric" name="qty_{{ item.id }}" value="{{ item.quantity }}"
+                   class="turn-action-control" style="width:60px; padding:4px 8px; margin-bottom:0;">
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+      {% endfor %}
+      <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px; margin-top:6px;">出售所選</button>
+    </form>
+    {% else %}
+    <p class="hint" style="margin:0;">背包裡沒有可以出售的裝備</p>
+    {% endif %}
+  </div>
+
+  <script>
+    (function () {
+      var remaining = {{ cooldown_seconds }};
+      var display = document.getElementById("cooldown-display");
+      var secondsSpan = document.getElementById("cooldown-seconds");
+      var controls = document.querySelectorAll(".turn-action-control");
+
+      function setControlsDisabled(disabled) {
+        controls.forEach(function (el) { el.disabled = disabled; });
+      }
+
+      function tick() {
+        if (remaining <= 0) {
+          setControlsDisabled(false);
+          if (display) display.style.display = "none";
+          return;
+        }
+        setControlsDisabled(true);
+        if (display) {
+          display.style.display = "";
+          secondsSpan.textContent = remaining;
+        }
+        remaining -= 1;
+        setTimeout(tick, 1000);
+      }
+
+      tick();
+    })();
+  </script>
+{% endblock %}

@@ -88,3 +88,13 @@ CREATE TABLE IF NOT EXISTS items (
     stat TEXT NOT NULL,
     stat_bonus INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS inventory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL,
+    item_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(character_id, item_id),
+    FOREIGN KEY (character_id) REFERENCES characters(id),
+    FOREIGN KEY (item_id) REFERENCES items(id)
+);

@@ -27,6 +27,8 @@ ACTION_LABELS = {
     "move": "移動",
     "shop_buy": "購買裝備",
     "shop_sell": "出售裝備",
+    "equip": "裝備",
+    "unequip": "卸下裝備",
 }
 
 SHOP_TYPE_LABELS = {
@@ -142,6 +144,36 @@ def _format_duration(seconds):
     if minutes:
         return f"{minutes} 分 {sec} 秒"
     return f"{sec} 秒"
+
+
+def _add_to_inventory(db, character_id, item_id, quantity=1):
+    db.execute(
+        """INSERT INTO inventory (character_id, item_id, quantity) VALUES (?, ?, ?)
+           ON CONFLICT(character_id, item_id) DO UPDATE SET quantity = quantity + excluded.quantity""",
+        (character_id, item_id, quantity),
+    )
+
+
+def _remove_from_inventory(db, character_id, item_id, quantity=1):
+    """Returns True if the item had enough quantity and was removed."""
+    row = db.execute(
+        "SELECT quantity FROM inventory WHERE character_id = ? AND item_id = ?",
+        (character_id, item_id),
+    ).fetchone()
+    if row is None or row["quantity"] < quantity:
+        return False
+    remaining = row["quantity"] - quantity
+    if remaining <= 0:
+        db.execute(
+            "DELETE FROM inventory WHERE character_id = ? AND item_id = ?",
+            (character_id, item_id),
+        )
+    else:
+        db.execute(
+            "UPDATE inventory SET quantity = ? WHERE character_id = ? AND item_id = ?",
+            (remaining, character_id, item_id),
+        )
+    return True
 
 
 def login_required(view):
@@ -393,26 +425,6 @@ def game():
         db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
         for item_id in equipped_ids if item_id
     ]
-    shop_items = None
-    sellable_items = None
-    if current_tile["tile_type"] == "fortress":
-        all_items = db.execute("SELECT * FROM items ORDER BY shop_type, price").fetchall()
-        shop_items = {shop_type: [] for shop_type in SHOP_TYPE_LABELS}
-        for item in all_items:
-            shop_items[item["shop_type"]].append(item)
-
-        sellable_items = []
-        for shop_type, label in SLOT_LABELS.items():
-            item_id = character[EQUIP_SLOT_COLUMNS[shop_type]]
-            if not item_id:
-                continue
-            item = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-            sellable_items.append({
-                "slot": shop_type,
-                "label": label,
-                "item": item,
-                "sell_price": round(item["price"] * settings["sell_back_percent"] / 100),
-            })
     db.close()
 
     stats = compute_final_stats(character, equipped_items)
@@ -468,10 +480,6 @@ def game():
         move_targets=move_targets,
         hunting_grounds=hunting_grounds,
         cooldown_seconds=cooldown_seconds,
-        shop_items=shop_items,
-        sellable_items=sellable_items,
-        shop_type_labels=SHOP_TYPE_LABELS,
-        equipped_ids=set(equipped_ids),
         hexes=hexes,
         view_box=f"{min_x:.1f} {min_y:.1f} {max_x - min_x:.1f} {max_y - min_y:.1f}",
     )
@@ -576,62 +584,8 @@ def game_hunt():
     return redirect(url_for("game"))
 
 
-@app.route("/game/shop/buy", methods=["POST"])
-@character_required
-def game_shop_buy():
-    db = get_db()
-    character = db.execute(
-        """SELECT characters.id, characters.currency, characters.next_action_at, map_tiles.tile_type
-           FROM characters JOIN map_tiles ON map_tiles.id = characters.current_tile_id
-           WHERE characters.user_id = ?""",
-        (session["user_id"],),
-    ).fetchone()
-
-    if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
-        db.close()
-        flash("還在冷卻中，請稍候再行動")
-        return redirect(url_for("game"))
-
-    if character["tile_type"] != "fortress":
-        db.close()
-        flash("只能在要塞內的商店購買裝備")
-        return redirect(url_for("game"))
-
-    item = db.execute(
-        "SELECT * FROM items WHERE id = ?", (request.form.get("item_id", ""),)
-    ).fetchone()
-    if item is None:
-        db.close()
-        flash("請選擇一個有效的商品")
-        return redirect(url_for("game"))
-
-    if character["currency"] < item["price"]:
-        db.close()
-        flash(f"諸神幣不足，「{item['name']}」需要 {item['price']} 諸神幣")
-        return redirect(url_for("game"))
-
-    settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
-    slot_column = EQUIP_SLOT_COLUMNS[item["shop_type"]]
-    db.execute(
-        f"UPDATE characters SET currency = currency - ?, {slot_column} = ?, next_action_at = ? WHERE id = ?",
-        (item["price"], item["id"], _next_action_at(settings["turn_wait_seconds"]), character["id"]),
-    )
-    log_activity(
-        db, session["user_id"], session["username"], "shop_buy",
-        detail=f"{item['name']} ({item['price']} 諸神幣)", ip_address=request.remote_addr,
-    )
-    db.commit()
-    db.close()
-
-    flash(f"已購買並裝備「{item['name']}」")
-    return redirect(url_for("game"))
-
-
-@app.route("/game/shop/sell", methods=["POST"])
-@character_required
-def game_shop_sell():
-    db = get_db()
-    character = db.execute(
+def _character_for_shop(db):
+    return db.execute(
         """SELECT characters.id, characters.currency, characters.next_action_at, map_tiles.tile_type,
                   characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id
            FROM characters JOIN map_tiles ON map_tiles.id = characters.current_tile_id
@@ -639,14 +593,261 @@ def game_shop_sell():
         (session["user_id"],),
     ).fetchone()
 
+
+@app.route("/game/shop")
+@character_required
+def game_shop():
+    db = get_db()
+    character = _character_for_shop(db)
+
+    if character["tile_type"] != "fortress":
+        db.close()
+        flash("只能在要塞內使用商店")
+        return redirect(url_for("game"))
+
+    settings = db.execute(
+        "SELECT turn_wait_seconds, sell_back_percent FROM game_settings WHERE id = 1"
+    ).fetchone()
+
+    all_items = db.execute("SELECT * FROM items ORDER BY shop_type, price").fetchall()
+    shop_items = {shop_type: [] for shop_type in SHOP_TYPE_LABELS}
+    for item in all_items:
+        shop_items[item["shop_type"]].append(item)
+
+    inventory_rows = db.execute(
+        """SELECT items.*, inventory.quantity AS quantity
+           FROM inventory JOIN items ON items.id = inventory.item_id
+           WHERE inventory.character_id = ?
+           ORDER BY items.shop_type, items.price""",
+        (character["id"],),
+    ).fetchall()
+    inventory_items = {shop_type: [] for shop_type in SHOP_TYPE_LABELS}
+    for row in inventory_rows:
+        inventory_items[row["shop_type"]].append(row)
+
+    equipped_slots = []
+    suggestions = []
+    for shop_type, label in SLOT_LABELS.items():
+        slot_column = EQUIP_SLOT_COLUMNS[shop_type]
+        equipped_item_id = character[slot_column]
+        equipped_item = (
+            db.execute("SELECT * FROM items WHERE id = ?", (equipped_item_id,)).fetchone()
+            if equipped_item_id else None
+        )
+        equipped_slots.append({"slot": shop_type, "label": label, "item": equipped_item})
+
+        candidates = inventory_items[shop_type]
+        if candidates:
+            best = max(candidates, key=lambda i: i["stat_bonus"])
+            if equipped_item is None or best["stat_bonus"] > equipped_item["stat_bonus"]:
+                suggestions.append({
+                    "slot": shop_type,
+                    "label": label,
+                    "item": best,
+                    "current": equipped_item,
+                })
+
+    db.close()
+
+    return render_template(
+        "shop.html",
+        character=character,
+        cooldown_seconds=_cooldown_remaining_seconds(character["next_action_at"]),
+        shop_items=shop_items,
+        shop_type_labels=SHOP_TYPE_LABELS,
+        inventory_items=inventory_items,
+        sell_back_percent=settings["sell_back_percent"],
+        equipped_slots=equipped_slots,
+        suggestions=suggestions,
+    )
+
+
+@app.route("/game/shop/buy", methods=["POST"])
+@character_required
+def game_shop_buy():
+    db = get_db()
+    character = _character_for_shop(db)
+
     if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
         db.close()
         flash("還在冷卻中，請稍候再行動")
+        return redirect(url_for("game_shop"))
+
+    if character["tile_type"] != "fortress":
+        db.close()
+        flash("只能在要塞內的商店購買裝備")
         return redirect(url_for("game"))
+
+    item_ids = [i for i in request.form.getlist("item_ids") if i]
+    if not item_ids:
+        db.close()
+        flash("請至少選擇一件要購買的裝備")
+        return redirect(url_for("game_shop"))
+
+    placeholders = ",".join("?" for _ in item_ids)
+    items = db.execute(f"SELECT * FROM items WHERE id IN ({placeholders})", item_ids).fetchall()
+    if not items:
+        db.close()
+        flash("請選擇有效的商品")
+        return redirect(url_for("game_shop"))
+
+    total_price = sum(item["price"] for item in items)
+    if character["currency"] < total_price:
+        db.close()
+        flash(f"諸神幣不足，這次購買需要 {total_price} 諸神幣")
+        return redirect(url_for("game_shop"))
+
+    settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
+    for item in items:
+        _add_to_inventory(db, character["id"], item["id"], 1)
+    db.execute(
+        "UPDATE characters SET currency = currency - ?, next_action_at = ? WHERE id = ?",
+        (total_price, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+    )
+    names = "、".join(item["name"] for item in items)
+    log_activity(
+        db, session["user_id"], session["username"], "shop_buy",
+        detail=f"{names} ({total_price} 諸神幣)", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    flash(f"已購買「{names}」，放入背包")
+    return redirect(url_for("game_shop"))
+
+
+@app.route("/game/shop/sell", methods=["POST"])
+@character_required
+def game_shop_sell():
+    db = get_db()
+    character = _character_for_shop(db)
+
+    if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
+        db.close()
+        flash("還在冷卻中，請稍候再行動")
+        return redirect(url_for("game_shop"))
 
     if character["tile_type"] != "fortress":
         db.close()
         flash("只能在要塞內的商店出售裝備")
+        return redirect(url_for("game"))
+
+    item_ids = [i for i in request.form.getlist("item_ids") if i]
+    if not item_ids:
+        db.close()
+        flash("請至少選擇一件要出售的裝備")
+        return redirect(url_for("game_shop"))
+
+    settings = db.execute(
+        "SELECT turn_wait_seconds, sell_back_percent FROM game_settings WHERE id = 1"
+    ).fetchone()
+
+    sold_names = []
+    total_refund = 0
+    for item_id in item_ids:
+        try:
+            qty = int(request.form.get(f"qty_{item_id}", "1"))
+        except ValueError:
+            qty = 1
+        row = db.execute(
+            """SELECT items.*, inventory.quantity AS owned
+               FROM inventory JOIN items ON items.id = inventory.item_id
+               WHERE inventory.character_id = ? AND inventory.item_id = ?""",
+            (character["id"], item_id),
+        ).fetchone()
+        if row is None:
+            continue
+        qty = max(1, min(qty, row["owned"]))
+        if not _remove_from_inventory(db, character["id"], row["id"], qty):
+            continue
+        refund = round(row["price"] * settings["sell_back_percent"] / 100) * qty
+        total_refund += refund
+        sold_names.append(f"{row['name']} x{qty}" if qty > 1 else row["name"])
+
+    if not sold_names:
+        db.close()
+        flash("背包裡沒有可以出售的裝備")
+        return redirect(url_for("game_shop"))
+
+    db.execute(
+        "UPDATE characters SET currency = currency + ?, next_action_at = ? WHERE id = ?",
+        (total_refund, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "shop_sell",
+        detail=f"{'、'.join(sold_names)} (+{total_refund} 諸神幣)", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    flash(f"已出售「{'、'.join(sold_names)}」，獲得 {total_refund} 諸神幣")
+    return redirect(url_for("game_shop"))
+
+
+@app.route("/game/equip", methods=["POST"])
+@character_required
+def game_equip():
+    db = get_db()
+    character = _character_for_shop(db)
+
+    if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
+        db.close()
+        flash("還在冷卻中，請稍候再行動")
+        return redirect(url_for("game_shop"))
+
+    if character["tile_type"] != "fortress":
+        db.close()
+        flash("只能在要塞內裝備背包裡的物品")
+        return redirect(url_for("game"))
+
+    item = db.execute(
+        "SELECT * FROM items WHERE id = ?", (request.form.get("item_id", ""),)
+    ).fetchone()
+    if item is None:
+        db.close()
+        flash("請選擇一個有效的裝備")
+        return redirect(url_for("game_shop"))
+
+    if not _remove_from_inventory(db, character["id"], item["id"], 1):
+        db.close()
+        flash("背包裡沒有這件裝備")
+        return redirect(url_for("game_shop"))
+
+    slot_column = EQUIP_SLOT_COLUMNS[item["shop_type"]]
+    old_item_id = character[slot_column]
+    if old_item_id:
+        _add_to_inventory(db, character["id"], old_item_id, 1)
+
+    settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
+    db.execute(
+        f"UPDATE characters SET {slot_column} = ?, next_action_at = ? WHERE id = ?",
+        (item["id"], _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "equip",
+        detail=item["name"], ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    flash(f"已裝備「{item['name']}」")
+    return redirect(url_for("game_shop"))
+
+
+@app.route("/game/unequip", methods=["POST"])
+@character_required
+def game_unequip():
+    db = get_db()
+    character = _character_for_shop(db)
+
+    if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
+        db.close()
+        flash("還在冷卻中，請稍候再行動")
+        return redirect(url_for("game_shop"))
+
+    if character["tile_type"] != "fortress":
+        db.close()
+        flash("只能在要塞內卸下裝備")
         return redirect(url_for("game"))
 
     slot = request.form.get("slot", "")
@@ -654,33 +855,31 @@ def game_shop_sell():
     if slot_column is None:
         db.close()
         flash("請選擇一個有效的裝備部位")
-        return redirect(url_for("game"))
+        return redirect(url_for("game_shop"))
 
     item_id = character[slot_column]
     if not item_id:
         db.close()
         flash("該部位目前沒有裝備任何東西")
-        return redirect(url_for("game"))
+        return redirect(url_for("game_shop"))
 
     item = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-    settings = db.execute(
-        "SELECT turn_wait_seconds, sell_back_percent FROM game_settings WHERE id = 1"
-    ).fetchone()
-    refund = round(item["price"] * settings["sell_back_percent"] / 100)
+    _add_to_inventory(db, character["id"], item_id, 1)
 
+    settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
     db.execute(
-        f"UPDATE characters SET currency = currency + ?, {slot_column} = NULL, next_action_at = ? WHERE id = ?",
-        (refund, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+        f"UPDATE characters SET {slot_column} = NULL, next_action_at = ? WHERE id = ?",
+        (_next_action_at(settings["turn_wait_seconds"]), character["id"]),
     )
     log_activity(
-        db, session["user_id"], session["username"], "shop_sell",
-        detail=f"{item['name']} (+{refund} 諸神幣)", ip_address=request.remote_addr,
+        db, session["user_id"], session["username"], "unequip",
+        detail=item["name"], ip_address=request.remote_addr,
     )
     db.commit()
     db.close()
 
-    flash(f"已出售「{item['name']}」，獲得 {refund} 諸神幣")
-    return redirect(url_for("game"))
+    flash(f"已卸下「{item['name']}」，放回背包")
+    return redirect(url_for("game_shop"))
 
 
 @app.route("/character")
