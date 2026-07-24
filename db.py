@@ -40,6 +40,15 @@ DEFAULT_COUNTRIES = [
     },
 ]
 
+LEVEL_CAP = 1000
+
+DEFAULT_HUNTING_GROUNDS = [
+    {"tier": "beginner", "name": "初級打怪場", "min_level": 1, "max_level": 30, "monster_exp": 10},
+    {"tier": "intermediate", "name": "中級打怪場", "min_level": 31, "max_level": 70, "monster_exp": 20},
+    {"tier": "advanced", "name": "高級打怪場", "min_level": 71, "max_level": 120, "monster_exp": 40},
+    {"tier": "ultimate", "name": "究級打怪場", "min_level": 121, "max_level": LEVEL_CAP, "monster_exp": 80},
+]
+
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -67,6 +76,14 @@ def _ensure_character_columns(conn):
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(characters)")]
     if "current_tile_id" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN current_tile_id INTEGER")
+    if "currency" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN currency INTEGER NOT NULL DEFAULT 1000")
+    if "level" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN level INTEGER NOT NULL DEFAULT 1")
+    if "exp" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN exp INTEGER NOT NULL DEFAULT 0")
+    if "next_action_at" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN next_action_at TEXT")
 
 
 def init_db():
@@ -117,6 +134,17 @@ def seed_defaults():
     if map_regenerated:
         conn.execute("UPDATE characters SET current_tile_id = NULL")
     _backfill_character_positions(conn)
+
+    if conn.execute("SELECT COUNT(*) AS c FROM game_settings").fetchone()["c"] == 0:
+        conn.execute("INSERT INTO game_settings (id) VALUES (1)")
+
+    if conn.execute("SELECT COUNT(*) AS c FROM hunting_grounds").fetchone()["c"] == 0:
+        for g in DEFAULT_HUNTING_GROUNDS:
+            conn.execute(
+                """INSERT INTO hunting_grounds (tier, name, min_level, max_level, monster_exp)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (g["tier"], g["name"], g["min_level"], g["max_level"], g["monster_exp"]),
+            )
 
     conn.commit()
     conn.close()

@@ -111,7 +111,7 @@ def _hex_area_cells(radius):
     return cells
 
 
-def _axial_distance(a, b):
+def axial_distance(a, b):
     ax, az = a
     ay = -ax - az
     bx, bz = b
@@ -130,7 +130,7 @@ def generate_layout():
     origin = (0, 0)
 
     outer_ring = sorted(
-        (c for c in cells if _axial_distance(origin, c) == RADIUS),
+        (c for c in cells if axial_distance(origin, c) == RADIUS),
         key=_angle_of,
     )
 
@@ -149,7 +149,7 @@ def generate_layout():
 
         candidates = sorted(
             (c for c in cells if c not in assigned),
-            key=lambda c: (_axial_distance(fort_cell, c), _angle_of(c)),
+            key=lambda c: (axial_distance(fort_cell, c), _angle_of(c)),
         )
         chosen_towns = candidates[:2]
         assigned.update(chosen_towns)
@@ -162,7 +162,7 @@ def generate_layout():
 
     remaining = [c for c in cells if c not in assigned]
     remaining.sort(
-        key=lambda c: (min(_axial_distance(c, a) for a in assigned), _angle_of(c))
+        key=lambda c: (min(axial_distance(c, a) for a in assigned), _angle_of(c))
     )
 
     for i, c in enumerate(remaining, start=1):

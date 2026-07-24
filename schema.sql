@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS characters (
     user_id INTEGER UNIQUE NOT NULL,
     country_id INTEGER NOT NULL,
     current_tile_id INTEGER,
+    currency INTEGER NOT NULL DEFAULT 1000,
+    level INTEGER NOT NULL DEFAULT 1,
+    exp INTEGER NOT NULL DEFAULT 0,
+    next_action_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (country_id) REFERENCES countries(id),
@@ -51,4 +55,20 @@ CREATE TABLE IF NOT EXISTS map_tiles (
     name TEXT NOT NULL,
     country_id INTEGER,
     FOREIGN KEY (country_id) REFERENCES countries(id)
+);
+
+CREATE TABLE IF NOT EXISTS game_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    turn_wait_seconds INTEGER NOT NULL DEFAULT 2,
+    exp_base INTEGER NOT NULL DEFAULT 100,
+    exp_growth_percent REAL NOT NULL DEFAULT 0.5
+);
+
+CREATE TABLE IF NOT EXISTS hunting_grounds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tier TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    min_level INTEGER NOT NULL,
+    max_level INTEGER NOT NULL,
+    monster_exp INTEGER NOT NULL DEFAULT 0
 );

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}遊戲設定 - 諸神的黃昏{% endblock %}
+
+{% block content %}
+  {% include "_admin_nav.html" %}
+  <h2 style="color: var(--gold-bright); font-size: 18px; margin-top:0;">回合與升級設定</h2>
+  <p class="hint" style="margin-top:-8px; margin-bottom:20px;">調整每回合等待秒數，以及升級所需經驗的成長曲線</p>
+
+  <div class="panel" style="margin-bottom: 18px;">
+    <form method="post" action="{{ url_for('admin_update_game_settings') }}">
+      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+        <div>
+          <label>每回合等待秒數</label>
+          <input type="text" inputmode="numeric" name="turn_wait_seconds" value="{{ settings.turn_wait_seconds }}">
+        </div>
+        <div>
+          <label>基礎經驗值（1→2級所需）</label>
+          <input type="text" inputmode="numeric" name="exp_base" value="{{ settings.exp_base }}">
+        </div>
+        <div>
+          <label>每級經驗成長幅度 (%)</label>
+          <input type="text" inputmode="decimal" name="exp_growth_percent" value="{{ settings.exp_growth_percent }}">
+        </div>
+      </div>
+      <p class="hint" style="margin-bottom:16px;">
+        第 N 級所需經驗 = 基礎經驗值 ×（1 + 成長幅度%）^(N-1)，逐級複利成長
+      </p>
+      <button type="submit">儲存設定</button>
+    </form>
+  </div>
+
+  <h2 style="color: var(--gold-bright); font-size: 18px;">打怪場管理</h2>
+  <p class="hint" style="margin-top:-8px; margin-bottom:20px;">調整各打怪場的建議等級區間與每次擊殺經驗值</p>
+
+  {% for g in hunting_grounds %}
+  <div class="panel" style="margin-bottom: 18px;">
+    <form method="post" action="{{ url_for('admin_update_hunting_ground', ground_id=g.id) }}">
+      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+        <div>
+          <label>名稱</label>
+          <input type="text" name="name" value="{{ g.name }}" required>
+        </div>
+        <div>
+          <label>最低等級</label>
+          <input type="text" inputmode="numeric" name="min_level" value="{{ g.min_level }}">
+        </div>
+        <div>
+          <label>最高等級</label>
+          <input type="text" inputmode="numeric" name="max_level" value="{{ g.max_level }}">
+        </div>
+        <div>
+          <label>擊殺經驗值</label>
+          <input type="text" inputmode="numeric" name="monster_exp" value="{{ g.monster_exp }}">
+        </div>
+      </div>
+      <button type="submit">儲存「{{ g.name }}」</button>
+    </form>
+  </div>
+  {% endfor %}
+{% endblock %}

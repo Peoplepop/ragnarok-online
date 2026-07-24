@@ -1,13 +1,13 @@
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from db import get_db, init_db, seed_defaults, log_activity
-from map_layout import axial_to_pixel, hex_corners
+from db import get_db, init_db, seed_defaults, log_activity, LEVEL_CAP
+from map_layout import axial_to_pixel, hex_corners, axial_distance
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-only-secret-change-me")
@@ -23,7 +23,13 @@ ACTION_LABELS = {
     "logout": "登出",
     "auto_logout": "閒置自動登出",
     "character_create": "建立角色",
+    "hunt": "打怪",
+    "move": "移動",
 }
+
+# Below this level, 升級軟糖 may still be used to skip grinding; past it,
+# levelling only comes from killing monsters.
+LEVEL_CANDY_MAX_LEVEL = 500
 
 HEX_SIZE = 42
 ELEMENT_COLORS = {
@@ -55,6 +61,27 @@ def compute_final_stats(country):
     }
 
 
+def exp_required_for_level(level, settings):
+    """EXP needed to advance from `level` to `level + 1`, compounding
+    exp_growth_percent per level on top of exp_base."""
+    return round(settings["exp_base"] * (1 + settings["exp_growth_percent"] / 100) ** (level - 1))
+
+
+def apply_exp(level, exp, gained, settings):
+    """Add `gained` EXP, cascading through as many level-ups as it covers.
+    Returns (new_level, new_exp). Capped at LEVEL_CAP; extra EXP past the cap is discarded."""
+    level, exp = level, exp + gained
+    while level < LEVEL_CAP:
+        needed = exp_required_for_level(level, settings)
+        if exp < needed:
+            break
+        exp -= needed
+        level += 1
+    if level >= LEVEL_CAP:
+        level, exp = LEVEL_CAP, 0
+    return level, exp
+
+
 init_db()
 seed_defaults()
 
@@ -63,6 +90,23 @@ def _parse_dt(value):
     if not value:
         return None
     return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+
+
+ACTION_DT_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
+
+
+def _next_action_at(wait_seconds):
+    """Precise (sub-second) cooldown timestamp, computed in Python so it isn't
+    truncated the way SQLite's datetime('now', '+N seconds') rounds to whole
+    seconds -- that truncation could silently shave up to ~1s off every wait."""
+    return (datetime.utcnow() + timedelta(seconds=wait_seconds)).strftime(ACTION_DT_FORMAT)
+
+
+def _cooldown_remaining_seconds(next_action_at):
+    if not next_action_at:
+        return 0
+    until = datetime.strptime(next_action_at, ACTION_DT_FORMAT)
+    return max(0, round((until - datetime.utcnow()).total_seconds()))
 
 
 def _format_duration(seconds):
@@ -300,7 +344,9 @@ def character_create():
 def game():
     db = get_db()
     character = db.execute(
-        """SELECT characters.id AS character_id, characters.current_tile_id, countries.*
+        """SELECT characters.id AS character_id, characters.current_tile_id,
+                  characters.currency, characters.level, characters.exp, characters.next_action_at,
+                  countries.*
            FROM characters JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
         (session["user_id"],),
@@ -312,9 +358,28 @@ def game():
                   countries.element, countries.name AS country_name
            FROM map_tiles LEFT JOIN countries ON countries.id = map_tiles.country_id"""
     ).fetchall()
+    current_tile = next(t for t in tiles if t["tile_id"] == character["current_tile_id"])
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+    hunting_grounds = db.execute(
+        "SELECT * FROM hunting_grounds ORDER BY min_level"
+    ).fetchall()
     db.close()
 
     stats = compute_final_stats(character)
+
+    exp_needed = (
+        exp_required_for_level(character["level"], settings)
+        if character["level"] < LEVEL_CAP else None
+    )
+
+    cooldown_seconds = _cooldown_remaining_seconds(character["next_action_at"])
+
+    here = (current_tile["q"], current_tile["r"])
+    move_targets = [
+        t for t in tiles
+        if t["tile_type"] != "mountain"
+        and axial_distance(here, (t["q"], t["r"])) == 1
+    ]
 
     hexes = []
     xs, ys = [], []
@@ -347,9 +412,114 @@ def game():
         "game.html",
         character=character,
         stats=stats,
+        level_cap=LEVEL_CAP,
+        exp_needed=exp_needed,
+        current_tile=current_tile,
+        move_targets=move_targets,
+        hunting_grounds=hunting_grounds,
+        cooldown_seconds=cooldown_seconds,
         hexes=hexes,
         view_box=f"{min_x:.1f} {min_y:.1f} {max_x - min_x:.1f} {max_y - min_y:.1f}",
     )
+
+
+@app.route("/game/move", methods=["POST"])
+@character_required
+def game_move():
+    db = get_db()
+    character = db.execute(
+        "SELECT id, current_tile_id, next_action_at FROM characters WHERE user_id = ?",
+        (session["user_id"],),
+    ).fetchone()
+
+    if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
+        db.close()
+        flash("還在冷卻中，請稍候再行動")
+        return redirect(url_for("game"))
+
+    current_tile = db.execute(
+        "SELECT q, r FROM map_tiles WHERE id = ?", (character["current_tile_id"],)
+    ).fetchone()
+    target_tile = db.execute(
+        "SELECT id, q, r, tile_type, name FROM map_tiles WHERE id = ?",
+        (request.form.get("tile_id", ""),),
+    ).fetchone()
+
+    valid_target = (
+        target_tile is not None
+        and target_tile["tile_type"] != "mountain"
+        and axial_distance((current_tile["q"], current_tile["r"]), (target_tile["q"], target_tile["r"])) == 1
+    )
+    if not valid_target:
+        db.close()
+        flash("無法移動到那個地點")
+        return redirect(url_for("game"))
+
+    settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
+    db.execute(
+        "UPDATE characters SET current_tile_id = ?, next_action_at = ? WHERE id = ?",
+        (target_tile["id"], _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "move",
+        detail=target_tile["name"], ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    flash(f"移動到了「{target_tile['name']}」")
+    return redirect(url_for("game"))
+
+
+@app.route("/game/hunt", methods=["POST"])
+@character_required
+def game_hunt():
+    db = get_db()
+    character = db.execute(
+        """SELECT characters.id, characters.level, characters.exp, characters.next_action_at,
+                  map_tiles.tile_type
+           FROM characters JOIN map_tiles ON map_tiles.id = characters.current_tile_id
+           WHERE characters.user_id = ?""",
+        (session["user_id"],),
+    ).fetchone()
+
+    if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
+        db.close()
+        flash("還在冷卻中，請稍候再行動")
+        return redirect(url_for("game"))
+
+    if character["tile_type"] == "fortress":
+        db.close()
+        flash("要塞內沒有打怪地點，請先移動到要塞外")
+        return redirect(url_for("game"))
+
+    ground = db.execute(
+        "SELECT * FROM hunting_grounds WHERE id = ?", (request.form.get("ground_id", ""),)
+    ).fetchone()
+    if ground is None:
+        db.close()
+        flash("請選擇一個有效的打怪場")
+        return redirect(url_for("game"))
+
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+    new_level, new_exp = apply_exp(character["level"], character["exp"], ground["monster_exp"], settings)
+
+    db.execute(
+        "UPDATE characters SET level = ?, exp = ?, next_action_at = ? WHERE id = ?",
+        (new_level, new_exp, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "hunt",
+        detail=f"{ground['name']} +{ground['monster_exp']} EXP", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    if new_level > character["level"]:
+        flash(f"在{ground['name']}擊敗了怪物，獲得 {ground['monster_exp']} 經驗值，升到 Lv.{new_level}！")
+    else:
+        flash(f"在{ground['name']}擊敗了怪物，獲得 {ground['monster_exp']} 經驗值")
+    return redirect(url_for("game"))
 
 
 @app.route("/admin")
@@ -467,6 +637,82 @@ def admin_update_country(country_id):
 
     flash(f"已更新「{name}」")
     return redirect(url_for("admin"))
+
+
+@app.route("/admin/settings")
+@admin_required
+def admin_settings():
+    db = get_db()
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+    hunting_grounds = db.execute("SELECT * FROM hunting_grounds ORDER BY min_level").fetchall()
+    db.close()
+    return render_template(
+        "admin_settings.html",
+        settings=settings, hunting_grounds=hunting_grounds, active_tab="settings",
+    )
+
+
+@app.route("/admin/settings/game", methods=["POST"])
+@admin_required
+def admin_update_game_settings():
+    try:
+        turn_wait_seconds = int(request.form.get("turn_wait_seconds", ""))
+        exp_base = int(request.form.get("exp_base", ""))
+        exp_growth_percent = float(request.form.get("exp_growth_percent", ""))
+    except ValueError:
+        flash("設定值格式不正確")
+        return redirect(url_for("admin_settings"))
+
+    if turn_wait_seconds < 0 or exp_base < 1 or exp_growth_percent < 0:
+        flash("設定值必須是正數")
+        return redirect(url_for("admin_settings"))
+
+    db = get_db()
+    db.execute(
+        """UPDATE game_settings
+           SET turn_wait_seconds = ?, exp_base = ?, exp_growth_percent = ?
+           WHERE id = 1""",
+        (turn_wait_seconds, exp_base, exp_growth_percent),
+    )
+    db.commit()
+    db.close()
+
+    flash("已更新遊戲設定")
+    return redirect(url_for("admin_settings"))
+
+
+@app.route("/admin/settings/hunting/<int:ground_id>", methods=["POST"])
+@admin_required
+def admin_update_hunting_ground(ground_id):
+    name = request.form.get("name", "").strip()
+    if not name:
+        flash("打怪場名稱不可以是空的")
+        return redirect(url_for("admin_settings"))
+
+    try:
+        min_level = int(request.form.get("min_level", ""))
+        max_level = int(request.form.get("max_level", ""))
+        monster_exp = int(request.form.get("monster_exp", ""))
+    except ValueError:
+        flash("打怪場數值格式不正確")
+        return redirect(url_for("admin_settings"))
+
+    if min_level < 1 or max_level < min_level or monster_exp < 0:
+        flash("打怪場等級區間或經驗值不合理")
+        return redirect(url_for("admin_settings"))
+
+    db = get_db()
+    db.execute(
+        """UPDATE hunting_grounds
+           SET name = ?, min_level = ?, max_level = ?, monster_exp = ?
+           WHERE id = ?""",
+        (name, min_level, max_level, monster_exp, ground_id),
+    )
+    db.commit()
+    db.close()
+
+    flash(f"已更新「{name}」")
+    return redirect(url_for("admin_settings"))
 
 
 if __name__ == "__main__":
