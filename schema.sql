@@ -67,7 +67,8 @@ CREATE TABLE IF NOT EXISTS game_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     turn_wait_seconds INTEGER NOT NULL DEFAULT 2,
     exp_base INTEGER NOT NULL DEFAULT 100,
-    exp_growth_percent REAL NOT NULL DEFAULT 0.5
+    exp_growth_percent REAL NOT NULL DEFAULT 0.5,
+    sell_back_percent REAL NOT NULL DEFAULT 75
 );
 
 CREATE TABLE IF NOT EXISTS hunting_grounds (

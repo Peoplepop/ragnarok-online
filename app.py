@@ -26,12 +26,18 @@ ACTION_LABELS = {
     "hunt": "打怪",
     "move": "移動",
     "shop_buy": "購買裝備",
+    "shop_sell": "出售裝備",
 }
 
 SHOP_TYPE_LABELS = {
     "weapon": "武器店",
     "armor": "防具店",
     "accessory": "飾品店",
+}
+SLOT_LABELS = {
+    "weapon": "武器",
+    "armor": "防具",
+    "accessory": "飾品",
 }
 EQUIP_SLOT_COLUMNS = {
     "weapon": "equipped_weapon_id",
@@ -388,11 +394,25 @@ def game():
         for item_id in equipped_ids if item_id
     ]
     shop_items = None
+    sellable_items = None
     if current_tile["tile_type"] == "fortress":
         all_items = db.execute("SELECT * FROM items ORDER BY shop_type, price").fetchall()
         shop_items = {shop_type: [] for shop_type in SHOP_TYPE_LABELS}
         for item in all_items:
             shop_items[item["shop_type"]].append(item)
+
+        sellable_items = []
+        for shop_type, label in SLOT_LABELS.items():
+            item_id = character[EQUIP_SLOT_COLUMNS[shop_type]]
+            if not item_id:
+                continue
+            item = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+            sellable_items.append({
+                "slot": shop_type,
+                "label": label,
+                "item": item,
+                "sell_price": round(item["price"] * settings["sell_back_percent"] / 100),
+            })
     db.close()
 
     stats = compute_final_stats(character, equipped_items)
@@ -449,6 +469,7 @@ def game():
         hunting_grounds=hunting_grounds,
         cooldown_seconds=cooldown_seconds,
         shop_items=shop_items,
+        sellable_items=sellable_items,
         shop_type_labels=SHOP_TYPE_LABELS,
         equipped_ids=set(equipped_ids),
         hexes=hexes,
@@ -560,11 +581,16 @@ def game_hunt():
 def game_shop_buy():
     db = get_db()
     character = db.execute(
-        """SELECT characters.id, characters.currency, map_tiles.tile_type
+        """SELECT characters.id, characters.currency, characters.next_action_at, map_tiles.tile_type
            FROM characters JOIN map_tiles ON map_tiles.id = characters.current_tile_id
            WHERE characters.user_id = ?""",
         (session["user_id"],),
     ).fetchone()
+
+    if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
+        db.close()
+        flash("還在冷卻中，請稍候再行動")
+        return redirect(url_for("game"))
 
     if character["tile_type"] != "fortress":
         db.close()
@@ -584,10 +610,11 @@ def game_shop_buy():
         flash(f"諸神幣不足，「{item['name']}」需要 {item['price']} 諸神幣")
         return redirect(url_for("game"))
 
+    settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
     slot_column = EQUIP_SLOT_COLUMNS[item["shop_type"]]
     db.execute(
-        f"UPDATE characters SET currency = currency - ?, {slot_column} = ? WHERE id = ?",
-        (item["price"], item["id"], character["id"]),
+        f"UPDATE characters SET currency = currency - ?, {slot_column} = ?, next_action_at = ? WHERE id = ?",
+        (item["price"], item["id"], _next_action_at(settings["turn_wait_seconds"]), character["id"]),
     )
     log_activity(
         db, session["user_id"], session["username"], "shop_buy",
@@ -597,6 +624,62 @@ def game_shop_buy():
     db.close()
 
     flash(f"已購買並裝備「{item['name']}」")
+    return redirect(url_for("game"))
+
+
+@app.route("/game/shop/sell", methods=["POST"])
+@character_required
+def game_shop_sell():
+    db = get_db()
+    character = db.execute(
+        """SELECT characters.id, characters.currency, characters.next_action_at, map_tiles.tile_type,
+                  characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id
+           FROM characters JOIN map_tiles ON map_tiles.id = characters.current_tile_id
+           WHERE characters.user_id = ?""",
+        (session["user_id"],),
+    ).fetchone()
+
+    if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
+        db.close()
+        flash("還在冷卻中，請稍候再行動")
+        return redirect(url_for("game"))
+
+    if character["tile_type"] != "fortress":
+        db.close()
+        flash("只能在要塞內的商店出售裝備")
+        return redirect(url_for("game"))
+
+    slot = request.form.get("slot", "")
+    slot_column = EQUIP_SLOT_COLUMNS.get(slot)
+    if slot_column is None:
+        db.close()
+        flash("請選擇一個有效的裝備部位")
+        return redirect(url_for("game"))
+
+    item_id = character[slot_column]
+    if not item_id:
+        db.close()
+        flash("該部位目前沒有裝備任何東西")
+        return redirect(url_for("game"))
+
+    item = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    settings = db.execute(
+        "SELECT turn_wait_seconds, sell_back_percent FROM game_settings WHERE id = 1"
+    ).fetchone()
+    refund = round(item["price"] * settings["sell_back_percent"] / 100)
+
+    db.execute(
+        f"UPDATE characters SET currency = currency + ?, {slot_column} = NULL, next_action_at = ? WHERE id = ?",
+        (refund, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "shop_sell",
+        detail=f"{item['name']} (+{refund} 諸神幣)", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    flash(f"已出售「{item['name']}」，獲得 {refund} 諸神幣")
     return redirect(url_for("game"))
 
 
@@ -776,6 +859,7 @@ def admin_update_game_settings():
         turn_wait_seconds = int(request.form.get("turn_wait_seconds", ""))
         exp_base = int(request.form.get("exp_base", ""))
         exp_growth_percent = float(request.form.get("exp_growth_percent", ""))
+        sell_back_percent = float(request.form.get("sell_back_percent", ""))
     except ValueError:
         flash("設定值格式不正確")
         return redirect(url_for("admin_settings"))
@@ -784,12 +868,16 @@ def admin_update_game_settings():
         flash("設定值必須是正數")
         return redirect(url_for("admin_settings"))
 
+    if sell_back_percent < 0 or sell_back_percent > 100:
+        flash("裝備回收比例必須介於 0 到 100 之間")
+        return redirect(url_for("admin_settings"))
+
     db = get_db()
     db.execute(
         """UPDATE game_settings
-           SET turn_wait_seconds = ?, exp_base = ?, exp_growth_percent = ?
+           SET turn_wait_seconds = ?, exp_base = ?, exp_growth_percent = ?, sell_back_percent = ?
            WHERE id = 1""",
-        (turn_wait_seconds, exp_base, exp_growth_percent),
+        (turn_wait_seconds, exp_base, exp_growth_percent, sell_back_percent),
     )
     db.commit()
     db.close()

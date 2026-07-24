@@ -103,6 +103,24 @@
       display: inline-block;
     }
     button:hover, .btn:hover { box-shadow: 0 0 20px rgba(212, 175, 55, 0.5); transform: translateY(-1px); }
+    button:disabled, .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+
+    select {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    select:focus { outline: none; border-color: var(--gold); }
+    select:disabled { opacity: 0.4; cursor: not-allowed; }
 
     .flash {
       background: rgba(224, 85, 90, 0.08);

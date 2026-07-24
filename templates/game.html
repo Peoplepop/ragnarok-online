@@ -65,20 +65,20 @@
 
   <div class="panel" style="margin-top:20px;">
     <h3 style="margin:0 0 4px; color:var(--gold-bright); font-size:15px;">你目前在「{{ current_tile.name }}」</h3>
-    {% if cooldown_seconds > 0 %}
-    <p class="hint" style="margin-top:0;">冷卻中，還需等待 {{ cooldown_seconds }} 秒才能行動</p>
-    {% endif %}
+    <p class="hint" id="cooldown-display" style="margin-top:0; {% if cooldown_seconds <= 0 %}display:none;{% endif %}">
+      冷卻中，還需等待 <span id="cooldown-seconds">{{ cooldown_seconds }}</span> 秒才能行動
+    </p>
 
     <div style="margin-top:14px;">
       <div style="font-size:13px; color:var(--text-dim); margin-bottom:8px;">移動到相鄰地點</div>
       {% if move_targets %}
       <form method="post" action="{{ url_for('game_move') }}" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-        <select name="tile_id">
+        <select name="tile_id" class="turn-action-control">
           {% for t in move_targets %}
           <option value="{{ t.tile_id }}">{{ t.name }}</option>
           {% endfor %}
         </select>
-        <button type="submit" style="padding:6px 14px; font-size:13px;">移動</button>
+        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">移動</button>
       </form>
       {% else %}
       <p class="hint" style="margin:0;">附近沒有可以移動的地點</p>
@@ -91,12 +91,12 @@
       <p class="hint" style="margin:0;">要塞內只有商店，沒有打怪地點，請先移動到要塞外</p>
       {% else %}
       <form method="post" action="{{ url_for('game_hunt') }}" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-        <select name="ground_id">
+        <select name="ground_id" class="turn-action-control">
           {% for g in hunting_grounds %}
           <option value="{{ g.id }}">{{ g.name }}（Lv.{{ g.min_level }}-{{ g.max_level }}，+{{ g.monster_exp }} EXP）</option>
           {% endfor %}
         </select>
-        <button type="submit" style="padding:6px 14px; font-size:13px;">前往打怪</button>
+        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">前往打怪</button>
       </form>
       {% endif %}
     </div>
@@ -104,22 +104,69 @@
     {% if shop_items %}
     <div style="margin-top:24px; border-top:1px solid var(--border); padding-top:18px;">
       <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">要塞商店</h3>
-      {% for shop_type, label in shop_type_labels.items() %}
-      <div style="margin-bottom:16px;">
-        <div style="font-size:13px; color:var(--text-dim); margin-bottom:8px;">{{ label }}</div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          {% for item in shop_items[shop_type] %}
-          <form method="post" action="{{ url_for('game_shop_buy') }}">
-            <input type="hidden" name="item_id" value="{{ item.id }}">
-            <button type="submit" style="padding:6px 14px; font-size:13px; {% if item.id in equipped_ids %}opacity:0.6;{% endif %}">
+      <form method="post" action="{{ url_for('game_shop_buy') }}" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <select name="item_id" class="turn-action-control">
+          {% for shop_type, label in shop_type_labels.items() %}
+          {% if shop_items[shop_type] %}
+          <optgroup label="{{ label }}">
+            {% for item in shop_items[shop_type] %}
+            <option value="{{ item.id }}">
               {{ item.name }}（{{ item.stat }}+{{ item.stat_bonus }}，{{ item.price }} 諸神幣）{% if item.id in equipped_ids %} 已裝備{% endif %}
-            </button>
-          </form>
+            </option>
+            {% endfor %}
+          </optgroup>
+          {% endif %}
           {% endfor %}
-        </div>
+        </select>
+        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">購買</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if sellable_items %}
+    <div style="margin-top:24px; border-top:1px solid var(--border); padding-top:18px;">
+      <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">出售裝備</h3>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        {% for s in sellable_items %}
+        <form method="post" action="{{ url_for('game_shop_sell') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <input type="hidden" name="slot" value="{{ s.slot }}">
+          <span style="font-size:13px; color:var(--text-dim); min-width:50px;">{{ s.label }}</span>
+          <span style="font-size:13px;">{{ s.item.name }}（{{ s.item.stat }}+{{ s.item.stat_bonus }}）</span>
+          <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">出售（回收 {{ s.sell_price }} 諸神幣）</button>
+        </form>
+        {% endfor %}
       </div>
-      {% endfor %}
     </div>
     {% endif %}
   </div>
+
+  <script>
+    (function () {
+      var remaining = {{ cooldown_seconds }};
+      var display = document.getElementById("cooldown-display");
+      var secondsSpan = document.getElementById("cooldown-seconds");
+      var controls = document.querySelectorAll(".turn-action-control");
+
+      function setControlsDisabled(disabled) {
+        controls.forEach(function (el) { el.disabled = disabled; });
+      }
+
+      function tick() {
+        if (remaining <= 0) {
+          setControlsDisabled(false);
+          if (display) display.style.display = "none";
+          return;
+        }
+        setControlsDisabled(true);
+        if (display) {
+          display.style.display = "";
+          secondsSpan.textContent = remaining;
+        }
+        remaining -= 1;
+        setTimeout(tick, 1000);
+      }
+
+      tick();
+    })();
+  </script>
 {% endblock %}

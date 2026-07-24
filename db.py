@@ -104,6 +104,12 @@ def _ensure_character_columns(conn):
         conn.execute("ALTER TABLE characters ADD COLUMN equipped_accessory_id INTEGER")
 
 
+def _ensure_game_settings_columns(conn):
+    cols = [row["name"] for row in conn.execute("PRAGMA table_info(game_settings)")]
+    if "sell_back_percent" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN sell_back_percent REAL NOT NULL DEFAULT 75")
+
+
 def init_db():
     conn = get_db()
     with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
@@ -111,6 +117,7 @@ def init_db():
     _ensure_is_admin_column(conn)
     _ensure_session_columns(conn)
     _ensure_character_columns(conn)
+    _ensure_game_settings_columns(conn)
     conn.commit()
     conn.close()
 
