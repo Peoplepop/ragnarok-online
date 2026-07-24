@@ -35,6 +35,40 @@ def _neutral_name(i):
     return f"廢墟{_cn_number(i)}"
 
 
+# Manual overrides layered on top of the procedural layout below, per the
+# user's explicit map design calls (not derivable from the generation rules).
+_MOUNTAIN_CELLS = {(2, -1), (0, 0)}  # was 廢墟九 / 廢墟十九 -> impassable, unclaimable
+_EARTH_COUNTRY_INDEX = 4  # 萬物母育國
+_EARTH_SHIFT = (-1, 0)  # whole territory moves one step 左上 (up-left)
+
+
+def _apply_manual_overrides(tiles):
+    for tile in tiles:
+        if (tile["q"], tile["r"]) in _MOUNTAIN_CELLS:
+            tile["tile_type"] = "mountain"
+            tile["name"] = "山嶺"
+            tile["country_index"] = None
+
+    dq, dr = _EARTH_SHIFT
+    earth_tiles = [t for t in tiles if t["country_index"] == _EARTH_COUNTRY_INDEX]
+    old_cells = {(t["q"], t["r"]) for t in earth_tiles}
+    for t in earth_tiles:
+        t["q"] += dq
+        t["r"] += dr
+    new_cells = {(t["q"], t["r"]) for t in earth_tiles}
+
+    reclaimed = new_cells - old_cells  # cells taken over from former neutral ruins
+    vacated = sorted(old_cells - new_cells)  # cells the country left behind
+    tiles[:] = [
+        t for t in tiles
+        if (t["q"], t["r"]) not in reclaimed or t["country_index"] == _EARTH_COUNTRY_INDEX
+    ]
+
+    freed_names = ["廢墟十五", "廢墟十六"]  # reuse the numbers the reclaimed ruins vacate
+    for (q, r), name in zip(vacated, freed_names):
+        tiles.append({"q": q, "r": r, "tile_type": "neutral", "name": name, "country_index": None})
+
+
 def axial_to_pixel(q, r, size):
     x = size * 1.5 * q
     y = size * math.sqrt(3) * (r + q / 2)
@@ -122,4 +156,5 @@ def generate_layout():
             "tile_type": "neutral", "name": _neutral_name(i), "country_index": None,
         })
 
+    _apply_manual_overrides(tiles)
     return tiles

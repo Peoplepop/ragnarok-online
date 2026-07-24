@@ -124,15 +124,25 @@ def seed_defaults():
 
 def _seed_map_tiles(conn):
     layout = generate_layout()
-    current_count = conn.execute("SELECT COUNT(*) AS c FROM map_tiles").fetchone()["c"]
-    if current_count == len(layout):
-        return False
-
-    conn.execute("DELETE FROM map_tiles")
-
     country_ids = [
         row["id"] for row in conn.execute("SELECT id FROM countries ORDER BY id")
     ]
+
+    desired = sorted(
+        (
+            t["q"], t["r"], t["tile_type"], t["name"],
+            country_ids[t["country_index"]] if t["country_index"] is not None else None,
+        )
+        for t in layout
+    )
+    current = sorted(
+        (row["q"], row["r"], row["tile_type"], row["name"], row["country_id"])
+        for row in conn.execute("SELECT q, r, tile_type, name, country_id FROM map_tiles")
+    )
+    if desired == current:
+        return False
+
+    conn.execute("DELETE FROM map_tiles")
 
     for tile in layout:
         country_id = (

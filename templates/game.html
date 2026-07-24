@@ -26,7 +26,7 @@
         <polygon
           points="{{ h.points }}"
           fill="{{ h.color }}"
-          fill-opacity="{{ '0.55' if h.tile_type == 'town' else ('0.30' if h.tile_type == 'neutral' else '0.85') }}"
+          fill-opacity="{{ '0.55' if h.tile_type == 'town' else ('0.30' if h.tile_type == 'neutral' else ('1' if h.tile_type == 'mountain' else '0.85')) }}"
           stroke="{{ 'var(--gold-bright)' if h.is_own_country else 'rgba(232,226,208,0.35)' }}"
           stroke-width="{{ '3' if h.tile_type == 'fortress' else '1.2' }}"
           stroke-dasharray="{{ '4,3' if h.tile_type == 'neutral' else 'none' }}"
@@ -36,7 +36,7 @@
           text-anchor="middle" dominant-baseline="middle"
           font-size="{{ '13' if h.tile_type == 'fortress' else '11' }}"
           font-weight="{{ '700' if h.tile_type == 'fortress' else '400' }}"
-          fill="{{ '#1a1408' if h.tile_type != 'neutral' else 'var(--text-dim)' }}"
+          fill="{{ 'var(--text-dim)' if h.tile_type == 'neutral' else ('var(--text)' if h.tile_type == 'mountain' else '#1a1408') }}"
         >{{ h.name }}</text>
         {% if h.is_player_here %}
         <circle cx="{{ h.cx }}" cy="{{ h.cy - 18 }}" r="9" fill="none" stroke="#ffffff" stroke-width="2.5">
@@ -53,6 +53,7 @@
   <div style="display:flex; gap:18px; margin-top:14px; font-size:12px; color:var(--text-dim); flex-wrap:wrap;">
     <span>🔶 粗金框 = 國家要塞</span>
     <span>▫️ 虛線灰框 = 待佔領城鎮</span>
+    <span>⛰️ 深色實心 = 山嶺（無法通行、無法佔領）</span>
     <span>✨ 金色外框 = 我的國家領地</span>
     <span>⚪ 閃爍白點 = 你目前所在位置</span>
   </div>

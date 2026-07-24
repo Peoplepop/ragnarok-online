@@ -34,6 +34,7 @@ ELEMENT_COLORS = {
     "土": "#8b5a2b",
 }
 NEUTRAL_TILE_COLOR = "#5a5a5a"
+MOUNTAIN_TILE_COLOR = "#3e3830"
 
 init_db()
 seed_defaults()
@@ -298,7 +299,10 @@ def game():
     xs, ys = [], []
     for t in tiles:
         cx, cy = axial_to_pixel(t["q"], t["r"], HEX_SIZE)
-        color = ELEMENT_COLORS.get(t["element"], NEUTRAL_TILE_COLOR)
+        color = (
+            MOUNTAIN_TILE_COLOR if t["tile_type"] == "mountain"
+            else ELEMENT_COLORS.get(t["element"], NEUTRAL_TILE_COLOR)
+        )
         points = " ".join(f"{px:.1f},{py:.1f}" for px, py in hex_corners(cx, cy, HEX_SIZE))
         xs += [cx - HEX_SIZE, cx + HEX_SIZE]
         ys += [cy - HEX_SIZE, cy + HEX_SIZE]
