@@ -41,10 +41,16 @@ CREATE TABLE IF NOT EXISTS characters (
     level INTEGER NOT NULL DEFAULT 1,
     exp INTEGER NOT NULL DEFAULT 0,
     next_action_at TEXT,
+    equipped_weapon_id INTEGER,
+    equipped_armor_id INTEGER,
+    equipped_accessory_id INTEGER,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (country_id) REFERENCES countries(id),
-    FOREIGN KEY (current_tile_id) REFERENCES map_tiles(id)
+    FOREIGN KEY (current_tile_id) REFERENCES map_tiles(id),
+    FOREIGN KEY (equipped_weapon_id) REFERENCES items(id),
+    FOREIGN KEY (equipped_armor_id) REFERENCES items(id),
+    FOREIGN KEY (equipped_accessory_id) REFERENCES items(id)
 );
 
 CREATE TABLE IF NOT EXISTS map_tiles (
@@ -71,4 +77,13 @@ CREATE TABLE IF NOT EXISTS hunting_grounds (
     min_level INTEGER NOT NULL,
     max_level INTEGER NOT NULL,
     monster_exp INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    shop_type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    price INTEGER NOT NULL DEFAULT 0,
+    stat TEXT NOT NULL,
+    stat_bonus INTEGER NOT NULL DEFAULT 0
 );

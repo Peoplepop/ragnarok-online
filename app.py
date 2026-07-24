@@ -25,6 +25,18 @@ ACTION_LABELS = {
     "character_create": "建立角色",
     "hunt": "打怪",
     "move": "移動",
+    "shop_buy": "購買裝備",
+}
+
+SHOP_TYPE_LABELS = {
+    "weapon": "武器店",
+    "armor": "防具店",
+    "accessory": "飾品店",
+}
+EQUIP_SLOT_COLUMNS = {
+    "weapon": "equipped_weapon_id",
+    "armor": "equipped_armor_id",
+    "accessory": "equipped_accessory_id",
 }
 
 # Below this level, 升級軟糖 may still be used to skip grinding; past it,
@@ -54,9 +66,13 @@ BASE_STATS = {
 }
 
 
-def compute_final_stats(country):
+def compute_final_stats(country, equipped_items=()):
+    equip_bonus = {}
+    for item in equipped_items:
+        if item:
+            equip_bonus[item["stat"]] = equip_bonus.get(item["stat"], 0) + item["stat_bonus"]
     return {
-        key: round(base * (1 + country[bonus_field] / 100))
+        key: round(base * (1 + country[bonus_field] / 100)) + equip_bonus.get(key, 0)
         for key, (bonus_field, base) in BASE_STATS.items()
     }
 
@@ -346,7 +362,8 @@ def game():
     character = db.execute(
         """SELECT characters.id AS character_id, characters.current_tile_id,
                   characters.currency, characters.level, characters.exp, characters.next_action_at,
-                  countries.*
+                  characters.equipped_weapon_id, characters.equipped_armor_id,
+                  characters.equipped_accessory_id, countries.*
            FROM characters JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
         (session["user_id"],),
@@ -363,9 +380,22 @@ def game():
     hunting_grounds = db.execute(
         "SELECT * FROM hunting_grounds ORDER BY min_level"
     ).fetchall()
+    equipped_ids = [
+        character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
+    ]
+    equipped_items = [
+        db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        for item_id in equipped_ids if item_id
+    ]
+    shop_items = None
+    if current_tile["tile_type"] == "fortress":
+        all_items = db.execute("SELECT * FROM items ORDER BY shop_type, price").fetchall()
+        shop_items = {shop_type: [] for shop_type in SHOP_TYPE_LABELS}
+        for item in all_items:
+            shop_items[item["shop_type"]].append(item)
     db.close()
 
-    stats = compute_final_stats(character)
+    stats = compute_final_stats(character, equipped_items)
 
     exp_needed = (
         exp_required_for_level(character["level"], settings)
@@ -418,6 +448,9 @@ def game():
         move_targets=move_targets,
         hunting_grounds=hunting_grounds,
         cooldown_seconds=cooldown_seconds,
+        shop_items=shop_items,
+        shop_type_labels=SHOP_TYPE_LABELS,
+        equipped_ids=set(equipped_ids),
         hexes=hexes,
         view_box=f"{min_x:.1f} {min_y:.1f} {max_x - min_x:.1f} {max_y - min_y:.1f}",
     )
@@ -520,6 +553,90 @@ def game_hunt():
     else:
         flash(f"在{ground['name']}擊敗了怪物，獲得 {ground['monster_exp']} 經驗值")
     return redirect(url_for("game"))
+
+
+@app.route("/game/shop/buy", methods=["POST"])
+@character_required
+def game_shop_buy():
+    db = get_db()
+    character = db.execute(
+        """SELECT characters.id, characters.currency, map_tiles.tile_type
+           FROM characters JOIN map_tiles ON map_tiles.id = characters.current_tile_id
+           WHERE characters.user_id = ?""",
+        (session["user_id"],),
+    ).fetchone()
+
+    if character["tile_type"] != "fortress":
+        db.close()
+        flash("只能在要塞內的商店購買裝備")
+        return redirect(url_for("game"))
+
+    item = db.execute(
+        "SELECT * FROM items WHERE id = ?", (request.form.get("item_id", ""),)
+    ).fetchone()
+    if item is None:
+        db.close()
+        flash("請選擇一個有效的商品")
+        return redirect(url_for("game"))
+
+    if character["currency"] < item["price"]:
+        db.close()
+        flash(f"諸神幣不足，「{item['name']}」需要 {item['price']} 諸神幣")
+        return redirect(url_for("game"))
+
+    slot_column = EQUIP_SLOT_COLUMNS[item["shop_type"]]
+    db.execute(
+        f"UPDATE characters SET currency = currency - ?, {slot_column} = ? WHERE id = ?",
+        (item["price"], item["id"], character["id"]),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "shop_buy",
+        detail=f"{item['name']} ({item['price']} 諸神幣)", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    flash(f"已購買並裝備「{item['name']}」")
+    return redirect(url_for("game"))
+
+
+@app.route("/character")
+@character_required
+def character_page():
+    db = get_db()
+    character = db.execute(
+        """SELECT characters.id AS character_id, characters.level, characters.exp,
+                  characters.equipped_weapon_id, characters.equipped_armor_id,
+                  characters.equipped_accessory_id, countries.*
+           FROM characters JOIN countries ON countries.id = characters.country_id
+           WHERE characters.user_id = ?""",
+        (session["user_id"],),
+    ).fetchone()
+
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+    equipped_ids = [
+        character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
+    ]
+    equipped_items = [
+        db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        for item_id in equipped_ids if item_id
+    ]
+    db.close()
+
+    stats = compute_final_stats(character, equipped_items)
+    exp_needed = (
+        exp_required_for_level(character["level"], settings)
+        if character["level"] < LEVEL_CAP else None
+    )
+
+    return render_template(
+        "character.html",
+        character=character,
+        stats=stats,
+        level_cap=LEVEL_CAP,
+        exp_needed=exp_needed,
+        equipped_items=equipped_items,
+    )
 
 
 @app.route("/admin")

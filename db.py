@@ -49,6 +49,18 @@ DEFAULT_HUNTING_GROUNDS = [
     {"tier": "ultimate", "name": "究級打怪場", "min_level": 121, "max_level": LEVEL_CAP, "monster_exp": 80},
 ]
 
+DEFAULT_ITEMS = [
+    {"shop_type": "weapon", "name": "木劍", "price": 50, "stat": "str", "stat_bonus": 2},
+    {"shop_type": "weapon", "name": "鐵劍", "price": 200, "stat": "str", "stat_bonus": 8},
+    {"shop_type": "weapon", "name": "秘銀劍", "price": 800, "stat": "str", "stat_bonus": 20},
+    {"shop_type": "armor", "name": "布甲", "price": 50, "stat": "def", "stat_bonus": 2},
+    {"shop_type": "armor", "name": "鐵甲", "price": 200, "stat": "def", "stat_bonus": 8},
+    {"shop_type": "armor", "name": "龍鱗甲", "price": 800, "stat": "def", "stat_bonus": 20},
+    {"shop_type": "accessory", "name": "銅戒指", "price": 50, "stat": "luk", "stat_bonus": 2},
+    {"shop_type": "accessory", "name": "銀戒指", "price": 200, "stat": "luk", "stat_bonus": 8},
+    {"shop_type": "accessory", "name": "金戒指", "price": 800, "stat": "luk", "stat_bonus": 20},
+]
+
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -84,6 +96,12 @@ def _ensure_character_columns(conn):
         conn.execute("ALTER TABLE characters ADD COLUMN exp INTEGER NOT NULL DEFAULT 0")
     if "next_action_at" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN next_action_at TEXT")
+    if "equipped_weapon_id" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN equipped_weapon_id INTEGER")
+    if "equipped_armor_id" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN equipped_armor_id INTEGER")
+    if "equipped_accessory_id" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN equipped_accessory_id INTEGER")
 
 
 def init_db():
@@ -144,6 +162,14 @@ def seed_defaults():
                 """INSERT INTO hunting_grounds (tier, name, min_level, max_level, monster_exp)
                    VALUES (?, ?, ?, ?, ?)""",
                 (g["tier"], g["name"], g["min_level"], g["max_level"], g["monster_exp"]),
+            )
+
+    if conn.execute("SELECT COUNT(*) AS c FROM items").fetchone()["c"] == 0:
+        for i in DEFAULT_ITEMS:
+            conn.execute(
+                """INSERT INTO items (shop_type, name, price, stat, stat_bonus)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (i["shop_type"], i["name"], i["price"], i["stat"], i["stat_bonus"]),
             )
 
     conn.commit()
