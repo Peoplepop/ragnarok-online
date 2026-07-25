@@ -33,10 +33,28 @@
           <label>首領經驗倍率</label>
           <input type="text" inputmode="decimal" name="boss_exp_multiplier" value="{{ settings.boss_exp_multiplier }}">
         </div>
+        <div>
+          <label>商店稅率 (%)</label>
+          <input type="text" inputmode="decimal" name="shop_tax_percent" value="{{ settings.shop_tax_percent }}">
+        </div>
+        <div>
+          <label>回復站每點費用 (諸神幣/點)</label>
+          <input type="text" inputmode="decimal" name="heal_cost_per_point" value="{{ settings.heal_cost_per_point }}">
+        </div>
+        <div>
+          <label>城鎮防衛等級</label>
+          <input type="text" inputmode="numeric" name="town_defense_level" value="{{ settings.town_defense_level }}">
+        </div>
+        <div>
+          <label>要塞防衛等級</label>
+          <input type="text" inputmode="numeric" name="fortress_defense_level" value="{{ settings.fortress_defense_level }}">
+        </div>
       </div>
       <p class="hint" style="margin-bottom:16px;">
         第 N 級所需經驗 = 基礎經驗值 ×（1 + 成長幅度%）^(N-1)，逐級複利成長；出售裝備可回收「原價 × 回收比例%」的諸神幣；
-        每次打怪有「首領遭遇機率%」的機率遇到該場地的首領，擊敗首領可得「一般怪物經驗 × 首領經驗倍率」的經驗值
+        每次打怪有「首領遭遇機率%」的機率遇到該場地的首領，擊敗首領可得「一般怪物經驗 × 首領經驗倍率」的經驗值；
+        商店買賣會有「商店稅率%」流入玩家所屬國家的國庫；回復站依實際回復的 HP+MP 點數收費；
+        攻打城鎮/要塞時，防衛隊會以該國數值套用「城鎮/要塞防衛等級」現算戰力
       </p>
       <button type="submit">儲存設定</button>
     </form>

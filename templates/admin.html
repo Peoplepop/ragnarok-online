@@ -8,6 +8,7 @@
 
   {% for c in countries %}
   <div class="panel" style="margin-bottom: 18px;">
+    <p class="hint" style="margin-top:0;">🏛️ 國庫：{{ c.treasury }} 諸神幣</p>
     <form method="post" action="{{ url_for('admin_update_country', country_id=c.id) }}">
       <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <div>

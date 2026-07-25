@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS countries (
     str_bonus INTEGER NOT NULL DEFAULT 0,
     def_bonus INTEGER NOT NULL DEFAULT 0,
     agi_bonus INTEGER NOT NULL DEFAULT 0,
-    luk_bonus INTEGER NOT NULL DEFAULT 0
+    luk_bonus INTEGER NOT NULL DEFAULT 0,
+    treasury INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS characters (
@@ -44,6 +45,9 @@ CREATE TABLE IF NOT EXISTS characters (
     equipped_weapon_id INTEGER,
     equipped_armor_id INTEGER,
     equipped_accessory_id INTEGER,
+    battles_count INTEGER NOT NULL DEFAULT 0,
+    wins_count INTEGER NOT NULL DEFAULT 0,
+    bank_balance INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (country_id) REFERENCES countries(id),
@@ -68,7 +72,11 @@ CREATE TABLE IF NOT EXISTS game_settings (
     turn_wait_seconds INTEGER NOT NULL DEFAULT 2,
     exp_base INTEGER NOT NULL DEFAULT 100,
     exp_growth_percent REAL NOT NULL DEFAULT 0.5,
-    sell_back_percent REAL NOT NULL DEFAULT 75
+    sell_back_percent REAL NOT NULL DEFAULT 75,
+    shop_tax_percent REAL NOT NULL DEFAULT 5,
+    heal_cost_per_point REAL NOT NULL DEFAULT 1,
+    town_defense_level INTEGER NOT NULL DEFAULT 500,
+    fortress_defense_level INTEGER NOT NULL DEFAULT 1000
 );
 
 CREATE TABLE IF NOT EXISTS hunting_grounds (
@@ -109,5 +117,6 @@ CREATE TABLE IF NOT EXISTS monsters (
     def INTEGER NOT NULL,
     agi INTEGER NOT NULL,
     currency_reward INTEGER NOT NULL DEFAULT 0,
+    element TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (hunting_ground_id) REFERENCES hunting_grounds(id)
 );

@@ -7,7 +7,7 @@ from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from db import get_db, init_db, seed_defaults, log_activity, LEVEL_CAP
+from db import get_db, init_db, seed_defaults, log_activity, LEVEL_CAP, ELEMENT_OVERCOMES
 from map_layout import axial_to_pixel, hex_corners, axial_distance
 
 app = Flask(__name__)
@@ -33,6 +33,11 @@ ACTION_LABELS = {
     "equip": "裝備",
     "unequip": "卸下裝備",
     "recover": "回復",
+    "bank_deposit": "銀行存款",
+    "bank_withdraw": "銀行提款",
+    "treasury_donate": "捐獻國庫",
+    "conquer_win": "攻城成功",
+    "conquer_loss": "攻城失敗",
 }
 
 SHOP_TYPE_LABELS = {
@@ -96,6 +101,19 @@ def compute_final_stats(country, equipped_items=(), level=1):
     }
 
 
+def defense_tower_stats(country, tile_type, settings):
+    """Builds a monster-shaped dict for a town/fortress's defenders, reusing
+    compute_final_stats at a fixed high level (no gear) so territory combat
+    goes through the exact same run_battle/_combat_hit path as hunting."""
+    level = settings["fortress_defense_level"] if tile_type == "fortress" else settings["town_defense_level"]
+    s = compute_final_stats(country, [], level)
+    return {
+        "name": f"{country['name']}守軍",
+        "hp": s["hp"], "atk": s["str"], "def": s["def"], "agi": s["agi"],
+        "element": country["element"],
+    }
+
+
 def _current_hp_mp(character, stats):
     """current_hp/current_mp of NULL means "untouched, full" -- battles and
     /game/recover are the only things that ever write a concrete number."""
@@ -125,49 +143,156 @@ def apply_exp(level, exp, gained, settings):
     return level, exp
 
 
-def _combat_hit(attacker_name, attacker_atk, attacker_luk, defender_name, defender_def, defender_luk):
-    dodge_chance = min(25, defender_luk * 0.3)
-    if random.random() * 100 < dodge_chance:
+# --- Combat formula tuning ------------------------------------------------
+# Every percentage-based stat (減傷/爆擊率/命中率/閃避率) uses an x/(x+K) soft-cap
+# curve: it keeps climbing but only asymptotically approaches its ceiling, so no
+# stat combination can ever push it to a literal 100% (guaranteed unhittable /
+# undodgeable / uncritable outcome).
+STR_DAMAGE_RANGE = (0.85, 1.15)      # 1 STR point -> 0.85~1.15 raw damage, rolled per hit
+DEF_REDUCTION_K = 120                # DEF/(DEF+K) -> reduction fraction, asymptotic to 1
+DEF_REDUCTION_JITTER = (0.9, 1.1)    # per-hit jitter on the reduction fraction itself
+DEF_REDUCTION_HARD_CAP = 0.90        # extra safety net alongside the asymptote
+SPEED_PER_AGI = 5                    # 1 AGI -> 5 attack-speed points
+EXTRA_ATTACK_SPEED_STEP = 50         # every 50 speed points of lead = +1 attack per round
+CRIT_CHANCE_K = 150                  # AGI/(AGI+K) -> crit chance, asymptotic
+CRIT_CHANCE_HARD_CAP = 70            # percent
+CRIT_DAMAGE_RANGE = (1.3, 1.7)       # crit multiplier rolled per crit
+HIT_CHANCE_BASE = 90                 # percent, at LUK=0 (so monsters w/o LUK still swing)
+HIT_CHANCE_MAX_BONUS = 10            # + up to this many percent, asymptotic w/ LUK
+HIT_CHANCE_K = 100
+DODGE_CHANCE_BASE = 5                # percent, baseline evasion even at LUK=0
+DODGE_CHANCE_MAX_BONUS = 55          # + up to this many percent, asymptotic w/ LUK
+DODGE_CHANCE_K = 150
+GOLD_LUK_BONUS_PER_POINT = 0.05      # percent of currency reward per LUK point
+GOLD_LUK_BONUS_CAP = 15              # percent
+ELEMENT_OVERCOME_BONUS = 1.25        # attacker's element 剋 defender's -> +25% damage
+ELEMENT_OVERCOME_PENALTY = 0.8       # attacker's element 被剋 by defender's -> -20% damage
+
+
+def elemental_multiplier(attacker_element, defender_element):
+    if not attacker_element or not defender_element or attacker_element == defender_element:
+        return 1.0
+    if ELEMENT_OVERCOMES.get(attacker_element) == defender_element:
+        return ELEMENT_OVERCOME_BONUS
+    if ELEMENT_OVERCOMES.get(defender_element) == attacker_element:
+        return ELEMENT_OVERCOME_PENALTY
+    return 1.0
+
+
+def _hit_chance_pct(attacker_luk):
+    return HIT_CHANCE_BASE + HIT_CHANCE_MAX_BONUS * attacker_luk / (attacker_luk + HIT_CHANCE_K)
+
+
+def _dodge_chance_pct(defender_luk):
+    return DODGE_CHANCE_BASE + DODGE_CHANCE_MAX_BONUS * defender_luk / (defender_luk + DODGE_CHANCE_K)
+
+
+def _crit_chance_pct(attacker_agi):
+    return min(CRIT_CHANCE_HARD_CAP, 100 * attacker_agi / (attacker_agi + CRIT_CHANCE_K))
+
+
+def _def_reduction_fraction(defender_def):
+    return defender_def / (defender_def + DEF_REDUCTION_K)
+
+
+def gold_luk_bonus_pct(luk):
+    return min(GOLD_LUK_BONUS_CAP, luk * GOLD_LUK_BONUS_PER_POINT)
+
+
+def derived_combat_stats(stats):
+    """Same formulas as combat, minus the per-hit dice rolls -- for display
+    on the character sheet (shows the range a stat translates into)."""
+    reduction = _def_reduction_fraction(stats["def"])
+    return {
+        "damage_min": round(stats["str"] * STR_DAMAGE_RANGE[0]),
+        "damage_max": round(stats["str"] * STR_DAMAGE_RANGE[1]),
+        "reduction_min": round(min(DEF_REDUCTION_HARD_CAP, reduction * DEF_REDUCTION_JITTER[0]) * 100, 1),
+        "reduction_max": round(min(DEF_REDUCTION_HARD_CAP, reduction * DEF_REDUCTION_JITTER[1]) * 100, 1),
+        "speed": stats["agi"] * SPEED_PER_AGI,
+        "crit_chance": round(_crit_chance_pct(stats["agi"]), 1),
+        "crit_damage_min": CRIT_DAMAGE_RANGE[0],
+        "crit_damage_max": CRIT_DAMAGE_RANGE[1],
+        "hit_chance": round(_hit_chance_pct(stats["luk"]), 1),
+        "dodge_chance": round(_dodge_chance_pct(stats["luk"]), 1),
+        "gold_bonus": round(gold_luk_bonus_pct(stats["luk"]), 1),
+    }
+
+
+def _combat_hit(
+    attacker_name, attacker_str, attacker_agi, attacker_luk, attacker_element,
+    defender_name, defender_def, defender_luk, defender_element,
+):
+    if random.random() * 100 >= _hit_chance_pct(attacker_luk):
+        return 0, f"{attacker_name} 的攻擊沒有命中"
+
+    if random.random() * 100 < _dodge_chance_pct(defender_luk):
         return 0, f"{defender_name} 閃避了 {attacker_name} 的攻擊！"
-    raw_damage = max(1, round(attacker_atk - defender_def / 2))
-    is_crit = random.random() * 100 < min(35, attacker_luk * 0.5)
-    damage = round(raw_damage * 1.5) if is_crit else raw_damage
+
+    is_crit = random.random() * 100 < _crit_chance_pct(attacker_agi)
+    crit_mult = random.uniform(*CRIT_DAMAGE_RANGE) if is_crit else 1.0
+    elem_mult = elemental_multiplier(attacker_element, defender_element)
+    raw_damage = attacker_str * random.uniform(*STR_DAMAGE_RANGE) * crit_mult * elem_mult
+
+    reduction = min(DEF_REDUCTION_HARD_CAP, _def_reduction_fraction(defender_def) * random.uniform(*DEF_REDUCTION_JITTER))
+    damage = max(1, round(raw_damage * (1 - reduction)))
     suffix = "（會心一擊！）" if is_crit else ""
+    if elem_mult > 1:
+        suffix += "（屬性相剋！）"
+    elif elem_mult < 1:
+        suffix += "（屬性被剋）"
     return damage, f"{attacker_name} 攻擊 {defender_name}，造成 {damage} 點傷害{suffix}"
 
 
 BATTLE_ROUND_CAP = 60
 
 
-def run_battle(player_name, player_stats, player_hp, monster):
-    """Resolves an entire fight in one shot (no monster LUK -- monsters
-    never crit or dodge, only the player's LUK matters for those rolls)."""
+def run_battle(player_name, player_stats, player_element, player_hp, monster):
+    """Resolves an entire fight in one shot. Turn order and extra attacks are
+    driven purely by attack speed (AGI*SPEED_PER_AGI): whoever is faster always
+    goes first each round, and gets +1 extra attack per EXTRA_ATTACK_SPEED_STEP
+    of speed lead. Monsters have no LUK column so they use 0 (baseline hit/dodge
+    only), but they do roll crits off their own AGI and carry their own
+    element for the Wu Xing damage multiplier."""
     log = []
     p_hp, m_hp = player_hp, monster["hp"]
-    order = ("player", "monster") if player_stats["agi"] >= monster["agi"] else ("monster", "player")
+
+    player_speed = player_stats["agi"] * SPEED_PER_AGI
+    monster_speed = monster["agi"] * SPEED_PER_AGI
+    if player_speed >= monster_speed:
+        faster, slower = "player", "monster"
+        speed_lead = player_speed - monster_speed
+    else:
+        faster, slower = "monster", "player"
+        speed_lead = monster_speed - player_speed
+    extra_attacks = speed_lead // EXTRA_ATTACK_SPEED_STEP
+
+    def attack_once(attacker):
+        nonlocal p_hp, m_hp
+        if attacker == "player":
+            dmg, line = _combat_hit(
+                player_name, player_stats["str"], player_stats["agi"], player_stats["luk"], player_element,
+                monster["name"], monster["def"], 0, monster["element"],
+            )
+            m_hp = max(0, m_hp - dmg)
+            log.append(f"{line}（{monster['name']} 剩餘 HP {m_hp}）")
+        else:
+            dmg, line = _combat_hit(
+                monster["name"], monster["atk"], monster["agi"], 0, monster["element"],
+                player_name, player_stats["def"], player_stats["luk"], player_element,
+            )
+            p_hp = max(0, p_hp - dmg)
+            log.append(f"{line}（{player_name} 剩餘 HP {p_hp}）")
 
     for _round in range(BATTLE_ROUND_CAP):
         if p_hp <= 0 or m_hp <= 0:
             break
-        for attacker in order:
-            if attacker == "player":
-                dmg, line = _combat_hit(
-                    player_name, player_stats["str"], player_stats["luk"],
-                    monster["name"], monster["def"], 0,
-                )
-                m_hp = max(0, m_hp - dmg)
-                log.append(f"{line}（{monster['name']} 剩餘 HP {m_hp}）")
-                if m_hp <= 0:
-                    break
-            else:
-                dmg, line = _combat_hit(
-                    monster["name"], monster["atk"], 0,
-                    player_name, player_stats["def"], player_stats["luk"],
-                )
-                p_hp = max(0, p_hp - dmg)
-                log.append(f"{line}（{player_name} 剩餘 HP {p_hp}）")
-                if p_hp <= 0:
-                    break
+        for _ in range(1 + extra_attacks):
+            attack_once(faster)
+            if p_hp <= 0 or m_hp <= 0:
+                break
+        if p_hp <= 0 or m_hp <= 0:
+            break
+        attack_once(slower)
 
     return {"log": log, "won": m_hp <= 0 and p_hp > 0, "player_hp": p_hp, "monster_hp": m_hp}
 
@@ -483,11 +608,22 @@ def character_create():
         "SELECT id FROM map_tiles WHERE country_id = ? AND tile_type = 'fortress'",
         (country["id"],),
     ).fetchone()
+    if fortress is None:
+        # Fortress may have been conquered away -- fall back to any tile the
+        # country still owns (a town). If it owns nothing at all, it has no
+        # territory left to spawn characters on.
+        fortress = db.execute(
+            "SELECT id FROM map_tiles WHERE country_id = ? LIMIT 1", (country["id"],)
+        ).fetchone()
+    if fortress is None:
+        db.close()
+        flash(f"{country['name']}目前沒有任何據點，暫時無法在此建立角色")
+        return redirect(url_for("character_create"))
 
     try:
         db.execute(
             "INSERT INTO characters (user_id, country_id, current_tile_id, name) VALUES (?, ?, ?, ?)",
-            (session["user_id"], country["id"], fortress["id"] if fortress else None, character_name),
+            (session["user_id"], country["id"], fortress["id"], character_name),
         )
         db.commit()
     except sqlite3.IntegrityError:
@@ -514,8 +650,8 @@ def game():
     db = get_db()
     character = db.execute(
         """SELECT characters.id AS character_id, characters.current_tile_id,
-                  characters.currency, characters.level, characters.exp, characters.next_action_at,
-                  characters.equipped_weapon_id, characters.equipped_armor_id,
+                  characters.currency, characters.bank_balance, characters.level, characters.exp,
+                  characters.next_action_at, characters.equipped_weapon_id, characters.equipped_armor_id,
                   characters.equipped_accessory_id, characters.name AS character_name,
                   characters.current_hp, characters.current_mp, countries.*
            FROM characters JOIN countries ON countries.id = characters.country_id
@@ -552,6 +688,19 @@ def game():
     )
 
     cooldown_seconds = _cooldown_remaining_seconds(character["next_action_at"])
+
+    missing = (stats["hp"] - current_hp) + (stats["mp"] - current_mp)
+    recover_cost = round(missing * settings["heal_cost_per_point"])
+
+    can_attack_tile = (
+        current_tile["tile_type"] in ("fortress", "town")
+        and current_tile["country_id"] is not None
+        and current_tile["country_id"] != character["id"]
+    )
+    defense_level = (
+        settings["fortress_defense_level"] if current_tile["tile_type"] == "fortress"
+        else settings["town_defense_level"]
+    )
 
     here = (current_tile["q"], current_tile["r"])
     move_targets = [
@@ -599,6 +748,10 @@ def game():
         move_targets=move_targets,
         hunting_grounds=hunting_grounds,
         cooldown_seconds=cooldown_seconds,
+        recover_cost=recover_cost,
+        can_attack_tile=can_attack_tile,
+        defense_level=defense_level,
+        own_treasury=character["treasury"],
         hexes=hexes,
         view_box=f"{min_x:.1f} {min_y:.1f} {max_x - min_x:.1f} {max_y - min_y:.1f}",
     )
@@ -658,7 +811,7 @@ def game_hunt():
     db = get_db()
     character = db.execute(
         """SELECT characters.id AS character_id, characters.level, characters.exp, characters.next_action_at,
-                  characters.current_hp, characters.current_mp, characters.name AS character_name,
+                  characters.current_hp, characters.current_mp, characters.currency, characters.name AS character_name,
                   characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id,
                   map_tiles.tile_type, countries.*
            FROM characters
@@ -716,30 +869,38 @@ def game_hunt():
         return redirect(url_for("game"))
     monster = random.choice(pool)
 
-    result = run_battle(character["character_name"], stats, current_hp, monster)
+    result = run_battle(character["character_name"], stats, character["element"], current_hp, monster)
 
     exp_gain = 0
     currency_gain = 0
+    currency_lost = 0
     new_level, new_exp = character["level"], character["exp"]
     if result["won"]:
         exp_gain = ground["monster_exp"]
         if monster["is_boss"]:
             exp_gain = round(exp_gain * settings["boss_exp_multiplier"])
         currency_gain = monster["currency_reward"]
+        currency_gain = round(currency_gain * (1 + gold_luk_bonus_pct(stats["luk"]) / 100))
         new_level, new_exp = apply_exp(character["level"], character["exp"], exp_gain, settings)
+        new_currency = character["currency"] + currency_gain
+    else:
+        currency_lost = character["currency"]
+        new_currency = 0
 
     db.execute(
         """UPDATE characters
-           SET level = ?, exp = ?, currency = currency + ?, current_hp = ?, next_action_at = ?
+           SET level = ?, exp = ?, currency = ?, current_hp = ?, next_action_at = ?,
+               battles_count = battles_count + 1, wins_count = wins_count + ?
            WHERE id = ?""",
         (
-            new_level, new_exp, currency_gain, result["player_hp"],
-            _next_action_at(settings["turn_wait_seconds"]), character["character_id"],
+            new_level, new_exp, new_currency, result["player_hp"],
+            _next_action_at(settings["turn_wait_seconds"]), 1 if result["won"] else 0,
+            character["character_id"],
         ),
     )
     outcome_detail = (
         f"擊敗{monster['name']}，+{exp_gain} EXP +{currency_gain} 諸神幣"
-        if result["won"] else f"敗給{monster['name']}"
+        if result["won"] else f"敗給{monster['name']}，身上 {currency_lost} 諸神幣化為烏有"
     )
     log_activity(
         db, session["user_id"], session["username"], "hunt",
@@ -758,6 +919,114 @@ def game_hunt():
         new_level=new_level,
         exp_gain=exp_gain,
         currency_gain=currency_gain,
+        currency_lost=currency_lost,
+        player_hp=result["player_hp"],
+        max_hp=stats["hp"],
+    )
+
+
+@app.route("/game/conquer", methods=["POST"])
+@character_required
+def game_conquer():
+    db = get_db()
+    character = db.execute(
+        """SELECT characters.id AS character_id, characters.current_tile_id, characters.level,
+                  characters.exp, characters.next_action_at, characters.current_hp, characters.current_mp,
+                  characters.currency, characters.name AS character_name,
+                  characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id,
+                  map_tiles.tile_type, map_tiles.country_id AS tile_country_id, map_tiles.name AS tile_name,
+                  countries.*
+           FROM characters
+           JOIN map_tiles ON map_tiles.id = characters.current_tile_id
+           JOIN countries ON countries.id = characters.country_id
+           WHERE characters.user_id = ?""",
+        (session["user_id"],),
+    ).fetchone()
+
+    if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
+        db.close()
+        flash("還在冷卻中，請稍候再行動")
+        return redirect(url_for("game"))
+
+    if (
+        character["tile_type"] not in ("fortress", "town")
+        or character["tile_country_id"] is None
+        or character["tile_country_id"] == character["id"]
+    ):
+        db.close()
+        flash("這裡沒有可以攻打的敵方據點")
+        return redirect(url_for("game"))
+
+    equipped_ids = [
+        character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
+    ]
+    equipped_items = [
+        db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        for item_id in equipped_ids if item_id
+    ]
+    stats = compute_final_stats(character, equipped_items, character["level"])
+    current_hp, _current_mp = _current_hp_mp(character, stats)
+
+    if current_hp <= 0:
+        db.close()
+        flash("HP 已耗盡，無法戰鬥，請先回到要塞回復")
+        return redirect(url_for("game"))
+
+    settings = db.execute(
+        "SELECT turn_wait_seconds, town_defense_level, fortress_defense_level FROM game_settings WHERE id = 1"
+    ).fetchone()
+    defending_country = db.execute(
+        "SELECT * FROM countries WHERE id = ?", (character["tile_country_id"],)
+    ).fetchone()
+    tower = defense_tower_stats(defending_country, character["tile_type"], settings)
+
+    result = run_battle(character["character_name"], stats, character["element"], current_hp, tower)
+
+    currency_lost = 0
+    if result["won"]:
+        new_currency = character["currency"]
+        db.execute(
+            "UPDATE map_tiles SET country_id = ? WHERE id = ?",
+            (character["id"], character["current_tile_id"]),
+        )
+        outcome_detail = f"攻下{character['tile_name']}（原屬{defending_country['name']}）"
+    else:
+        currency_lost = character["currency"]
+        new_currency = 0
+        db.execute(
+            "UPDATE countries SET treasury = treasury + ? WHERE id = ?",
+            (currency_lost, defending_country["id"]),
+        )
+        outcome_detail = (
+            f"攻打{character['tile_name']}失敗，身上{currency_lost}諸神幣被{defending_country['name']}沒收"
+        )
+
+    db.execute(
+        """UPDATE characters
+           SET currency = ?, current_hp = ?, next_action_at = ?,
+               battles_count = battles_count + 1, wins_count = wins_count + ?
+           WHERE id = ?""",
+        (
+            new_currency, result["player_hp"], _next_action_at(settings["turn_wait_seconds"]),
+            1 if result["won"] else 0, character["character_id"],
+        ),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "conquer_win" if result["won"] else "conquer_loss",
+        detail=outcome_detail, ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    return render_template(
+        "battle.html",
+        conquest=True,
+        captured_tile_name=character["tile_name"],
+        defending_country_name=defending_country["name"],
+        monster=tower,
+        log=result["log"],
+        won=result["won"],
+        currency_lost=currency_lost,
         player_hp=result["player_hp"],
         max_hp=stats["hp"],
     )
@@ -768,7 +1037,8 @@ def game_hunt():
 def game_recover():
     db = get_db()
     character = db.execute(
-        """SELECT characters.id, characters.level, characters.next_action_at, map_tiles.tile_type,
+        """SELECT characters.id, characters.level, characters.next_action_at, characters.currency,
+                  characters.current_hp, characters.current_mp, map_tiles.tile_type,
                   characters.equipped_weapon_id, characters.equipped_armor_id,
                   characters.equipped_accessory_id, countries.*
            FROM characters
@@ -796,26 +1066,38 @@ def game_recover():
         for item_id in equipped_ids if item_id
     ]
     stats = compute_final_stats(character, equipped_items, character["level"])
+    current_hp, current_mp = _current_hp_mp(character, stats)
 
-    settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
+    settings = db.execute(
+        "SELECT turn_wait_seconds, heal_cost_per_point FROM game_settings WHERE id = 1"
+    ).fetchone()
+    missing = (stats["hp"] - current_hp) + (stats["mp"] - current_mp)
+    cost = round(missing * settings["heal_cost_per_point"])
+    if cost > character["currency"]:
+        db.close()
+        flash(f"諸神幣不足，完全回復需要 {cost} 諸神幣")
+        return redirect(url_for("game"))
+
     db.execute(
-        "UPDATE characters SET current_hp = ?, current_mp = ?, next_action_at = ? WHERE id = ?",
-        (stats["hp"], stats["mp"], _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+        """UPDATE characters SET current_hp = ?, current_mp = ?, currency = currency - ?,
+               next_action_at = ? WHERE id = ?""",
+        (stats["hp"], stats["mp"], cost, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
     )
     log_activity(
         db, session["user_id"], session["username"], "recover",
-        ip_address=request.remote_addr,
+        detail=f"花費 {cost} 諸神幣", ip_address=request.remote_addr,
     )
     db.commit()
     db.close()
 
-    flash("HP／MP 已完全回復")
+    flash(f"HP／MP 已完全回復，花費 {cost} 諸神幣")
     return redirect(url_for("game"))
 
 
 def _character_for_shop(db):
     return db.execute(
-        """SELECT characters.id, characters.currency, characters.next_action_at, map_tiles.tile_type,
+        """SELECT characters.id, characters.currency, characters.bank_balance,
+                  characters.next_action_at, characters.country_id, map_tiles.tile_type,
                   characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id
            FROM characters JOIN map_tiles ON map_tiles.id = characters.current_tile_id
            WHERE characters.user_id = ?""",
@@ -926,13 +1208,20 @@ def game_shop_buy():
         flash(f"諸神幣不足，這次購買需要 {total_price} 諸神幣")
         return redirect(url_for("game_shop"))
 
-    settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
+    settings = db.execute(
+        "SELECT turn_wait_seconds, shop_tax_percent FROM game_settings WHERE id = 1"
+    ).fetchone()
     for item in items:
         _add_to_inventory(db, character["id"], item["id"], 1)
     db.execute(
         "UPDATE characters SET currency = currency - ?, next_action_at = ? WHERE id = ?",
         (total_price, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
     )
+    tax = round(total_price * settings["shop_tax_percent"] / 100)
+    if tax:
+        db.execute(
+            "UPDATE countries SET treasury = treasury + ? WHERE id = ?", (tax, character["country_id"])
+        )
     names = "、".join(item["name"] for item in items)
     log_activity(
         db, session["user_id"], session["username"], "shop_buy",
@@ -968,7 +1257,7 @@ def game_shop_sell():
         return redirect(url_for("game_shop"))
 
     settings = db.execute(
-        "SELECT turn_wait_seconds, sell_back_percent FROM game_settings WHERE id = 1"
+        "SELECT turn_wait_seconds, sell_back_percent, shop_tax_percent FROM game_settings WHERE id = 1"
     ).fetchone()
 
     sold_names = []
@@ -1002,6 +1291,11 @@ def game_shop_sell():
         "UPDATE characters SET currency = currency + ?, next_action_at = ? WHERE id = ?",
         (total_refund, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
     )
+    tax = round(total_refund * settings["shop_tax_percent"] / 100)
+    if tax:
+        db.execute(
+            "UPDATE countries SET treasury = treasury + ? WHERE id = ?", (tax, character["country_id"])
+        )
     log_activity(
         db, session["user_id"], session["username"], "shop_sell",
         detail=f"{'、'.join(sold_names)} (+{total_refund} 諸神幣)", ip_address=request.remote_addr,
@@ -1011,6 +1305,133 @@ def game_shop_sell():
 
     flash(f"已出售「{'、'.join(sold_names)}」，獲得 {total_refund} 諸神幣")
     return redirect(url_for("game_shop"))
+
+
+def _parse_positive_amount(raw):
+    try:
+        amount = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return amount if amount > 0 else None
+
+
+@app.route("/game/bank/deposit", methods=["POST"])
+@character_required
+def game_bank_deposit():
+    db = get_db()
+    character = _character_for_shop(db)
+
+    if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
+        db.close()
+        flash("還在冷卻中，請稍候再行動")
+        return redirect(url_for("game"))
+
+    if character["tile_type"] != "fortress":
+        db.close()
+        flash("只能在要塞內使用銀行")
+        return redirect(url_for("game"))
+
+    amount = _parse_positive_amount(request.form.get("amount", ""))
+    if amount is None or amount > character["currency"]:
+        db.close()
+        flash("請輸入不超過身上諸神幣數量的有效金額")
+        return redirect(url_for("game"))
+
+    settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
+    db.execute(
+        """UPDATE characters SET currency = currency - ?, bank_balance = bank_balance + ?,
+               next_action_at = ? WHERE id = ?""",
+        (amount, amount, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "bank_deposit",
+        detail=f"存入 {amount} 諸神幣", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    flash(f"已存入 {amount} 諸神幣")
+    return redirect(url_for("game"))
+
+
+@app.route("/game/bank/withdraw", methods=["POST"])
+@character_required
+def game_bank_withdraw():
+    db = get_db()
+    character = _character_for_shop(db)
+
+    if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
+        db.close()
+        flash("還在冷卻中，請稍候再行動")
+        return redirect(url_for("game"))
+
+    if character["tile_type"] != "fortress":
+        db.close()
+        flash("只能在要塞內使用銀行")
+        return redirect(url_for("game"))
+
+    amount = _parse_positive_amount(request.form.get("amount", ""))
+    if amount is None or amount > character["bank_balance"]:
+        db.close()
+        flash("請輸入不超過銀行存款數量的有效金額")
+        return redirect(url_for("game"))
+
+    settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
+    db.execute(
+        """UPDATE characters SET currency = currency + ?, bank_balance = bank_balance - ?,
+               next_action_at = ? WHERE id = ?""",
+        (amount, amount, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "bank_withdraw",
+        detail=f"提領 {amount} 諸神幣", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    flash(f"已提領 {amount} 諸神幣")
+    return redirect(url_for("game"))
+
+
+@app.route("/game/treasury/donate", methods=["POST"])
+@character_required
+def game_treasury_donate():
+    db = get_db()
+    character = _character_for_shop(db)
+
+    if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
+        db.close()
+        flash("還在冷卻中，請稍候再行動")
+        return redirect(url_for("game"))
+
+    if character["tile_type"] != "fortress":
+        db.close()
+        flash("只能在要塞內捐獻給國庫")
+        return redirect(url_for("game"))
+
+    amount = _parse_positive_amount(request.form.get("amount", ""))
+    if amount is None or amount > character["currency"]:
+        db.close()
+        flash("請輸入不超過身上諸神幣數量的有效金額")
+        return redirect(url_for("game"))
+
+    settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
+    db.execute(
+        "UPDATE characters SET currency = currency - ?, next_action_at = ? WHERE id = ?",
+        (amount, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+    )
+    db.execute(
+        "UPDATE countries SET treasury = treasury + ? WHERE id = ?", (amount, character["country_id"])
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "treasury_donate",
+        detail=f"捐獻 {amount} 諸神幣給國庫", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    flash(f"已捐獻 {amount} 諸神幣給國庫")
+    return redirect(url_for("game"))
 
 
 EQUIPMENT_RETURN_ENDPOINTS = {
@@ -1121,7 +1542,8 @@ def character_page():
                   characters.next_action_at, characters.name AS character_name,
                   characters.current_hp, characters.current_mp,
                   characters.equipped_weapon_id, characters.equipped_armor_id,
-                  characters.equipped_accessory_id, countries.*
+                  characters.equipped_accessory_id, characters.battles_count,
+                  characters.wins_count, countries.*
            FROM characters JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
         (session["user_id"],),
@@ -1161,11 +1583,25 @@ def character_page():
         exp_required_for_level(character["level"], settings)
         if character["level"] < LEVEL_CAP else None
     )
+    win_rate = (
+        round(character["wins_count"] / character["battles_count"] * 100, 1)
+        if character["battles_count"] else None
+    )
+    overcomes = ELEMENT_OVERCOMES.get(character["element"])
+    overcome_by = next(
+        (k for k, v in ELEMENT_OVERCOMES.items() if v == character["element"]), None
+    )
 
     return render_template(
         "character.html",
         character=character,
         stats=stats,
+        combat_stats=derived_combat_stats(stats),
+        win_rate=win_rate,
+        overcomes=overcomes,
+        overcome_by=overcome_by,
+        element_overcome_bonus=round((ELEMENT_OVERCOME_BONUS - 1) * 100),
+        element_overcome_penalty=round((1 - ELEMENT_OVERCOME_PENALTY) * 100),
         current_hp=current_hp,
         current_mp=current_mp,
         level_cap=LEVEL_CAP,
@@ -1318,6 +1754,10 @@ def admin_update_game_settings():
         sell_back_percent = float(request.form.get("sell_back_percent", ""))
         boss_encounter_percent = float(request.form.get("boss_encounter_percent", ""))
         boss_exp_multiplier = float(request.form.get("boss_exp_multiplier", ""))
+        shop_tax_percent = float(request.form.get("shop_tax_percent", ""))
+        heal_cost_per_point = float(request.form.get("heal_cost_per_point", ""))
+        town_defense_level = int(request.form.get("town_defense_level", ""))
+        fortress_defense_level = int(request.form.get("fortress_defense_level", ""))
     except ValueError:
         flash("設定值格式不正確")
         return redirect(url_for("admin_settings"))
@@ -1334,15 +1774,25 @@ def admin_update_game_settings():
         flash("首領遭遇機率須介於 0 到 100，經驗倍率須大於等於 1")
         return redirect(url_for("admin_settings"))
 
+    if shop_tax_percent < 0 or shop_tax_percent > 100 or heal_cost_per_point < 0:
+        flash("商店稅率須介於 0 到 100，回復站費率不可為負數")
+        return redirect(url_for("admin_settings"))
+
+    if town_defense_level < 1 or fortress_defense_level < town_defense_level:
+        flash("城鎮防衛等級須大於等於 1，且要塞防衛等級須大於等於城鎮防衛等級")
+        return redirect(url_for("admin_settings"))
+
     db = get_db()
     db.execute(
         """UPDATE game_settings
            SET turn_wait_seconds = ?, exp_base = ?, exp_growth_percent = ?, sell_back_percent = ?,
-               boss_encounter_percent = ?, boss_exp_multiplier = ?
+               boss_encounter_percent = ?, boss_exp_multiplier = ?, shop_tax_percent = ?,
+               heal_cost_per_point = ?, town_defense_level = ?, fortress_defense_level = ?
            WHERE id = 1""",
         (
             turn_wait_seconds, exp_base, exp_growth_percent, sell_back_percent,
-            boss_encounter_percent, boss_exp_multiplier,
+            boss_encounter_percent, boss_exp_multiplier, shop_tax_percent,
+            heal_cost_per_point, town_defense_level, fortress_defense_level,
         ),
     )
     db.commit()

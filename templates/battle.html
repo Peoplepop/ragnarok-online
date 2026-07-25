@@ -5,12 +5,22 @@
   <div class="panel" style="margin-bottom:20px;">
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
       <h2 style="margin:0; color:var(--gold-bright); font-size:18px;">
+        {% if conquest %}
+        攻城戰：{{ captured_tile_name }}
+        {% else %}
         {{ ground.name }}
         {% if monster.is_boss %}
         <span style="color:var(--danger); font-size:13px; border:1px solid var(--danger); border-radius:6px; padding:2px 8px; margin-left:8px; vertical-align:middle;">首領</span>
         {% endif %}
+        {% endif %}
       </h2>
-      <span style="font-size:13px; color:var(--text-dim);">遭遇了「{{ monster.name }}」</span>
+      <span style="font-size:13px; color:var(--text-dim);">
+        {% if conquest %}
+        挑戰「{{ defending_country_name }}」的守軍
+        {% else %}
+        遭遇了「{{ monster.name }}」
+        {% endif %}
+      </span>
     </div>
   </div>
 
@@ -22,13 +32,23 @@
     {% if won %}
       <h3 style="margin:0 0 8px; color:var(--gold-bright);">🎉 戰鬥勝利！</h3>
       <p style="margin:0; font-size:13px; color:var(--text-dim);">
+        {% if conquest %}
+        擊退了「{{ defending_country_name }}」的守軍，成功占領「{{ captured_tile_name }}」！
+        {% else %}
         擊敗了「{{ monster.name }}」，獲得 {{ exp_gain }} 經驗值、{{ currency_gain }} 諸神幣
         {% if leveled_up %}，升到 Lv.{{ new_level }}！{% endif %}
+        {% endif %}
       </p>
     {% else %}
       <h3 style="margin:0 0 8px; color:var(--danger);">💀 戰鬥失敗</h3>
       <p style="margin:0; font-size:13px; color:var(--text-dim);">
+        {% if conquest %}
+        攻城失敗，「{{ defending_country_name }}」擊退了這次進攻
+        {% if currency_lost %}，身上 {{ currency_lost }} 諸神幣被沒收充作對方的防守獎勵{% endif %}
+        {% else %}
         被「{{ monster.name }}」擊敗了，沒有獲得任何獎勵
+        {% if currency_lost %}，身上 {{ currency_lost }} 諸神幣也化為烏有{% endif %}
+        {% endif %}
         {% if player_hp <= 0 %}，HP 已耗盡，請回到要塞選擇「回復」{% endif %}
       </p>
     {% endif %}

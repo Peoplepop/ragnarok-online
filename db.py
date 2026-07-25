@@ -16,29 +16,45 @@ DEFAULT_COUNTRIES = [
     {
         "name": "百鍊流金國", "element": "金",
         "description": "初始幸運值較高，閃避與命中俱佳",
-        "hp_bonus": 0, "mp_bonus": 0, "str_bonus": 0, "def_bonus": 0, "agi_bonus": 0, "luk_bonus": 1,
+        "hp_bonus": 0, "mp_bonus": 0, "str_bonus": 0, "def_bonus": 0, "agi_bonus": 0, "luk_bonus": 15,
     },
     {
         "name": "翡翠靈木國", "element": "木",
         "description": "防禦與生命力驚人，減傷效果顯著",
-        "hp_bonus": 1, "mp_bonus": 0, "str_bonus": 0, "def_bonus": 1, "agi_bonus": 0, "luk_bonus": 0,
+        "hp_bonus": 8, "mp_bonus": 0, "str_bonus": 0, "def_bonus": 15, "agi_bonus": 0, "luk_bonus": 0,
     },
     {
         "name": "蔚藍千泉國", "element": "水",
         "description": "身法飄逸，擅長先發制人與連續攻擊",
-        "hp_bonus": 0, "mp_bonus": 0, "str_bonus": 0, "def_bonus": 0, "agi_bonus": 1, "luk_bonus": 0,
+        "hp_bonus": 0, "mp_bonus": 0, "str_bonus": 0, "def_bonus": 0, "agi_bonus": 15, "luk_bonus": 0,
     },
     {
         "name": "紅蓮業火國", "element": "火",
         "description": "烈焰焚天，魔力與傷害兼備",
-        "hp_bonus": 0, "mp_bonus": 1, "str_bonus": 1, "def_bonus": 0, "agi_bonus": 0, "luk_bonus": 0,
+        "hp_bonus": 0, "mp_bonus": 8, "str_bonus": 15, "def_bonus": 0, "agi_bonus": 0, "luk_bonus": 0,
     },
     {
         "name": "萬物母育國", "element": "土",
         "description": "厚德載物，六圍均衡發展",
-        "hp_bonus": 1, "mp_bonus": 1, "str_bonus": 1, "def_bonus": 1, "agi_bonus": 1, "luk_bonus": 1,
+        "hp_bonus": 6, "mp_bonus": 6, "str_bonus": 6, "def_bonus": 6, "agi_bonus": 6, "luk_bonus": 6,
     },
 ]
+
+# The bonuses DEFAULT_COUNTRIES originally shipped with (all a flat 1%, which
+# rounds away to nothing until stats are fairly large) -- kept here so
+# _upgrade_country_bonuses can safely retarget already-seeded rows to the
+# stronger values above without clobbering any bonus an admin has since
+# hand-edited in /admin.
+LEGACY_DEFAULT_COUNTRY_BONUSES = {
+    "百鍊流金國": (0, 0, 0, 0, 0, 1),
+    "翡翠靈木國": (1, 0, 0, 1, 0, 0),
+    "蔚藍千泉國": (0, 0, 0, 0, 1, 0),
+    "紅蓮業火國": (0, 1, 1, 0, 0, 0),
+    "萬物母育國": (1, 1, 1, 1, 1, 1),
+}
+
+# 五行相剋 (Wu Xing destructive cycle): key overcomes value.
+ELEMENT_OVERCOMES = {"金": "木", "木": "土", "土": "水", "水": "火", "火": "金"}
 
 LEVEL_CAP = 1000
 
@@ -65,25 +81,25 @@ DEFAULT_ITEMS = [
 # start of that ground's level range (base stats + LEVEL_STAT_GROWTH from
 # app.py, before any gear) -- they get easier as you outlevel the tier.
 DEFAULT_MONSTERS = [
-    {"tier": "beginner", "name": "潑皮野狼", "is_boss": 0, "hp": 70, "atk": 14, "def": 5, "agi": 10, "currency_reward": 15},
-    {"tier": "beginner", "name": "荒野土狼", "is_boss": 0, "hp": 85, "atk": 16, "def": 6, "agi": 12, "currency_reward": 18},
-    {"tier": "beginner", "name": "銹刃盜賊", "is_boss": 0, "hp": 75, "atk": 15, "def": 7, "agi": 14, "currency_reward": 20},
-    {"tier": "beginner", "name": "荒原狼王", "is_boss": 1, "hp": 300, "atk": 30, "def": 12, "agi": 20, "currency_reward": 100},
+    {"tier": "beginner", "name": "潑皮野狼", "is_boss": 0, "hp": 70, "atk": 14, "def": 5, "agi": 10, "currency_reward": 15, "element": "木"},
+    {"tier": "beginner", "name": "荒野土狼", "is_boss": 0, "hp": 85, "atk": 16, "def": 6, "agi": 12, "currency_reward": 18, "element": "土"},
+    {"tier": "beginner", "name": "銹刃盜賊", "is_boss": 0, "hp": 75, "atk": 15, "def": 7, "agi": 14, "currency_reward": 20, "element": "金"},
+    {"tier": "beginner", "name": "荒原狼王", "is_boss": 1, "hp": 300, "atk": 30, "def": 12, "agi": 20, "currency_reward": 100, "element": "木"},
 
-    {"tier": "intermediate", "name": "赤鱗蜥蜴", "is_boss": 0, "hp": 160, "atk": 26, "def": 13, "agi": 18, "currency_reward": 35},
-    {"tier": "intermediate", "name": "岩甲蟹", "is_boss": 0, "hp": 200, "atk": 24, "def": 18, "agi": 14, "currency_reward": 38},
-    {"tier": "intermediate", "name": "黑霧遊魂", "is_boss": 0, "hp": 150, "atk": 30, "def": 10, "agi": 26, "currency_reward": 36},
-    {"tier": "intermediate", "name": "熔岩巨蠍王", "is_boss": 1, "hp": 650, "atk": 55, "def": 25, "agi": 32, "currency_reward": 220},
+    {"tier": "intermediate", "name": "赤鱗蜥蜴", "is_boss": 0, "hp": 160, "atk": 26, "def": 13, "agi": 18, "currency_reward": 35, "element": "火"},
+    {"tier": "intermediate", "name": "岩甲蟹", "is_boss": 0, "hp": 200, "atk": 24, "def": 18, "agi": 14, "currency_reward": 38, "element": "土"},
+    {"tier": "intermediate", "name": "黑霧遊魂", "is_boss": 0, "hp": 150, "atk": 30, "def": 10, "agi": 26, "currency_reward": 36, "element": "水"},
+    {"tier": "intermediate", "name": "熔岩巨蠍王", "is_boss": 1, "hp": 650, "atk": 55, "def": 25, "agi": 32, "currency_reward": 220, "element": "火"},
 
-    {"tier": "advanced", "name": "鋼骨巨魔", "is_boss": 0, "hp": 320, "atk": 50, "def": 28, "agi": 26, "currency_reward": 70},
-    {"tier": "advanced", "name": "幽冥劍靈", "is_boss": 0, "hp": 280, "atk": 58, "def": 22, "agi": 38, "currency_reward": 75},
-    {"tier": "advanced", "name": "血眸狂虎", "is_boss": 0, "hp": 350, "atk": 52, "def": 25, "agi": 34, "currency_reward": 72},
-    {"tier": "advanced", "name": "深淵魔狼王", "is_boss": 1, "hp": 1100, "atk": 90, "def": 45, "agi": 45, "currency_reward": 450},
+    {"tier": "advanced", "name": "鋼骨巨魔", "is_boss": 0, "hp": 320, "atk": 50, "def": 28, "agi": 26, "currency_reward": 70, "element": "金"},
+    {"tier": "advanced", "name": "幽冥劍靈", "is_boss": 0, "hp": 280, "atk": 58, "def": 22, "agi": 38, "currency_reward": 75, "element": "水"},
+    {"tier": "advanced", "name": "血眸狂虎", "is_boss": 0, "hp": 350, "atk": 52, "def": 25, "agi": 34, "currency_reward": 72, "element": "火"},
+    {"tier": "advanced", "name": "深淵魔狼王", "is_boss": 1, "hp": 1100, "atk": 90, "def": 45, "agi": 45, "currency_reward": 450, "element": "水"},
 
-    {"tier": "ultimate", "name": "天穹巨龍裔", "is_boss": 0, "hp": 600, "atk": 85, "def": 40, "agi": 42, "currency_reward": 150},
-    {"tier": "ultimate", "name": "虛空吞噬者", "is_boss": 0, "hp": 550, "atk": 95, "def": 35, "agi": 50, "currency_reward": 160},
-    {"tier": "ultimate", "name": "混沌石像鬼", "is_boss": 0, "hp": 700, "atk": 75, "def": 50, "agi": 35, "currency_reward": 155},
-    {"tier": "ultimate", "name": "終焉魔神", "is_boss": 1, "hp": 2000, "atk": 150, "def": 70, "agi": 60, "currency_reward": 900},
+    {"tier": "ultimate", "name": "天穹巨龍裔", "is_boss": 0, "hp": 600, "atk": 85, "def": 40, "agi": 42, "currency_reward": 150, "element": "金"},
+    {"tier": "ultimate", "name": "虛空吞噬者", "is_boss": 0, "hp": 550, "atk": 95, "def": 35, "agi": 50, "currency_reward": 160, "element": "土"},
+    {"tier": "ultimate", "name": "混沌石像鬼", "is_boss": 0, "hp": 700, "atk": 75, "def": 50, "agi": 35, "currency_reward": 155, "element": "土"},
+    {"tier": "ultimate", "name": "終焉魔神", "is_boss": 1, "hp": 2000, "atk": 150, "def": 70, "agi": 60, "currency_reward": 900, "element": "火"},
 ]
 
 
@@ -131,6 +147,12 @@ def _ensure_character_columns(conn):
         conn.execute("ALTER TABLE characters ADD COLUMN current_hp INTEGER")
     if "current_mp" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN current_mp INTEGER")
+    if "battles_count" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN battles_count INTEGER NOT NULL DEFAULT 0")
+    if "wins_count" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN wins_count INTEGER NOT NULL DEFAULT 0")
+    if "bank_balance" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN bank_balance INTEGER NOT NULL DEFAULT 0")
     if "name" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN name TEXT")
         conn.execute(
@@ -144,6 +166,57 @@ def _ensure_character_columns(conn):
             pass
 
 
+def _ensure_country_columns(conn):
+    cols = [row["name"] for row in conn.execute("PRAGMA table_info(countries)")]
+    if "treasury" not in cols:
+        conn.execute("ALTER TABLE countries ADD COLUMN treasury INTEGER NOT NULL DEFAULT 0")
+
+
+def _ensure_monster_columns(conn):
+    cols = [row["name"] for row in conn.execute("PRAGMA table_info(monsters)")]
+    if "element" not in cols:
+        conn.execute("ALTER TABLE monsters ADD COLUMN element TEXT NOT NULL DEFAULT ''")
+
+
+def _upgrade_country_bonuses(conn):
+    """One-time retarget of countries seeded with the old flat 1% bonuses to
+    the new differentiated values in DEFAULT_COUNTRIES -- skips any country an
+    admin has since hand-edited (its bonuses no longer match the legacy set)."""
+    rows = conn.execute(
+        "SELECT id, name, hp_bonus, mp_bonus, str_bonus, def_bonus, agi_bonus, luk_bonus FROM countries"
+    ).fetchall()
+    by_name = {c["name"]: c for c in DEFAULT_COUNTRIES}
+    for row in rows:
+        legacy = LEGACY_DEFAULT_COUNTRY_BONUSES.get(row["name"])
+        target = by_name.get(row["name"])
+        if legacy is None or target is None:
+            continue
+        current = (
+            row["hp_bonus"], row["mp_bonus"], row["str_bonus"],
+            row["def_bonus"], row["agi_bonus"], row["luk_bonus"],
+        )
+        if current == legacy:
+            conn.execute(
+                """UPDATE countries SET hp_bonus = ?, mp_bonus = ?, str_bonus = ?,
+                       def_bonus = ?, agi_bonus = ?, luk_bonus = ? WHERE id = ?""",
+                (
+                    target["hp_bonus"], target["mp_bonus"], target["str_bonus"],
+                    target["def_bonus"], target["agi_bonus"], target["luk_bonus"], row["id"],
+                ),
+            )
+
+
+def _upgrade_monster_elements(conn):
+    """One-time backfill of the element column for monsters seeded before it
+    existed (rows left with the '' default)."""
+    by_name = {m["name"]: m["element"] for m in DEFAULT_MONSTERS}
+    for row in conn.execute("SELECT id, name, element FROM monsters"):
+        if not row["element"] and row["name"] in by_name:
+            conn.execute(
+                "UPDATE monsters SET element = ? WHERE id = ?", (by_name[row["name"]], row["id"])
+            )
+
+
 def _ensure_game_settings_columns(conn):
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(game_settings)")]
     if "sell_back_percent" not in cols:
@@ -152,6 +225,14 @@ def _ensure_game_settings_columns(conn):
         conn.execute("ALTER TABLE game_settings ADD COLUMN boss_encounter_percent REAL NOT NULL DEFAULT 15")
     if "boss_exp_multiplier" not in cols:
         conn.execute("ALTER TABLE game_settings ADD COLUMN boss_exp_multiplier REAL NOT NULL DEFAULT 5")
+    if "shop_tax_percent" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN shop_tax_percent REAL NOT NULL DEFAULT 5")
+    if "heal_cost_per_point" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN heal_cost_per_point REAL NOT NULL DEFAULT 1")
+    if "town_defense_level" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN town_defense_level INTEGER NOT NULL DEFAULT 500")
+    if "fortress_defense_level" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN fortress_defense_level INTEGER NOT NULL DEFAULT 1000")
 
 
 def init_db():
@@ -161,6 +242,8 @@ def init_db():
     _ensure_is_admin_column(conn)
     _ensure_session_columns(conn)
     _ensure_character_columns(conn)
+    _ensure_country_columns(conn)
+    _ensure_monster_columns(conn)
     _ensure_game_settings_columns(conn)
     conn.commit()
     conn.close()
@@ -189,6 +272,8 @@ def seed_defaults():
                     c["def_bonus"], c["agi_bonus"], c["luk_bonus"],
                 ),
             )
+    else:
+        _upgrade_country_bonuses(conn)
 
     admin = conn.execute(
         "SELECT id FROM users WHERE username = ?", (DEFAULT_ADMIN_USERNAME,)
@@ -230,13 +315,15 @@ def seed_defaults():
         }
         for m in DEFAULT_MONSTERS:
             conn.execute(
-                """INSERT INTO monsters (hunting_ground_id, name, is_boss, hp, atk, def, agi, currency_reward)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO monsters (hunting_ground_id, name, is_boss, hp, atk, def, agi, currency_reward, element)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     ground_ids[m["tier"]], m["name"], m["is_boss"],
-                    m["hp"], m["atk"], m["def"], m["agi"], m["currency_reward"],
+                    m["hp"], m["atk"], m["def"], m["agi"], m["currency_reward"], m["element"],
                 ),
             )
+    else:
+        _upgrade_monster_elements(conn)
 
     conn.commit()
     conn.close()
