@@ -1487,9 +1487,15 @@ def game_recover():
     missing = (stats["hp"] - current_hp) + (stats["mp"] - current_mp)
     cost = round(missing * settings["heal_cost_per_point"])
     if cost > character["currency"]:
-        db.close()
-        flash(f"諸神幣不足，完全回復需要 {cost} 諸神幣")
-        return redirect(url_for("game"))
+        if current_hp <= 0:
+            # Stuck-safety valve: HP is fully gone and can't afford a full
+            # heal -- still heal, just take every last coin instead of
+            # blocking the player from ever recovering.
+            cost = character["currency"]
+        else:
+            db.close()
+            flash(f"諸神幣不足，完全回復需要 {cost} 諸神幣")
+            return redirect(url_for("game"))
 
     db.execute(
         """UPDATE characters SET current_hp = ?, current_mp = ?, currency = currency - ?,
