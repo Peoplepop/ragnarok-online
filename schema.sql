@@ -30,7 +30,13 @@ CREATE TABLE IF NOT EXISTS countries (
     def_bonus INTEGER NOT NULL DEFAULT 0,
     agi_bonus INTEGER NOT NULL DEFAULT 0,
     luk_bonus INTEGER NOT NULL DEFAULT 0,
-    treasury INTEGER NOT NULL DEFAULT 0
+    treasury INTEGER NOT NULL DEFAULT 0,
+    king_character_id INTEGER,
+    advisor_character_id INTEGER,
+    general_character_id INTEGER,
+    FOREIGN KEY (king_character_id) REFERENCES characters(id),
+    FOREIGN KEY (advisor_character_id) REFERENCES characters(id),
+    FOREIGN KEY (general_character_id) REFERENCES characters(id)
 );
 
 CREATE TABLE IF NOT EXISTS characters (
@@ -48,6 +54,7 @@ CREATE TABLE IF NOT EXISTS characters (
     battles_count INTEGER NOT NULL DEFAULT 0,
     wins_count INTEGER NOT NULL DEFAULT 0,
     bank_balance INTEGER NOT NULL DEFAULT 0,
+    job_class TEXT NOT NULL DEFAULT '初心者',
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (country_id) REFERENCES countries(id),

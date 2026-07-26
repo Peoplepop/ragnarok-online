@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}國家詳情 - 諸神的黃昏{% endblock %}
+
+{% block content %}
+  <h2 style="color: var(--gold-bright); font-size: 18px; margin-top:0;">國家詳情</h2>
+
+  <div class="panel" style="margin-bottom:20px;">
+    <h3 style="margin:0 0 10px; color:var(--gold-bright); font-size:15px;">官職說明</h3>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      {% for role in roles %}
+      <p style="margin:0; font-size:13px; color:var(--text-dim);">
+        <strong style="color:var(--text);">{{ role.label }}</strong>：{{ role.description }}
+      </p>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% for c in countries %}
+  <div class="panel" style="margin-bottom:18px;">
+    <div class="element">屬性：{{ c.element }}</div>
+    <h3 style="margin:6px 0;">
+      {{ c.name }}
+      {% if c.tile_count == 0 %}
+      <span style="color:var(--danger); font-size:12px; border:1px solid var(--danger); border-radius:6px; padding:2px 8px; margin-left:8px; vertical-align:middle;">⚠️ 無國籍（已無據點）</span>
+      {% endif %}
+    </h3>
+    <p style="margin:0 0 12px;">{{ c.description }}</p>
+
+    <div style="display:flex; gap:20px; flex-wrap:wrap; font-size:13px; color:var(--text-dim); margin-bottom:10px;">
+      <span>🏛️ 國庫：{{ c.treasury }} 諸神幣</span>
+      <span>📍 據點數：{{ c.tile_count }}</span>
+    </div>
+
+    <div style="display:flex; gap:20px; flex-wrap:wrap; font-size:13px;">
+      {% for role in c.roles %}
+      <span><span style="color:var(--text-dim);">{{ role.label }}：</span>{{ role.holder or "（出缺）" }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+{% endblock %}

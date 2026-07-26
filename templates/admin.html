@@ -51,6 +51,20 @@
         </div>
       </div>
 
+      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+        {% for role in roles %}
+        <div>
+          <label>{{ role.label }}</label>
+          <select name="{{ role.column }}">
+            <option value="">（出缺）</option>
+            {% for ch in characters_by_country.get(c.id, []) %}
+            <option value="{{ ch.id }}" {% if c[role.column] == ch.id %}selected{% endif %}>{{ ch.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endfor %}
+      </div>
+
       <button type="submit">儲存「{{ c.name }}」</button>
     </form>
   </div>

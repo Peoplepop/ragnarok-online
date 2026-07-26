@@ -56,9 +56,21 @@ EQUIP_SLOT_COLUMNS = {
     "accessory": "equipped_accessory_id",
 }
 
+# Government seats are informational only for now -- no permissions are tied
+# to holding one, just a name + a blurb of what the seat is meant to do.
+GOVERNMENT_ROLES = [
+    {"column": "king_character_id", "label": "國王", "description": "國家最高元首，代表國家對外決策"},
+    {"column": "advisor_character_id", "label": "參謀", "description": "協助國政與外交，提供決策建議"},
+    {"column": "general_character_id", "label": "大將軍", "description": "統帥軍隊，主導攻城與防衛行動"},
+]
+
 # Below this level, 升級軟糖 may still be used to skip grinding; past it,
 # levelling only comes from killing monsters.
 LEVEL_CANDY_MAX_LEVEL = 500
+
+def tile_display_name(name, tile_type):
+    return f"{name}要塞" if tile_type == "fortress" else name
+
 
 HEX_SIZE = 42
 ELEMENT_COLORS = {
@@ -659,12 +671,16 @@ def game():
         (session["user_id"],),
     ).fetchone()
 
-    tiles = db.execute(
-        """SELECT map_tiles.id AS tile_id, map_tiles.q, map_tiles.r, map_tiles.tile_type,
-                  map_tiles.name, map_tiles.country_id,
-                  countries.element, countries.name AS country_name
-           FROM map_tiles LEFT JOIN countries ON countries.id = map_tiles.country_id"""
-    ).fetchall()
+    tiles = [
+        dict(row) for row in db.execute(
+            """SELECT map_tiles.id AS tile_id, map_tiles.q, map_tiles.r, map_tiles.tile_type,
+                      map_tiles.name, map_tiles.country_id,
+                      countries.element, countries.name AS country_name
+               FROM map_tiles LEFT JOIN countries ON countries.id = map_tiles.country_id"""
+        ).fetchall()
+    ]
+    for t in tiles:
+        t["display_name"] = tile_display_name(t["name"], t["tile_type"])
     current_tile = next(t for t in tiles if t["tile_id"] == character["current_tile_id"])
     settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
     hunting_grounds = db.execute(
@@ -726,9 +742,8 @@ def game():
             "cy": cy,
             "color": color,
             "tile_type": t["tile_type"],
-            "name": t["name"],
+            "name": t["display_name"],
             "country_name": t["country_name"],
-            "is_own_country": t["country_id"] == character["id"] if t["country_id"] else False,
             "is_player_here": t["tile_id"] == character["current_tile_id"],
         })
 
@@ -789,6 +804,8 @@ def game_move():
         flash("無法移動到那個地點")
         return redirect(url_for("game"))
 
+    target_name = tile_display_name(target_tile["name"], target_tile["tile_type"])
+
     settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
     db.execute(
         "UPDATE characters SET current_tile_id = ?, next_action_at = ? WHERE id = ?",
@@ -796,12 +813,12 @@ def game_move():
     )
     log_activity(
         db, session["user_id"], session["username"], "move",
-        detail=target_tile["name"], ip_address=request.remote_addr,
+        detail=target_name, ip_address=request.remote_addr,
     )
     db.commit()
     db.close()
 
-    flash(f"移動到了「{target_tile['name']}」")
+    flash(f"移動到了「{target_name}」")
     return redirect(url_for("game"))
 
 
@@ -979,6 +996,7 @@ def game_conquer():
         "SELECT * FROM countries WHERE id = ?", (character["tile_country_id"],)
     ).fetchone()
     tower = defense_tower_stats(defending_country, character["tile_type"], settings)
+    tile_name = tile_display_name(character["tile_name"], character["tile_type"])
 
     result = run_battle(character["character_name"], stats, character["element"], current_hp, tower)
 
@@ -989,7 +1007,7 @@ def game_conquer():
             "UPDATE map_tiles SET country_id = ? WHERE id = ?",
             (character["id"], character["current_tile_id"]),
         )
-        outcome_detail = f"攻下{character['tile_name']}（原屬{defending_country['name']}）"
+        outcome_detail = f"攻下{tile_name}（原屬{defending_country['name']}）"
     else:
         currency_lost = character["currency"]
         new_currency = 0
@@ -998,7 +1016,7 @@ def game_conquer():
             (currency_lost, defending_country["id"]),
         )
         outcome_detail = (
-            f"攻打{character['tile_name']}失敗，身上{currency_lost}諸神幣被{defending_country['name']}沒收"
+            f"攻打{tile_name}失敗，身上{currency_lost}諸神幣被{defending_country['name']}沒收"
         )
 
     db.execute(
@@ -1021,7 +1039,7 @@ def game_conquer():
     return render_template(
         "battle.html",
         conquest=True,
-        captured_tile_name=character["tile_name"],
+        captured_tile_name=tile_name,
         defending_country_name=defending_country["name"],
         monster=tower,
         log=result["log"],
@@ -1307,12 +1325,19 @@ def game_shop_sell():
     return redirect(url_for("game_shop"))
 
 
-def _parse_positive_amount(raw):
+BANK_AMOUNT_UNIT = 1000
+
+
+def _parse_bank_amount(raw):
+    """Bank deposits/withdrawals and treasury donations must be a positive
+    multiple of BANK_AMOUNT_UNIT -- no other amount is accepted."""
     try:
         amount = int(raw)
     except (TypeError, ValueError):
         return None
-    return amount if amount > 0 else None
+    if amount <= 0 or amount % BANK_AMOUNT_UNIT != 0:
+        return None
+    return amount
 
 
 @app.route("/game/bank/deposit", methods=["POST"])
@@ -1331,10 +1356,14 @@ def game_bank_deposit():
         flash("只能在要塞內使用銀行")
         return redirect(url_for("game"))
 
-    amount = _parse_positive_amount(request.form.get("amount", ""))
-    if amount is None or amount > character["currency"]:
+    amount = _parse_bank_amount(request.form.get("amount", ""))
+    if amount is None:
         db.close()
-        flash("請輸入不超過身上諸神幣數量的有效金額")
+        flash(f"存入金額必須是 {BANK_AMOUNT_UNIT} 的倍數")
+        return redirect(url_for("game"))
+    if amount > character["currency"]:
+        db.close()
+        flash("存入金額不可超過身上諸神幣數量")
         return redirect(url_for("game"))
 
     settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
@@ -1370,10 +1399,14 @@ def game_bank_withdraw():
         flash("只能在要塞內使用銀行")
         return redirect(url_for("game"))
 
-    amount = _parse_positive_amount(request.form.get("amount", ""))
-    if amount is None or amount > character["bank_balance"]:
+    amount = _parse_bank_amount(request.form.get("amount", ""))
+    if amount is None:
         db.close()
-        flash("請輸入不超過銀行存款數量的有效金額")
+        flash(f"提領金額必須是 {BANK_AMOUNT_UNIT} 的倍數")
+        return redirect(url_for("game"))
+    if amount > character["bank_balance"]:
+        db.close()
+        flash("提領金額不可超過銀行存款數量")
         return redirect(url_for("game"))
 
     settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
@@ -1409,10 +1442,14 @@ def game_treasury_donate():
         flash("只能在要塞內捐獻給國庫")
         return redirect(url_for("game"))
 
-    amount = _parse_positive_amount(request.form.get("amount", ""))
-    if amount is None or amount > character["currency"]:
+    amount = _parse_bank_amount(request.form.get("amount", ""))
+    if amount is None:
         db.close()
-        flash("請輸入不超過身上諸神幣數量的有效金額")
+        flash(f"捐獻金額必須是 {BANK_AMOUNT_UNIT} 的倍數")
+        return redirect(url_for("game"))
+    if amount > character["currency"]:
+        db.close()
+        flash("捐獻金額不可超過身上諸神幣數量")
         return redirect(url_for("game"))
 
     settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
@@ -1533,6 +1570,39 @@ def game_unequip():
     return _equipment_return_redirect(request)
 
 
+@app.route("/countries")
+@character_required
+def countries_page():
+    db = get_db()
+    countries = db.execute("SELECT * FROM countries ORDER BY id").fetchall()
+    tile_counts = {
+        row["country_id"]: row["c"]
+        for row in db.execute(
+            "SELECT country_id, COUNT(*) AS c FROM map_tiles WHERE country_id IS NOT NULL GROUP BY country_id"
+        ).fetchall()
+    }
+    character_names = {
+        row["id"]: row["name"] for row in db.execute("SELECT id, name FROM characters").fetchall()
+    }
+    db.close()
+
+    rows = []
+    for c in countries:
+        rows.append({
+            "name": c["name"],
+            "element": c["element"],
+            "description": c["description"],
+            "treasury": c["treasury"],
+            "tile_count": tile_counts.get(c["id"], 0),
+            "roles": [
+                {"label": role["label"], "holder": character_names.get(c[role["column"]])}
+                for role in GOVERNMENT_ROLES
+            ],
+        })
+
+    return render_template("countries.html", countries=rows, roles=GOVERNMENT_ROLES)
+
+
 @app.route("/character")
 @character_required
 def character_page():
@@ -1540,7 +1610,7 @@ def character_page():
     character = db.execute(
         """SELECT characters.id AS character_id, characters.level, characters.exp,
                   characters.next_action_at, characters.name AS character_name,
-                  characters.current_hp, characters.current_mp,
+                  characters.current_hp, characters.current_mp, characters.job_class,
                   characters.equipped_weapon_id, characters.equipped_armor_id,
                   characters.equipped_accessory_id, characters.battles_count,
                   characters.wins_count, countries.*
@@ -1619,8 +1689,17 @@ def character_page():
 def admin():
     db = get_db()
     countries = db.execute("SELECT * FROM countries ORDER BY id").fetchall()
+    characters = db.execute("SELECT id, name, country_id FROM characters ORDER BY name").fetchall()
     db.close()
-    return render_template("admin.html", countries=countries, active_tab="countries")
+
+    characters_by_country = {}
+    for c in characters:
+        characters_by_country.setdefault(c["country_id"], []).append(c)
+
+    return render_template(
+        "admin.html", countries=countries, characters_by_country=characters_by_country,
+        roles=GOVERNMENT_ROLES, active_tab="countries",
+    )
 
 
 @app.route("/admin/sessions")
@@ -1706,17 +1785,42 @@ def admin_update_country(country_id):
             return redirect(url_for("admin"))
 
     db = get_db()
+
+    role_ids = {}
+    for role in GOVERNMENT_ROLES:
+        raw = request.form.get(role["column"], "").strip()
+        if not raw:
+            role_ids[role["column"]] = None
+            continue
+        try:
+            char_id = int(raw)
+        except ValueError:
+            flash(f"{role['label']}的人選不正確")
+            db.close()
+            return redirect(url_for("admin"))
+        owner = db.execute(
+            "SELECT id FROM characters WHERE id = ? AND country_id = ?", (char_id, country_id)
+        ).fetchone()
+        if owner is None:
+            flash(f"{role['label']}必須是這個國家的角色")
+            db.close()
+            return redirect(url_for("admin"))
+        role_ids[role["column"]] = char_id
+
     try:
         db.execute(
             """UPDATE countries SET
                  name = ?, element = ?, description = ?,
                  hp_bonus = ?, mp_bonus = ?, str_bonus = ?,
-                 def_bonus = ?, agi_bonus = ?, luk_bonus = ?
+                 def_bonus = ?, agi_bonus = ?, luk_bonus = ?,
+                 king_character_id = ?, advisor_character_id = ?, general_character_id = ?
                WHERE id = ?""",
             (
                 name, element, description,
                 bonuses["hp_bonus"], bonuses["mp_bonus"], bonuses["str_bonus"],
                 bonuses["def_bonus"], bonuses["agi_bonus"], bonuses["luk_bonus"],
+                role_ids["king_character_id"], role_ids["advisor_character_id"],
+                role_ids["general_character_id"],
                 country_id,
             ),
         )

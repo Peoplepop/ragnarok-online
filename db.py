@@ -153,6 +153,8 @@ def _ensure_character_columns(conn):
         conn.execute("ALTER TABLE characters ADD COLUMN wins_count INTEGER NOT NULL DEFAULT 0")
     if "bank_balance" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN bank_balance INTEGER NOT NULL DEFAULT 0")
+    if "job_class" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN job_class TEXT NOT NULL DEFAULT '初心者'")
     if "name" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN name TEXT")
         conn.execute(
@@ -170,6 +172,12 @@ def _ensure_country_columns(conn):
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(countries)")]
     if "treasury" not in cols:
         conn.execute("ALTER TABLE countries ADD COLUMN treasury INTEGER NOT NULL DEFAULT 0")
+    if "king_character_id" not in cols:
+        conn.execute("ALTER TABLE countries ADD COLUMN king_character_id INTEGER")
+    if "advisor_character_id" not in cols:
+        conn.execute("ALTER TABLE countries ADD COLUMN advisor_character_id INTEGER")
+    if "general_character_id" not in cols:
+        conn.execute("ALTER TABLE countries ADD COLUMN general_character_id INTEGER")
 
 
 def _ensure_monster_columns(conn):
