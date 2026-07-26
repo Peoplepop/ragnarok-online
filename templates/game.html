@@ -118,6 +118,16 @@
         </select>
         <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">前往打怪</button>
       </form>
+      {% if session.is_admin %}
+      <form method="post" action="{{ url_for('game_hunt') }}" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px;">
+        <select name="monster_id" class="turn-action-control">
+          {% for m in admin_monsters %}
+          <option value="{{ m.id }}">[{{ m.ground_name }}] {{ m.name }}（{{ m.level_label }}）</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">🛠️ 指定怪物測試</button>
+      </form>
+      {% endif %}
       {% endif %}
     </div>
 

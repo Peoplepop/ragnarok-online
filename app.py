@@ -1056,6 +1056,24 @@ def game():
     hunting_grounds = db.execute(
         "SELECT * FROM hunting_grounds ORDER BY min_level"
     ).fetchall()
+    admin_monsters = []
+    if session.get("is_admin"):
+        rows = db.execute(
+            """SELECT monsters.*, hunting_grounds.name AS ground_name
+               FROM monsters JOIN hunting_grounds ON hunting_grounds.id = monsters.hunting_ground_id
+               ORDER BY hunting_grounds.min_level, monsters.is_boss, monsters.is_guardian, monsters.level_min"""
+        ).fetchall()
+        for m in rows:
+            if m["is_boss"]:
+                level_label = "首領"
+            elif m["is_guardian"]:
+                level_label = "守衛怪"
+            else:
+                level_label = f"Lv{m['level_min']}-{m['level_max']}"
+            admin_monsters.append({
+                "id": m["id"], "name": m["name"], "ground_name": m["ground_name"],
+                "level_label": level_label,
+            })
     equipped_ids = [
         character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
     ]
@@ -1137,6 +1155,7 @@ def game():
         current_tile=current_tile,
         move_targets=move_targets,
         hunting_grounds=hunting_grounds,
+        admin_monsters=admin_monsters,
         cooldown_seconds=cooldown_seconds,
         recover_cost=recover_cost,
         can_attack_tile=can_attack_tile,
@@ -1227,9 +1246,20 @@ def game_hunt():
         flash("要塞內沒有打怪地點，請先移動到要塞外")
         return redirect(url_for("game"))
 
-    ground = db.execute(
-        "SELECT * FROM hunting_grounds WHERE id = ?", (request.form.get("ground_id", ""),)
-    ).fetchone()
+    forced_monster = None
+    if session.get("is_admin") and request.form.get("monster_id", ""):
+        forced_monster = db.execute(
+            "SELECT * FROM monsters WHERE id = ?", (request.form.get("monster_id", ""),)
+        ).fetchone()
+
+    if forced_monster is not None:
+        ground = db.execute(
+            "SELECT * FROM hunting_grounds WHERE id = ?", (forced_monster["hunting_ground_id"],)
+        ).fetchone()
+    else:
+        ground = db.execute(
+            "SELECT * FROM hunting_grounds WHERE id = ?", (request.form.get("ground_id", ""),)
+        ).fetchone()
     if ground is None:
         db.close()
         flash("請選擇一個有效的打怪場")
@@ -1255,22 +1285,26 @@ def game_hunt():
     monsters = db.execute(
         "SELECT * FROM monsters WHERE hunting_ground_id = ?", (ground["id"],)
     ).fetchall()
-    regulars_in_bracket = [
-        m for m in monsters
-        if not m["is_boss"] and not m["is_guardian"]
-        and m["level_min"] is not None and m["level_min"] <= character["level"] <= m["level_max"]
-    ]
-    regulars_any = [m for m in monsters if not m["is_boss"] and not m["is_guardian"]]
-    guardian = next((m for m in monsters if m["is_guardian"]), None)
     boss = next((m for m in monsters if m["is_boss"]), None)
-    regular_pool = regulars_in_bracket or regulars_any
-    if not regular_pool and not guardian:
-        db.close()
-        flash("這個打怪場目前還沒有設定怪物")
-        return redirect(url_for("game"))
 
-    is_guardian_fight = bool(guardian) and random.random() * 100 < settings["guardian_encounter_percent"]
-    monster = guardian if is_guardian_fight else random.choice(regular_pool)
+    if forced_monster is not None:
+        monster = forced_monster
+        is_guardian_fight = bool(monster["is_guardian"])
+    else:
+        regulars_in_bracket = [
+            m for m in monsters
+            if not m["is_boss"] and not m["is_guardian"]
+            and m["level_min"] is not None and m["level_min"] <= character["level"] <= m["level_max"]
+        ]
+        regulars_any = [m for m in monsters if not m["is_boss"] and not m["is_guardian"]]
+        guardian = next((m for m in monsters if m["is_guardian"]), None)
+        regular_pool = regulars_in_bracket or regulars_any
+        if not regular_pool and not guardian:
+            db.close()
+            flash("這個打怪場目前還沒有設定怪物")
+            return redirect(url_for("game"))
+        is_guardian_fight = bool(guardian) and random.random() * 100 < settings["guardian_encounter_percent"]
+        monster = guardian if is_guardian_fight else random.choice(regular_pool)
 
     usable_skills = _character_usable_skills(db, character)
     result = run_battle(
@@ -1285,7 +1319,12 @@ def game_hunt():
     pending_boss_id = None
     boss_room_available = False
     if result["won"]:
-        exp_multiplier = settings["guardian_exp_multiplier"] if is_guardian_fight else 1.0
+        if is_guardian_fight:
+            exp_multiplier = settings["guardian_exp_multiplier"]
+        elif monster["is_boss"]:
+            exp_multiplier = settings["boss_exp_multiplier"]
+        else:
+            exp_multiplier = 1.0
         exp_gain = round(ground["monster_exp"] * exp_multiplier)
         currency_gain = round(monster["currency_reward"] * (1 + gold_luk_bonus_pct(stats["luk"]) / 100))
         new_level, new_exp = apply_exp(
