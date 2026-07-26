@@ -38,6 +38,7 @@ ACTION_LABELS = {
     "treasury_donate": "捐獻國庫",
     "conquer_win": "攻城成功",
     "conquer_loss": "攻城失敗",
+    "promote_tier1": "一轉",
     "promote_tier2": "二轉",
     "promote_tier3": "三轉",
     "rebirth": "轉生",
@@ -107,6 +108,14 @@ LEVEL_STAT_GROWTH = {"hp": 5, "mp": 5, "str": 1, "def": 1, "agi": 1, "luk": 1}
 # 三轉 jobs that blend in a third stat. Not stored in its own table -- job_class
 # is just a string written into an existing characters column, so this is
 # pure business-logic configuration living next to compute_final_stats.
+# 一轉 (job_tier=1): the 3 root philosophies, promotable straight out of
+# novice at level 10. Each forks into 2 job_tier=2 jobs (below) at level 30.
+TIER1_JOBS = {
+    "劍修":   {"primary": "str", "secondary": "def"},
+    "游俠":   {"primary": "agi", "secondary": "luk"},
+    "玄陣師": {"primary": "def", "secondary": "luk"},
+}
+
 TIER2_JOBS = {
     "鋒劍士":   {"family": "劍修",   "primary": "str", "secondary": "def"},
     "鐵衛劍師": {"family": "劍修",   "primary": "def", "secondary": "str"},
@@ -115,6 +124,10 @@ TIER2_JOBS = {
     "磐石陣師": {"family": "玄陣師", "primary": "def", "secondary": "luk"},
     "易數先生": {"family": "玄陣師", "primary": "luk", "secondary": "def"},
 }
+
+TIER2_CHILDREN_BY_FAMILY = {}
+for _name, _info in TIER2_JOBS.items():
+    TIER2_CHILDREN_BY_FAMILY.setdefault(_info["family"], []).append(_name)
 
 TIER3_JOBS = {
     "裂地劍豪":   {"parent": "鋒劍士",   "primary": "str", "secondary": "agi"},
@@ -141,7 +154,7 @@ for _name, _info in TIER3_JOBS.items():
 TIER4_JOB_BY_STAT = {"str": "業火尊者", "def": "青木道尊", "agi": "流水劍尊", "luk": "流金尊者"}
 TIER4_TIE_JOB = "厚土真尊"
 
-JOB_TIER_LABELS = {0: "初心者", 2: "二轉", 3: "三轉", 4: "四轉"}
+JOB_TIER_LABELS = {0: "初心者", 1: "一轉", 2: "二轉", 3: "三轉", 4: "四轉"}
 
 # Skill tree: every job path (novice-by-element, then each 二轉/三轉/四轉 job)
 # has 1-3 learnable skills gated by level, each a one-time currency purchase
@@ -389,7 +402,15 @@ def _active_set_summaries(equipped_items):
     return summaries
 
 
-def compute_final_stats(country, equipped_items=(), level=1, job_bonus=None, rebirth_bonus_percent=0):
+def compute_final_stats(
+    country, equipped_items=(), level=1, job_bonus=None, rebirth_bonus_percent=0, level_bonus_stats=None,
+):
+    """level_bonus_stats is the per-character accumulated total from the
+    random job-weighted level-up rolls (see _roll_level_up_stat_points) --
+    always supplied for real player characters via character_final_stats.
+    Left as None here only for NPC-only callers (defense_tower_stats), which
+    still fall back to the old flat LEVEL_STAT_GROWTH formula since NPCs are
+    computed fresh at a fixed level, not leveled up one roll at a time."""
     job_bonus = job_bonus or {}
     equip_bonus = {}
     for item in equipped_items:
@@ -397,11 +418,13 @@ def compute_final_stats(country, equipped_items=(), level=1, job_bonus=None, reb
             equip_bonus[item["stat"]] = equip_bonus.get(item["stat"], 0) + item["stat_bonus"]
     for stat, amount in _equipment_set_bonus(equipped_items).items():
         equip_bonus[stat] = equip_bonus.get(stat, 0) + amount
-    level_bonus = max(0, level - 1)
+    if level_bonus_stats is None:
+        level_bonus = max(0, level - 1)
+        level_bonus_stats = {key: LEVEL_STAT_GROWTH[key] * level_bonus for key in BASE_STATS}
     return {
         key: round(base * (1 + (country[bonus_field] + job_bonus.get(key, 0) + rebirth_bonus_percent) / 100))
         + equip_bonus.get(key, 0)
-        + LEVEL_STAT_GROWTH[key] * level_bonus
+        + level_bonus_stats[key]
         for key, (bonus_field, base) in BASE_STATS.items()
     }
 
@@ -409,6 +432,9 @@ def compute_final_stats(country, equipped_items=(), level=1, job_bonus=None, reb
 def job_stat_bonus_pct(job_class, job_tier):
     """{stat: percent} bonus from the character's current job -- only ever
     touches str/def/agi/luk, never hp/mp (unlike the rebirth bonus)."""
+    if job_tier == 1:
+        info = TIER1_JOBS.get(job_class)
+        return {info["primary"]: 5, info["secondary"]: 2} if info else {}
     if job_tier == 2:
         info = TIER2_JOBS.get(job_class)
         return {info["primary"]: 10, info["secondary"]: 5} if info else {}
@@ -437,7 +463,10 @@ def character_final_stats(character, equipped_items, settings):
     intentionally bypasses this floor -- see game_rebirth, which clears it."""
     job_bonus = job_stat_bonus_pct(character["job_class"], character["job_tier"])
     rebirth_bonus = character["rebirth_count"] * settings["rebirth_stat_bonus_percent"]
-    stats = compute_final_stats(character, equipped_items, character["level"], job_bonus, rebirth_bonus)
+    level_bonus_stats = {key: character[f"level_bonus_{key}"] for key in BASE_STATS}
+    stats = compute_final_stats(
+        character, equipped_items, character["level"], job_bonus, rebirth_bonus, level_bonus_stats,
+    )
     for key, col in STAT_FLOOR_COLUMNS.items():
         floor = character[col]
         if floor is not None:
@@ -512,25 +541,78 @@ def exp_required_for_level(level, settings, force_one=False):
     return round(anchor)
 
 
-def apply_exp(level, exp, gained, settings, force_one=False):
+# Every level-up distributes exactly 10 points across hp/mp/str/def/agi/luk
+# (never more than LEVEL_UP_STAT_POINT_CAP in any single stat, never fewer
+# than 0), weighted toward the character's current job's specialty stat(s)
+# so a level-up "feels like" that job -- a str/def build rolls more str/def,
+# not a uniform spread. HP/MP points are worth more raw stat per point than
+# the other four, matching the game's existing 10s-vs-1s stat granularity.
+LEVEL_UP_TOTAL_POINTS = 10
+LEVEL_UP_STAT_POINT_CAP = 5
+LEVEL_UP_POINT_VALUE = {"hp": 10, "mp": 10, "str": 1, "def": 1, "agi": 1, "luk": 1}
+LEVEL_UP_PRIMARY_WEIGHT = 3
+LEVEL_UP_SECONDARY_WEIGHT = 2
+LEVEL_UP_BASE_WEIGHT = 1
+
+
+def _job_primary_secondary(job_class, job_tier):
+    if job_tier == 1:
+        info = TIER1_JOBS.get(job_class)
+    elif job_tier == 2:
+        info = TIER2_JOBS.get(job_class)
+    elif job_tier == 3:
+        info = TIER3_JOBS.get(job_class)
+    elif job_tier == 4:
+        dominant = next((k for k, v in TIER4_JOB_BY_STAT.items() if v == job_class), None)
+        return dominant, None
+    else:
+        info = None
+    return (info["primary"], info["secondary"]) if info else (None, None)
+
+
+def _roll_level_up_stat_points(job_class, job_tier):
+    """Returns {stat: points} (0-5 each, summing to LEVEL_UP_TOTAL_POINTS) --
+    still just points, not raw stat amounts; multiply by LEVEL_UP_POINT_VALUE
+    to get the actual stat increase."""
+    primary, secondary = _job_primary_secondary(job_class, job_tier)
+    weights = {key: LEVEL_UP_BASE_WEIGHT for key in LEVEL_UP_POINT_VALUE}
+    if primary:
+        weights[primary] += LEVEL_UP_PRIMARY_WEIGHT
+    if secondary:
+        weights[secondary] += LEVEL_UP_SECONDARY_WEIGHT
+    points = {key: 0 for key in weights}
+    for _ in range(LEVEL_UP_TOTAL_POINTS):
+        available = [key for key in weights if points[key] < LEVEL_UP_STAT_POINT_CAP]
+        chosen = random.choices(available, weights=[weights[k] for k in available], k=1)[0]
+        points[chosen] += 1
+    return points
+
+
+def apply_exp(level, exp, gained, settings, force_one=False, job_class=None, job_tier=0):
     """Add `gained` EXP, cascading through as many level-ups as it covers.
-    Returns (new_level, new_exp). Capped at LEVEL_CAP; extra EXP past the cap
-    is discarded. Overflow past what a level-up consumes is also discarded
-    (not carried into the next level's counter) -- every level always starts
-    counting from 0, so this can advance at most one level per call (harmless
-    for normal play since a single kill's EXP is always well under a level's
-    requirement; it's what keeps the admin's force_one testing override from
-    rocketing through many levels off one big EXP gain)."""
+    Returns (new_level, new_exp, stat_gain) where stat_gain is the raw
+    {stat: amount} total accumulated from a random job-weighted roll on each
+    level gained (see _roll_level_up_stat_points) -- summed across every
+    level-up in this call, since one big EXP gain can still cross several
+    level thresholds if force_one or a huge kill allows it, even though
+    overflow itself is discarded rather than carried. Capped at LEVEL_CAP;
+    extra EXP past the cap is discarded. Overflow past what a level-up
+    consumes is also discarded (not carried into the next level's counter)
+    -- every level always starts counting from 0, so a single force_one
+    level-up can only ever advance one level, not cascade through many."""
     exp += gained
+    stat_gain = {key: 0 for key in LEVEL_UP_POINT_VALUE}
     while level < LEVEL_CAP:
         needed = exp_required_for_level(level, settings, force_one)
         if exp < needed:
             break
         exp = 0
         level += 1
+        for stat, points in _roll_level_up_stat_points(job_class, job_tier).items():
+            stat_gain[stat] += points * LEVEL_UP_POINT_VALUE[stat]
     if level >= LEVEL_CAP:
         level, exp = LEVEL_CAP, 0
-    return level, exp
+    return level, exp, stat_gain
 
 
 def _resolve_tier4_job(db, character_id):
@@ -755,8 +837,42 @@ def run_battle(player_name, player_stats, player_element, player_hp, monster, pl
     return {"log": log, "won": m_hp <= 0 and p_hp > 0, "player_hp": p_hp, "player_mp": p_mp, "monster_hp": m_hp}
 
 
+def _backfill_level_bonus_columns():
+    """One-time migration: characters predating the random level-up stat-
+    point system (see apply_exp/_roll_level_up_stat_points) get their
+    level_bonus_* columns seeded from the old flat LEVEL_STAT_GROWTH formula,
+    so switching to random rolls doesn't retroactively strip stats they
+    already earned -- only levels gained *after* this change use the new
+    roll. Detected by all six columns still being exactly 0, which is
+    impossible for a character who has gone through even one real roll
+    (a roll always distributes a positive total across at least one stat)."""
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT id, level FROM characters
+           WHERE level_bonus_hp = 0 AND level_bonus_mp = 0 AND level_bonus_str = 0
+                 AND level_bonus_def = 0 AND level_bonus_agi = 0 AND level_bonus_luk = 0
+                 AND level > 1"""
+    ).fetchall()
+    for row in rows:
+        level_bonus = max(0, row["level"] - 1)
+        conn.execute(
+            """UPDATE characters SET level_bonus_hp = ?, level_bonus_mp = ?, level_bonus_str = ?,
+                   level_bonus_def = ?, level_bonus_agi = ?, level_bonus_luk = ?
+               WHERE id = ?""",
+            (
+                LEVEL_STAT_GROWTH["hp"] * level_bonus, LEVEL_STAT_GROWTH["mp"] * level_bonus,
+                LEVEL_STAT_GROWTH["str"] * level_bonus, LEVEL_STAT_GROWTH["def"] * level_bonus,
+                LEVEL_STAT_GROWTH["agi"] * level_bonus, LEVEL_STAT_GROWTH["luk"] * level_bonus,
+                row["id"],
+            ),
+        )
+    conn.commit()
+    conn.close()
+
+
 init_db()
 seed_defaults()
+_backfill_level_bonus_columns()
 
 
 def _parse_dt(value):
@@ -1114,7 +1230,9 @@ def game():
                   characters.current_hp, characters.current_mp, characters.job_class, characters.job_tier,
                   characters.rebirth_count, characters.stat_floor_hp, characters.stat_floor_mp,
                   characters.stat_floor_str, characters.stat_floor_def, characters.stat_floor_agi,
-                  characters.stat_floor_luk, countries.*
+                  characters.stat_floor_luk, characters.level_bonus_hp, characters.level_bonus_mp,
+                  characters.level_bonus_str, characters.level_bonus_def, characters.level_bonus_agi,
+                  characters.level_bonus_luk, countries.*
            FROM characters JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
         (session["user_id"],),
@@ -1175,7 +1293,8 @@ def game():
         and current_tile["country_id"] != character["id"]
     )
     job_action_available = (
-        (character["job_tier"] == 0 and character["level"] >= 30)
+        (character["job_tier"] == 0 and character["level"] >= 10)
+        or (character["job_tier"] == 1 and character["level"] >= 30)
         or (character["job_tier"] == 2 and character["level"] >= 70)
         or (character["job_tier"] == 3 and character["level"] >= 120)
     )
@@ -1301,6 +1420,8 @@ def game_hunt():
                   characters.job_class, characters.job_tier, characters.rebirth_count,
                   characters.stat_floor_hp, characters.stat_floor_mp, characters.stat_floor_str,
                   characters.stat_floor_def, characters.stat_floor_agi, characters.stat_floor_luk,
+                  characters.level_bonus_hp, characters.level_bonus_mp, characters.level_bonus_str,
+                  characters.level_bonus_def, characters.level_bonus_agi, characters.level_bonus_luk,
                   map_tiles.tile_type, countries.*
            FROM characters
            JOIN map_tiles ON map_tiles.id = characters.current_tile_id
@@ -1383,6 +1504,7 @@ def game_hunt():
     currency_gain = 0
     currency_lost = 0
     new_level, new_exp = character["level"], character["exp"]
+    stat_gain = {key: 0 for key in LEVEL_UP_POINT_VALUE}
     pending_boss_id = None
     boss_room_available = False
     if result["won"]:
@@ -1394,9 +1516,10 @@ def game_hunt():
             exp_multiplier = 1.0
         exp_gain = round(monster["exp_reward"] * exp_multiplier)
         currency_gain = round(monster["currency_reward"] * (1 + gold_luk_bonus_pct(stats["luk"]) / 100))
-        new_level, new_exp = apply_exp(
+        new_level, new_exp, stat_gain = apply_exp(
             character["level"], character["exp"], exp_gain, settings,
             force_one=session.get("is_admin", False),
+            job_class=character["job_class"], job_tier=character["job_tier"],
         )
         new_currency = character["currency"] + currency_gain
         if is_guardian_fight and boss is not None and result["player_hp"] > 0:
@@ -1414,12 +1537,17 @@ def game_hunt():
         """UPDATE characters
            SET level = ?, exp = ?, currency = ?, current_hp = ?, current_mp = ?, next_action_at = ?,
                battles_count = battles_count + 1, wins_count = wins_count + ?,
-               job_class = ?, job_tier = ?, pending_boss_monster_id = ?
+               job_class = ?, job_tier = ?, pending_boss_monster_id = ?,
+               level_bonus_hp = level_bonus_hp + ?, level_bonus_mp = level_bonus_mp + ?,
+               level_bonus_str = level_bonus_str + ?, level_bonus_def = level_bonus_def + ?,
+               level_bonus_agi = level_bonus_agi + ?, level_bonus_luk = level_bonus_luk + ?
            WHERE id = ?""",
         (
             new_level, new_exp, new_currency, result["player_hp"], result["player_mp"],
             _next_action_at(settings["turn_wait_seconds"]), 1 if result["won"] else 0,
             new_job_class, new_job_tier, pending_boss_id,
+            stat_gain["hp"], stat_gain["mp"], stat_gain["str"],
+            stat_gain["def"], stat_gain["agi"], stat_gain["luk"],
             character["character_id"],
         ),
     )
@@ -1453,6 +1581,7 @@ def game_hunt():
         max_hp=stats["hp"],
         player_mp=result["player_mp"],
         max_mp=stats["mp"],
+        player_stats=stats,
     )
 
 
@@ -1468,6 +1597,8 @@ def game_hunt_boss_room():
                   characters.job_class, characters.job_tier, characters.rebirth_count,
                   characters.stat_floor_hp, characters.stat_floor_mp, characters.stat_floor_str,
                   characters.stat_floor_def, characters.stat_floor_agi, characters.stat_floor_luk,
+                  characters.level_bonus_hp, characters.level_bonus_mp, characters.level_bonus_str,
+                  characters.level_bonus_def, characters.level_bonus_agi, characters.level_bonus_luk,
                   countries.*
            FROM characters
            JOIN countries ON countries.id = characters.country_id
@@ -1514,12 +1645,14 @@ def game_hunt_boss_room():
     currency_gain = 0
     currency_lost = 0
     new_level, new_exp = character["level"], character["exp"]
+    stat_gain = {key: 0 for key in LEVEL_UP_POINT_VALUE}
     if result["won"]:
         exp_gain = round(boss["exp_reward"] * settings["boss_exp_multiplier"])
         currency_gain = round(boss["currency_reward"] * (1 + gold_luk_bonus_pct(stats["luk"]) / 100))
-        new_level, new_exp = apply_exp(
+        new_level, new_exp, stat_gain = apply_exp(
             character["level"], character["exp"], exp_gain, settings,
             force_one=session.get("is_admin", False),
+            job_class=character["job_class"], job_tier=character["job_tier"],
         )
         new_currency = character["currency"] + currency_gain
     else:
@@ -1534,11 +1667,16 @@ def game_hunt_boss_room():
         """UPDATE characters
            SET level = ?, exp = ?, currency = ?, current_hp = ?, current_mp = ?,
                battles_count = battles_count + 1, wins_count = wins_count + ?,
-               job_class = ?, job_tier = ?, pending_boss_monster_id = NULL
+               job_class = ?, job_tier = ?, pending_boss_monster_id = NULL,
+               level_bonus_hp = level_bonus_hp + ?, level_bonus_mp = level_bonus_mp + ?,
+               level_bonus_str = level_bonus_str + ?, level_bonus_def = level_bonus_def + ?,
+               level_bonus_agi = level_bonus_agi + ?, level_bonus_luk = level_bonus_luk + ?
            WHERE id = ?""",
         (
             new_level, new_exp, new_currency, result["player_hp"], result["player_mp"],
             1 if result["won"] else 0, new_job_class, new_job_tier,
+            stat_gain["hp"], stat_gain["mp"], stat_gain["str"],
+            stat_gain["def"], stat_gain["agi"], stat_gain["luk"],
             character["character_id"],
         ),
     )
@@ -1569,6 +1707,7 @@ def game_hunt_boss_room():
         max_hp=stats["hp"],
         player_mp=result["player_mp"],
         max_mp=stats["mp"],
+        player_stats=stats,
     )
 
 
@@ -1584,6 +1723,8 @@ def game_conquer():
                   characters.job_class, characters.job_tier, characters.rebirth_count,
                   characters.stat_floor_hp, characters.stat_floor_mp, characters.stat_floor_str,
                   characters.stat_floor_def, characters.stat_floor_agi, characters.stat_floor_luk,
+                  characters.level_bonus_hp, characters.level_bonus_mp, characters.level_bonus_str,
+                  characters.level_bonus_def, characters.level_bonus_agi, characters.level_bonus_luk,
                   map_tiles.tile_type, map_tiles.country_id AS tile_country_id, map_tiles.name AS tile_name,
                   countries.*
            FROM characters
@@ -1682,6 +1823,7 @@ def game_conquer():
         max_hp=stats["hp"],
         player_mp=result["player_mp"],
         max_mp=stats["mp"],
+        player_stats=stats,
     )
 
 
@@ -1697,7 +1839,9 @@ def game_recover():
                   characters.equipped_accessory_id, characters.job_class, characters.job_tier,
                   characters.rebirth_count, characters.stat_floor_hp, characters.stat_floor_mp,
                   characters.stat_floor_str, characters.stat_floor_def, characters.stat_floor_agi,
-                  characters.stat_floor_luk, countries.*
+                  characters.stat_floor_luk, characters.level_bonus_hp, characters.level_bonus_mp,
+                  characters.level_bonus_str, characters.level_bonus_def, characters.level_bonus_agi,
+                  characters.level_bonus_luk, countries.*
            FROM characters
            JOIN map_tiles ON map_tiles.id = characters.current_tile_id
            JOIN countries ON countries.id = characters.country_id
@@ -2267,6 +2411,8 @@ def character_page():
                   characters.stat_floor_hp,
                   characters.stat_floor_mp, characters.stat_floor_str, characters.stat_floor_def,
                   characters.stat_floor_agi, characters.stat_floor_luk,
+                  characters.level_bonus_hp, characters.level_bonus_mp, characters.level_bonus_str,
+                  characters.level_bonus_def, characters.level_bonus_agi, characters.level_bonus_luk,
                   characters.equipped_weapon_id, characters.equipped_armor_id,
                   characters.equipped_accessory_id, characters.battles_count,
                   characters.wins_count, countries.*
@@ -2309,9 +2455,11 @@ def character_page():
         exp_required_for_level(character["level"], settings, force_one=session.get("is_admin", False))
         if character["level"] < LEVEL_CAP else None
     )
-    can_promote_tier2 = character["job_tier"] == 0 and character["level"] >= 30
+    can_promote_tier1 = character["job_tier"] == 0 and character["level"] >= 10
+    can_promote_tier2 = character["job_tier"] == 1 and character["level"] >= 30
     can_promote_tier3 = character["job_tier"] == 2 and character["level"] >= 70
     can_rebirth = character["job_tier"] == 3 and character["level"] >= 120
+    tier2_choices = TIER2_CHILDREN_BY_FAMILY.get(character["job_class"], [])
     tier3_choices = TIER3_CHILDREN_BY_PARENT.get(character["job_class"], [])
     win_rate = (
         round(character["wins_count"] / character["battles_count"] * 100, 1)
@@ -2352,10 +2500,13 @@ def character_page():
         cooldown_seconds=_cooldown_remaining_seconds(character["next_action_at"]),
         job_tier_label=JOB_TIER_LABELS.get(character["job_tier"], ""),
         mastery_names=mastery_names,
+        can_promote_tier1=can_promote_tier1,
         can_promote_tier2=can_promote_tier2,
         can_promote_tier3=can_promote_tier3,
         can_rebirth=can_rebirth,
-        tier2_jobs=TIER2_JOBS,
+        tier1_jobs=TIER1_JOBS,
+        tier2_choices=tier2_choices,
+        tier2_job_info=TIER2_JOBS,
         tier3_choices=tier3_choices,
         tier3_job_info=TIER3_JOBS,
         learnable_skills=learnable_skills,
@@ -2372,6 +2523,8 @@ def _character_for_promotion(db):
                   characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id,
                   characters.stat_floor_hp, characters.stat_floor_mp, characters.stat_floor_str,
                   characters.stat_floor_def, characters.stat_floor_agi, characters.stat_floor_luk,
+                  characters.level_bonus_hp, characters.level_bonus_mp, characters.level_bonus_str,
+                  characters.level_bonus_def, characters.level_bonus_agi, characters.level_bonus_luk,
                   countries.*
            FROM characters JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
@@ -2387,6 +2540,48 @@ def _snapshot_stat_floor(character, equipped_items, settings):
     return {STAT_FLOOR_COLUMNS[key]: value for key, value in stats.items()}
 
 
+@app.route("/character/promote/tier1", methods=["POST"])
+@character_required
+def character_promote_tier1():
+    db = get_db()
+    character = _character_for_promotion(db)
+
+    job_name = request.form.get("job_name", "")
+    if character["job_tier"] != 0 or character["level"] < 10:
+        db.close()
+        flash("目前還不能一轉")
+        return redirect(url_for("character_page"))
+    if job_name not in TIER1_JOBS:
+        db.close()
+        flash("請選擇一個有效的職業")
+        return redirect(url_for("character_page"))
+
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+    equipped_items = _fetch_equipped_items(db, character)
+    floor = _snapshot_stat_floor(character, equipped_items, settings)
+
+    db.execute(
+        """UPDATE characters SET job_class = ?, job_tier = 1,
+               stat_floor_hp = ?, stat_floor_mp = ?, stat_floor_str = ?,
+               stat_floor_def = ?, stat_floor_agi = ?, stat_floor_luk = ?
+           WHERE id = ?""",
+        (
+            job_name, floor["stat_floor_hp"], floor["stat_floor_mp"], floor["stat_floor_str"],
+            floor["stat_floor_def"], floor["stat_floor_agi"], floor["stat_floor_luk"],
+            character["character_id"],
+        ),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "promote_tier1",
+        detail=job_name, ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    flash(f"一轉成功，成為「{job_name}」！")
+    return redirect(url_for("character_page"))
+
+
 @app.route("/character/promote/tier2", methods=["POST"])
 @character_required
 def character_promote_tier2():
@@ -2394,11 +2589,12 @@ def character_promote_tier2():
     character = _character_for_promotion(db)
 
     job_name = request.form.get("job_name", "")
-    if character["job_tier"] != 0 or character["level"] < 30:
+    valid_choices = TIER2_CHILDREN_BY_FAMILY.get(character["job_class"], [])
+    if character["job_tier"] != 1 or character["level"] < 30:
         db.close()
         flash("目前還不能二轉")
         return redirect(url_for("character_page"))
-    if job_name not in TIER2_JOBS:
+    if job_name not in valid_choices:
         db.close()
         flash("請選擇一個有效的職業")
         return redirect(url_for("character_page"))
@@ -2555,10 +2751,22 @@ def character_debug_set_level():
         return redirect(url_for("character_page"))
 
     level = max(1, min(level, LEVEL_CAP))
+    # Debug-jumping a level can't fairly replay the random per-level roll for
+    # every level skipped, so it approximates with the old flat formula --
+    # good enough for eyeballing roughly how strong that level should feel.
+    level_growth = max(0, level - 1)
     db = get_db()
     db.execute(
-        "UPDATE characters SET level = ?, exp = 0 WHERE user_id = ?",
-        (level, session["user_id"]),
+        """UPDATE characters SET level = ?, exp = 0,
+               level_bonus_hp = ?, level_bonus_mp = ?, level_bonus_str = ?,
+               level_bonus_def = ?, level_bonus_agi = ?, level_bonus_luk = ?
+           WHERE user_id = ?""",
+        (
+            level, LEVEL_STAT_GROWTH["hp"] * level_growth, LEVEL_STAT_GROWTH["mp"] * level_growth,
+            LEVEL_STAT_GROWTH["str"] * level_growth, LEVEL_STAT_GROWTH["def"] * level_growth,
+            LEVEL_STAT_GROWTH["agi"] * level_growth, LEVEL_STAT_GROWTH["luk"] * level_growth,
+            session["user_id"],
+        ),
     )
     db.commit()
     db.close()

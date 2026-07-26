@@ -278,6 +278,10 @@ def _ensure_character_columns(conn):
             conn.execute(f"ALTER TABLE characters ADD COLUMN {stat_col} INTEGER")
     if "pending_boss_monster_id" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN pending_boss_monster_id INTEGER")
+    for bonus_col in ("level_bonus_hp", "level_bonus_mp", "level_bonus_str",
+                      "level_bonus_def", "level_bonus_agi", "level_bonus_luk"):
+        if bonus_col not in cols:
+            conn.execute(f"ALTER TABLE characters ADD COLUMN {bonus_col} INTEGER NOT NULL DEFAULT 0")
     if "name" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN name TEXT")
         conn.execute(

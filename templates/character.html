@@ -86,11 +86,21 @@
     <p class="hint" style="margin:0 0 14px;">已學會但目前無法使用（跨職業樹，唯有四轉可解鎖全部已學技能）：{{ learned_locked_skills|map(attribute='name')|join('、') }}</p>
     {% endif %}
 
-    {% if can_promote_tier2 %}
+    {% if can_promote_tier1 %}
+    <form method="post" action="{{ url_for('character_promote_tier1') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <select name="job_name">
+        {% for name, info in tier1_jobs.items() %}
+        <option value="{{ name }}">{{ name }}（{{ '力量' if info.primary == 'str' else '防禦' if info.primary == 'def' else '敏捷' if info.primary == 'agi' else '幸運' }}＋{{ '力量' if info.secondary == 'str' else '防禦' if info.secondary == 'def' else '敏捷' if info.secondary == 'agi' else '幸運' }}）</option>
+        {% endfor %}
+      </select>
+      <button type="submit">一轉</button>
+    </form>
+    {% elif can_promote_tier2 %}
     <form method="post" action="{{ url_for('character_promote_tier2') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
       <select name="job_name">
-        {% for name, info in tier2_jobs.items() %}
-        <option value="{{ name }}">{{ name }}（{{ info.family }}・{{ '力量' if info.primary == 'str' else '防禦' if info.primary == 'def' else '敏捷' if info.primary == 'agi' else '幸運' }}側重）</option>
+        {% for name in tier2_choices %}
+        {% set info = tier2_job_info[name] %}
+        <option value="{{ name }}">{{ name }}（{{ '力量' if info.primary == 'str' else '防禦' if info.primary == 'def' else '敏捷' if info.primary == 'agi' else '幸運' }}側重）</option>
         {% endfor %}
       </select>
       <button type="submit">二轉</button>
@@ -112,7 +122,7 @@
     </form>
     {% else %}
     <p class="hint" style="margin:0;">
-      {% if character.job_tier == 0 %}30 級可二轉{% elif character.job_tier == 2 %}70 級可三轉{% elif character.job_tier == 3 %}120 級可轉生{% else %}已四轉，繼續練功邁向封頂{% endif %}
+      {% if character.job_tier == 0 %}10 級可一轉{% elif character.job_tier == 1 %}30 級可二轉{% elif character.job_tier == 2 %}70 級可三轉{% elif character.job_tier == 3 %}120 級可轉生{% else %}已四轉，繼續練功邁向封頂{% endif %}
     </p>
     {% endif %}
   </div>

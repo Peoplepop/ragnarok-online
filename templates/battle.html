@@ -30,6 +30,21 @@
     {% endif %}
   </div>
 
+  {% if player_stats %}
+  <div class="panel" style="margin-bottom:20px; display:flex; gap:32px; flex-wrap:wrap; font-size:13px;">
+    <div>
+      <div style="color:var(--gold-bright); margin-bottom:4px;">我方</div>
+      <div style="color:var(--text-dim);">HP {{ player_stats.hp }}　MP {{ player_stats.mp }}</div>
+      <div style="color:var(--text-dim);">力量 {{ player_stats.str }}　防禦 {{ player_stats.def }}　敏捷 {{ player_stats.agi }}　幸運 {{ player_stats.luk }}</div>
+    </div>
+    <div>
+      <div style="color:var(--danger); margin-bottom:4px;">{% if conquest %}守軍{% else %}敵方{% endif %}</div>
+      <div style="color:var(--text-dim);">HP {{ monster.hp }}</div>
+      <div style="color:var(--text-dim);">攻擊 {{ monster.atk }}　防禦 {{ monster.def }}　敏捷 {{ monster.agi }}</div>
+    </div>
+  </div>
+  {% endif %}
+
   <div class="panel" style="margin-bottom:20px;">
     <div id="battle-log" style="max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; font-size:13px;"></div>
   </div>
