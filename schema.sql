@@ -63,13 +63,15 @@ CREATE TABLE IF NOT EXISTS characters (
     stat_floor_def INTEGER,
     stat_floor_agi INTEGER,
     stat_floor_luk INTEGER,
+    pending_boss_monster_id INTEGER,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (country_id) REFERENCES countries(id),
     FOREIGN KEY (current_tile_id) REFERENCES map_tiles(id),
     FOREIGN KEY (equipped_weapon_id) REFERENCES items(id),
     FOREIGN KEY (equipped_armor_id) REFERENCES items(id),
-    FOREIGN KEY (equipped_accessory_id) REFERENCES items(id)
+    FOREIGN KEY (equipped_accessory_id) REFERENCES items(id),
+    FOREIGN KEY (pending_boss_monster_id) REFERENCES monsters(id)
 );
 
 CREATE TABLE IF NOT EXISTS map_tiles (

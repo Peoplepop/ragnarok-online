@@ -23,10 +23,10 @@
       </span>
     </div>
     {% if guardian_encounter and not conquest %}
-    <p style="margin:8px 0 0; font-size:12px; color:var(--gold-bright);">
-      🐺 這次遇到的是守衛怪「{{ guardian_monster.name }}」！
-      {% if boss_room_triggered %}擊敗後成功觸發魔王房間，緊接著挑戰了「{{ monster.name }}」！{% endif %}
-    </p>
+    <p style="margin:8px 0 0; font-size:12px; color:var(--gold-bright);">🐺 這次遇到的是守衛怪！</p>
+    {% endif %}
+    {% if boss_room_challenge %}
+    <p style="margin:8px 0 0; font-size:12px; color:var(--gold-bright);">⚔️ 你在魔王房間中挑戰了魔王！</p>
     {% endif %}
   </div>
 
@@ -51,9 +51,6 @@
         {% if conquest %}
         攻城失敗，「{{ defending_country_name }}」擊退了這次進攻
         {% if currency_lost %}，身上 {{ currency_lost }} 諸神幣被沒收充作對方的防守獎勵{% endif %}
-        {% elif boss_room_triggered %}
-        被「{{ monster.name }}」擊敗了，不過先前擊敗守衛怪已獲得的 {{ exp_gain }} 經驗值、{{ currency_gain }} 諸神幣仍然保留
-        {% if currency_lost %}，這次挑戰魔王房間又賠上了 {{ currency_lost }} 諸神幣{% endif %}
         {% else %}
         被「{{ monster.name }}」擊敗了，沒有獲得任何獎勵
         {% if currency_lost %}，身上 {{ currency_lost }} 諸神幣也化為烏有{% endif %}
@@ -62,6 +59,12 @@
       </p>
     {% endif %}
     <p style="margin:10px 0 0; font-size:13px; color:var(--text-dim);">你目前 HP {{ player_hp }}/{{ max_hp }}　MP {{ player_mp }}/{{ max_mp }}</p>
+    {% if boss_room_available %}
+    <form method="post" action="{{ url_for('game_hunt_boss_room') }}" style="display:inline-block; margin-top:14px;">
+      <p class="hint" style="margin:0 0 8px;">你擊敗了守衛怪，可以選擇挑戰魔王房間，或直接返回主畫面</p>
+      <button type="submit">⚔️ 進攻魔王房間</button>
+    </form>
+    {% endif %}
   </div>
 
   <a href="{{ url_for('game') }}" class="btn">← 返回主畫面</a>

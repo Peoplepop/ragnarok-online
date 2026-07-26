@@ -418,8 +418,12 @@ EXP_TIER_BANDS = [
 ]
 
 
-def exp_required_for_level(level, settings):
-    """EXP needed to advance from `level` to `level + 1`."""
+def exp_required_for_level(level, settings, force_one=False):
+    """EXP needed to advance from `level` to `level + 1`. force_one is the
+    admin-testing override (session.is_admin) that always needs just 1 EXP,
+    regardless of level."""
+    if force_one:
+        return 1
     anchor = settings["exp_base"]
     for start, end, field in EXP_TIER_BANDS:
         rate = settings[field]
@@ -429,15 +433,21 @@ def exp_required_for_level(level, settings):
     return round(anchor)
 
 
-def apply_exp(level, exp, gained, settings):
+def apply_exp(level, exp, gained, settings, force_one=False):
     """Add `gained` EXP, cascading through as many level-ups as it covers.
-    Returns (new_level, new_exp). Capped at LEVEL_CAP; extra EXP past the cap is discarded."""
-    level, exp = level, exp + gained
+    Returns (new_level, new_exp). Capped at LEVEL_CAP; extra EXP past the cap
+    is discarded. Overflow past what a level-up consumes is also discarded
+    (not carried into the next level's counter) -- every level always starts
+    counting from 0, so this can advance at most one level per call (harmless
+    for normal play since a single kill's EXP is always well under a level's
+    requirement; it's what keeps the admin's force_one testing override from
+    rocketing through many levels off one big EXP gain)."""
+    exp += gained
     while level < LEVEL_CAP:
-        needed = exp_required_for_level(level, settings)
+        needed = exp_required_for_level(level, settings, force_one)
         if exp < needed:
             break
-        exp -= needed
+        exp = 0
         level += 1
     if level >= LEVEL_CAP:
         level, exp = LEVEL_CAP, 0
@@ -1059,7 +1069,7 @@ def game():
     current_hp, current_mp = _current_hp_mp(character, stats)
 
     exp_needed = (
-        exp_required_for_level(character["level"], settings)
+        exp_required_for_level(character["level"], settings, force_one=session.get("is_admin", False))
         if character["level"] < LEVEL_CAP else None
     )
 
@@ -1174,7 +1184,7 @@ def game_move():
 
     settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
     db.execute(
-        "UPDATE characters SET current_tile_id = ?, next_action_at = ? WHERE id = ?",
+        "UPDATE characters SET current_tile_id = ?, next_action_at = ?, pending_boss_monster_id = NULL WHERE id = ?",
         (target_tile["id"], _next_action_at(settings["turn_wait_seconds"]), character["id"]),
     )
     log_activity(
@@ -1260,53 +1270,35 @@ def game_hunt():
         return redirect(url_for("game"))
 
     is_guardian_fight = bool(guardian) and random.random() * 100 < settings["guardian_encounter_percent"]
-    first_monster = guardian if is_guardian_fight else random.choice(regular_pool)
+    monster = guardian if is_guardian_fight else random.choice(regular_pool)
 
     usable_skills = _character_usable_skills(db, character)
-    level, exp, currency = character["level"], character["exp"], character["currency"]
-    hp, mp = current_hp, current_mp
-    exp_gain_total = 0
-    currency_gain_total = 0
+    result = run_battle(
+        character["character_name"], stats, character["element"], current_hp, monster,
+        player_mp=current_mp, usable_skills=usable_skills,
+    )
+
+    exp_gain = 0
+    currency_gain = 0
     currency_lost = 0
-    log = []
-    won = False
-    boss_room_triggered = False
-    final_monster = first_monster
-
-    def resolve_fight(monster, exp_multiplier):
-        nonlocal level, exp, currency, hp, mp, exp_gain_total, currency_gain_total, currency_lost, log, won
-        result = run_battle(
-            character["character_name"], stats, character["element"], hp, monster,
-            player_mp=mp, usable_skills=usable_skills,
+    new_level, new_exp = character["level"], character["exp"]
+    pending_boss_id = None
+    boss_room_available = False
+    if result["won"]:
+        exp_multiplier = settings["guardian_exp_multiplier"] if is_guardian_fight else 1.0
+        exp_gain = round(ground["monster_exp"] * exp_multiplier)
+        currency_gain = round(monster["currency_reward"] * (1 + gold_luk_bonus_pct(stats["luk"]) / 100))
+        new_level, new_exp = apply_exp(
+            character["level"], character["exp"], exp_gain, settings,
+            force_one=session.get("is_admin", False),
         )
-        hp, mp = result["player_hp"], result["player_mp"]
-        log.extend(result["log"])
-        won = result["won"]
-        if won:
-            gain = round(ground["monster_exp"] * exp_multiplier)
-            reward = round(monster["currency_reward"] * (1 + gold_luk_bonus_pct(stats["luk"]) / 100))
-            level, exp = apply_exp(level, exp, gain, settings)
-            currency += reward
-            exp_gain_total += gain
-            currency_gain_total += reward
-        else:
-            lost = currency // 2
-            currency -= lost
-            currency_lost = lost
-        return won
-
-    fight1_won = resolve_fight(first_monster, settings["guardian_exp_multiplier"] if is_guardian_fight else 1.0)
-
-    if (
-        is_guardian_fight and fight1_won and boss is not None and hp > 0
-        and random.random() * 100 < settings["boss_room_trigger_percent"]
-    ):
-        boss_room_triggered = True
-        final_monster = boss
-        log.append(f"擊敗{first_monster['name']}，觸發魔王房間，{boss['name']}現身！")
-        resolve_fight(boss, settings["boss_exp_multiplier"])
-
-    new_level, new_exp, new_currency = level, exp, currency
+        new_currency = character["currency"] + currency_gain
+        if is_guardian_fight and boss is not None and result["player_hp"] > 0:
+            boss_room_available = True
+            pending_boss_id = boss["id"]
+    else:
+        currency_lost = character["currency"] // 2
+        new_currency = character["currency"] - currency_lost
 
     progression = _process_job_progression(db, character, character["level"], new_level)
     new_job_class = progression["job_class"] if progression else character["job_class"]
@@ -1316,22 +1308,20 @@ def game_hunt():
         """UPDATE characters
            SET level = ?, exp = ?, currency = ?, current_hp = ?, current_mp = ?, next_action_at = ?,
                battles_count = battles_count + 1, wins_count = wins_count + ?,
-               job_class = ?, job_tier = ?
+               job_class = ?, job_tier = ?, pending_boss_monster_id = ?
            WHERE id = ?""",
         (
-            new_level, new_exp, new_currency, hp, mp,
-            _next_action_at(settings["turn_wait_seconds"]), 1 if won else 0,
-            new_job_class, new_job_tier,
+            new_level, new_exp, new_currency, result["player_hp"], result["player_mp"],
+            _next_action_at(settings["turn_wait_seconds"]), 1 if result["won"] else 0,
+            new_job_class, new_job_tier, pending_boss_id,
             character["character_id"],
         ),
     )
     outcome_detail = (
-        f"擊敗{final_monster['name']}，+{exp_gain_total} EXP +{currency_gain_total} 諸神幣"
-        if won else f"敗給{final_monster['name']}，身上 {currency_lost} 諸神幣化為烏有"
+        f"擊敗{monster['name']}，+{exp_gain} EXP +{currency_gain} 諸神幣"
+        if result["won"] else f"敗給{monster['name']}，身上 {currency_lost} 諸神幣化為烏有"
     )
-    if boss_room_triggered:
-        outcome_detail = f"[魔王房間] {outcome_detail}"
-    elif is_guardian_fight:
+    if is_guardian_fight:
         outcome_detail = f"[守衛怪] {outcome_detail}"
     log_activity(
         db, session["user_id"], session["username"], "hunt",
@@ -1343,20 +1333,141 @@ def game_hunt():
     return render_template(
         "battle.html",
         ground=ground,
-        monster=final_monster,
+        monster=monster,
         guardian_encounter=is_guardian_fight,
-        guardian_monster=first_monster if is_guardian_fight else None,
-        boss_room_triggered=boss_room_triggered,
-        log=log,
-        won=won,
+        boss_room_available=boss_room_available,
+        log=result["log"],
+        won=result["won"],
         leveled_up=new_level > character["level"],
         new_level=new_level,
-        exp_gain=exp_gain_total,
-        currency_gain=currency_gain_total,
+        exp_gain=exp_gain,
+        currency_gain=currency_gain,
         currency_lost=currency_lost,
-        player_hp=hp,
+        player_hp=result["player_hp"],
         max_hp=stats["hp"],
-        player_mp=mp,
+        player_mp=result["player_mp"],
+        max_mp=stats["mp"],
+    )
+
+
+@app.route("/game/hunt/boss_room", methods=["POST"])
+@character_required
+def game_hunt_boss_room():
+    db = get_db()
+    character = db.execute(
+        """SELECT characters.id AS character_id, characters.level, characters.exp, characters.currency,
+                  characters.name AS character_name, characters.pending_boss_monster_id,
+                  characters.current_hp, characters.current_mp,
+                  characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id,
+                  characters.job_class, characters.job_tier, characters.rebirth_count,
+                  characters.stat_floor_hp, characters.stat_floor_mp, characters.stat_floor_str,
+                  characters.stat_floor_def, characters.stat_floor_agi, characters.stat_floor_luk,
+                  countries.*
+           FROM characters
+           JOIN countries ON countries.id = characters.country_id
+           WHERE characters.user_id = ?""",
+        (session["user_id"],),
+    ).fetchone()
+
+    boss = None
+    ground = None
+    if character["pending_boss_monster_id"] is not None:
+        boss = db.execute(
+            "SELECT * FROM monsters WHERE id = ? AND is_boss = 1", (character["pending_boss_monster_id"],)
+        ).fetchone()
+        if boss is not None:
+            ground = db.execute(
+                "SELECT * FROM hunting_grounds WHERE id = ?", (boss["hunting_ground_id"],)
+            ).fetchone()
+    if boss is None or ground is None:
+        db.close()
+        flash("魔王房間的挑戰機會已經沒有了")
+        return redirect(url_for("game"))
+
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+    equipped_ids = [
+        character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
+    ]
+    equipped_items = [
+        db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        for item_id in equipped_ids if item_id
+    ]
+    stats = character_final_stats(character, equipped_items, settings)
+    current_hp, current_mp = _current_hp_mp(character, stats)
+
+    if current_hp <= 0:
+        db.execute(
+            "UPDATE characters SET pending_boss_monster_id = NULL WHERE id = ?", (character["character_id"],)
+        )
+        db.commit()
+        db.close()
+        flash("HP 已耗盡，無法挑戰魔王，請先回到要塞回復")
+        return redirect(url_for("game"))
+
+    usable_skills = _character_usable_skills(db, character)
+    result = run_battle(
+        character["character_name"], stats, character["element"], current_hp, boss,
+        player_mp=current_mp, usable_skills=usable_skills,
+    )
+
+    exp_gain = 0
+    currency_gain = 0
+    currency_lost = 0
+    new_level, new_exp = character["level"], character["exp"]
+    if result["won"]:
+        exp_gain = round(ground["monster_exp"] * settings["boss_exp_multiplier"])
+        currency_gain = round(boss["currency_reward"] * (1 + gold_luk_bonus_pct(stats["luk"]) / 100))
+        new_level, new_exp = apply_exp(
+            character["level"], character["exp"], exp_gain, settings,
+            force_one=session.get("is_admin", False),
+        )
+        new_currency = character["currency"] + currency_gain
+    else:
+        currency_lost = character["currency"] // 2
+        new_currency = character["currency"] - currency_lost
+
+    progression = _process_job_progression(db, character, character["level"], new_level)
+    new_job_class = progression["job_class"] if progression else character["job_class"]
+    new_job_tier = progression["job_tier"] if progression else character["job_tier"]
+
+    db.execute(
+        """UPDATE characters
+           SET level = ?, exp = ?, currency = ?, current_hp = ?, current_mp = ?,
+               battles_count = battles_count + 1, wins_count = wins_count + ?,
+               job_class = ?, job_tier = ?, pending_boss_monster_id = NULL
+           WHERE id = ?""",
+        (
+            new_level, new_exp, new_currency, result["player_hp"], result["player_mp"],
+            1 if result["won"] else 0, new_job_class, new_job_tier,
+            character["character_id"],
+        ),
+    )
+    outcome_detail = (
+        f"擊敗{boss['name']}，+{exp_gain} EXP +{currency_gain} 諸神幣"
+        if result["won"] else f"敗給{boss['name']}，身上 {currency_lost} 諸神幣化為烏有"
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "hunt",
+        detail=f"[魔王房間] {ground['name']} {outcome_detail}", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    return render_template(
+        "battle.html",
+        ground=ground,
+        monster=boss,
+        boss_room_challenge=True,
+        log=result["log"],
+        won=result["won"],
+        leveled_up=new_level > character["level"],
+        new_level=new_level,
+        exp_gain=exp_gain,
+        currency_gain=currency_gain,
+        currency_lost=currency_lost,
+        player_hp=result["player_hp"],
+        max_hp=stats["hp"],
+        player_mp=result["player_mp"],
         max_mp=stats["mp"],
     )
 
@@ -1449,7 +1560,8 @@ def game_conquer():
     db.execute(
         """UPDATE characters
            SET currency = ?, current_hp = ?, current_mp = ?, next_action_at = ?,
-               battles_count = battles_count + 1, wins_count = wins_count + ?
+               battles_count = battles_count + 1, wins_count = wins_count + ?,
+               pending_boss_monster_id = NULL
            WHERE id = ?""",
         (
             new_currency, result["player_hp"], result["player_mp"], _next_action_at(settings["turn_wait_seconds"]),
@@ -1538,7 +1650,7 @@ def game_recover():
 
     db.execute(
         """UPDATE characters SET current_hp = ?, current_mp = ?, currency = currency - ?,
-               next_action_at = ? WHERE id = ?""",
+               next_action_at = ?, pending_boss_monster_id = NULL WHERE id = ?""",
         (stats["hp"], stats["mp"], cost, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
     )
     if cost and character["tile_country_id"] is not None:
@@ -2105,7 +2217,7 @@ def character_page():
     stats = character_final_stats(character, equipped_items, settings)
     current_hp, current_mp = _current_hp_mp(character, stats)
     exp_needed = (
-        exp_required_for_level(character["level"], settings)
+        exp_required_for_level(character["level"], settings, force_one=session.get("is_admin", False))
         if character["level"] < LEVEL_CAP else None
     )
     can_promote_tier2 = character["job_tier"] == 0 and character["level"] >= 30
@@ -2579,7 +2691,6 @@ def admin_update_game_settings():
         sell_back_percent = float(request.form.get("sell_back_percent", ""))
         guardian_encounter_percent = float(request.form.get("guardian_encounter_percent", ""))
         guardian_exp_multiplier = float(request.form.get("guardian_exp_multiplier", ""))
-        boss_room_trigger_percent = float(request.form.get("boss_room_trigger_percent", ""))
         boss_exp_multiplier = float(request.form.get("boss_exp_multiplier", ""))
         shop_tax_percent = float(request.form.get("shop_tax_percent", ""))
         heal_cost_per_point = float(request.form.get("heal_cost_per_point", ""))
@@ -2608,10 +2719,9 @@ def admin_update_game_settings():
 
     if (
         guardian_encounter_percent < 0 or guardian_encounter_percent > 100
-        or boss_room_trigger_percent < 0 or boss_room_trigger_percent > 100
         or guardian_exp_multiplier < 1 or boss_exp_multiplier < 1
     ):
-        flash("守衛怪遭遇機率／魔王房間觸發機率須介於 0 到 100，經驗倍率須大於等於 1")
+        flash("守衛怪遭遇機率須介於 0 到 100，經驗倍率須大於等於 1")
         return redirect(url_for("admin_settings"))
 
     if shop_tax_percent < 0 or shop_tax_percent > 100 or heal_cost_per_point < 0:
@@ -2629,7 +2739,7 @@ def admin_update_game_settings():
                exp_growth_tier2_percent = ?, exp_growth_tier3_percent = ?, exp_growth_tier4_percent = ?,
                rebirth_stat_bonus_percent = ?, sell_back_percent = ?,
                guardian_encounter_percent = ?, guardian_exp_multiplier = ?,
-               boss_room_trigger_percent = ?, boss_exp_multiplier = ?, shop_tax_percent = ?,
+               boss_exp_multiplier = ?, shop_tax_percent = ?,
                heal_cost_per_point = ?, town_defense_level = ?, fortress_defense_level = ?
            WHERE id = 1""",
         (
@@ -2637,7 +2747,7 @@ def admin_update_game_settings():
             exp_growth_tier2_percent, exp_growth_tier3_percent, exp_growth_tier4_percent,
             rebirth_stat_bonus_percent, sell_back_percent,
             guardian_encounter_percent, guardian_exp_multiplier,
-            boss_room_trigger_percent, boss_exp_multiplier, shop_tax_percent,
+            boss_exp_multiplier, shop_tax_percent,
             heal_cost_per_point, town_defense_level, fortress_defense_level,
         ),
     )

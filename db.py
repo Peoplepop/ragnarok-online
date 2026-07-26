@@ -241,6 +241,8 @@ def _ensure_character_columns(conn):
                      "stat_floor_def", "stat_floor_agi", "stat_floor_luk"):
         if stat_col not in cols:
             conn.execute(f"ALTER TABLE characters ADD COLUMN {stat_col} INTEGER")
+    if "pending_boss_monster_id" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN pending_boss_monster_id INTEGER")
     if "name" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN name TEXT")
         conn.execute(

@@ -50,10 +50,6 @@
           <input type="text" inputmode="decimal" name="guardian_exp_multiplier" value="{{ settings.guardian_exp_multiplier }}">
         </div>
         <div>
-          <label>魔王房間觸發機率 (%)</label>
-          <input type="text" inputmode="decimal" name="boss_room_trigger_percent" value="{{ settings.boss_room_trigger_percent }}">
-        </div>
-        <div>
           <label>魔王經驗倍率</label>
           <input type="text" inputmode="decimal" name="boss_exp_multiplier" value="{{ settings.boss_exp_multiplier }}">
         </div>
@@ -79,7 +75,7 @@
         階段交界處會從上一階段結束的地方接續，不會斷層；建議成長率由高到低遞減。轉生每次疊加「轉生加成%」到六圍上，
         無法作用於已被屬性下限鎖定的數值以下。出售裝備可回收「原價 × 回收比例%」的諸神幣；
         每次打怪有「守衛怪遭遇機率%」的機率遇到該場地的守衛怪（擊敗可得一般怪物經驗 × 守衛怪經驗倍率），
-        擊敗守衛怪後再有「魔王房間觸發機率%」的機率緊接著挑戰該場地的魔王（擊敗可得一般怪物經驗 × 魔王經驗倍率）；
+        擊敗守衛怪後玩家可以自由選擇是否要挑戰該場地的魔王房間（擊敗可得一般怪物經驗 × 魔王經驗倍率）；
         商店買賣會有「商店稅率%」流入玩家所屬國家的國庫；回復站依實際回復的 HP+MP 點數收費；
         攻打城鎮/要塞時，防衛隊會以該國數值套用「城鎮/要塞防衛等級」現算戰力
       </p>
