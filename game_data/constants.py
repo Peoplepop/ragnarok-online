@@ -26,6 +26,7 @@ ACTION_LABELS = {
     "promote_tier1": "一轉",
     "promote_tier2": "二轉",
     "promote_tier3": "三轉",
+    "promote_tier4": "四轉",
     "rebirth": "轉生",
     "learn_skill": "學習技能",
 }

@@ -115,6 +115,11 @@
       </select>
       <button type="submit">三轉</button>
     </form>
+    {% elif can_promote_tier4 %}
+    <form method="post" action="{{ url_for('character_promote_tier4') }}">
+      <p class="hint" style="margin:0 0 10px;">四轉是職業旅程的終點，結果由你已精通的三個三轉職業之屬性權重決定，非隨機。</p>
+      <button type="submit">四轉</button>
+    </form>
     {% elif can_rebirth %}
     <form method="post" action="{{ url_for('character_rebirth') }}">
       <p class="hint" style="margin:0 0 10px;">轉生會將等級重置為 10 級、職業回到初心者，並清除目前的屬性下限；國家、金幣、銀行存款、裝備與背包都不受影響。</p>

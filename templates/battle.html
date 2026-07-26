@@ -82,6 +82,20 @@
     {% endif %}
   </div>
 
+  {% if leveled_up and stats_after %}
+  <div class="panel" style="margin-bottom:20px;">
+    <h3 style="margin:0 0 10px; color:var(--gold-bright); font-size:15px;">🎉 升級了！Lv.{{ new_level }} 屬性異動</h3>
+    <div style="display:flex; gap:20px; flex-wrap:wrap; font-size:13px; color:var(--text-dim);">
+      <div>HP {{ player_stats.hp }} → {{ stats_after.hp }}（+{{ stats_after.hp - player_stats.hp }}）</div>
+      <div>MP {{ player_stats.mp }} → {{ stats_after.mp }}（+{{ stats_after.mp - player_stats.mp }}）</div>
+      <div>{{ stat_labels.str }} {{ player_stats.str }} → {{ stats_after.str }}（+{{ stats_after.str - player_stats.str }}）</div>
+      <div>{{ stat_labels.def }} {{ player_stats.def }} → {{ stats_after.def }}（+{{ stats_after.def - player_stats.def }}）</div>
+      <div>{{ stat_labels.agi }} {{ player_stats.agi }} → {{ stats_after.agi }}（+{{ stats_after.agi - player_stats.agi }}）</div>
+      <div>{{ stat_labels.luk }} {{ player_stats.luk }} → {{ stats_after.luk }}（+{{ stats_after.luk - player_stats.luk }}）</div>
+    </div>
+  </div>
+  {% endif %}
+
   <a href="{{ url_for('game') }}" class="btn">← 返回主畫面</a>
 
   <script>

@@ -94,20 +94,14 @@ def _resolve_tier4_job(db, character_id):
 
 def _process_job_progression(db, character, old_level, new_level):
     """Fires once per crossing into level 120 while in a 三轉 job. Registers
-    (idempotently) mastery of the current job, then checks whether the
-    character has now met every 四轉 requirement (3rd rebirth done, 3 distinct
-    masteries recorded). Returns {'job_class':..., 'job_tier': 4} to merge
-    into the pending characters UPDATE, or None if nothing changed."""
+    (idempotently) mastery of the current job. 四轉 itself is no longer an
+    automatic side effect of this crossing -- it's now an explicit player
+    action (see character_promote_tier4 in app.py), so this function no
+    longer returns anything for callers to merge into their UPDATE."""
     if character["job_tier"] != 3 or new_level < 120 or old_level >= 120:
         return None
     db.execute(
         "INSERT OR IGNORE INTO job_masteries (character_id, job_name) VALUES (?, ?)",
         (character["character_id"], character["job_class"]),
     )
-    mastery_count = db.execute(
-        "SELECT COUNT(*) AS c FROM job_masteries WHERE character_id = ?",
-        (character["character_id"],),
-    ).fetchone()["c"]
-    if character["rebirth_count"] >= 3 and mastery_count >= 3:
-        return {"job_class": _resolve_tier4_job(db, character["character_id"]), "job_tier": 4}
     return None

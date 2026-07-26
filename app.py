@@ -747,15 +747,13 @@ def game_hunt():
         currency_lost = character["currency"] // 2
         new_currency = character["currency"] - currency_lost
 
-    progression = _process_job_progression(db, character, character["level"], new_level)
-    new_job_class = progression["job_class"] if progression else character["job_class"]
-    new_job_tier = progression["job_tier"] if progression else character["job_tier"]
+    _process_job_progression(db, character, character["level"], new_level)
 
     db.execute(
         """UPDATE characters
            SET level = ?, exp = ?, currency = ?, current_hp = ?, current_mp = ?, next_action_at = ?,
                battles_count = battles_count + 1, wins_count = wins_count + ?,
-               job_class = ?, job_tier = ?, pending_boss_monster_id = ?,
+               pending_boss_monster_id = ?,
                level_bonus_hp = level_bonus_hp + ?, level_bonus_mp = level_bonus_mp + ?,
                level_bonus_str = level_bonus_str + ?, level_bonus_def = level_bonus_def + ?,
                level_bonus_agi = level_bonus_agi + ?, level_bonus_luk = level_bonus_luk + ?
@@ -763,7 +761,7 @@ def game_hunt():
         (
             new_level, new_exp, new_currency, result["player_hp"], result["player_mp"],
             _next_action_at(settings["turn_wait_seconds"]), 1 if result["won"] else 0,
-            new_job_class, new_job_tier, pending_boss_id,
+            pending_boss_id,
             stat_gain["hp"], stat_gain["mp"], stat_gain["str"],
             stat_gain["def"], stat_gain["agi"], stat_gain["luk"],
             character["character_id"],
@@ -779,6 +777,16 @@ def game_hunt():
         db, session["user_id"], session["username"], "hunt",
         detail=f"{ground['name']} {outcome_detail}", ip_address=request.remote_addr,
     )
+
+    if new_level > character["level"]:
+        updated = dict(character)
+        updated["level"] = new_level
+        for stat in ("hp", "mp", "str", "def", "agi", "luk"):
+            updated[f"level_bonus_{stat}"] = character[f"level_bonus_{stat}"] + stat_gain[stat]
+        stats_after = character_final_stats(updated, equipped_items, settings)
+    else:
+        stats_after = None
+
     db.commit()
     db.close()
 
@@ -800,6 +808,8 @@ def game_hunt():
         player_mp=result["player_mp"],
         max_mp=stats["mp"],
         player_stats=stats,
+        stats_after=stats_after,
+        stat_labels=STAT_LABELS,
     )
 
 
@@ -877,22 +887,20 @@ def game_hunt_boss_room():
         currency_lost = character["currency"] // 2
         new_currency = character["currency"] - currency_lost
 
-    progression = _process_job_progression(db, character, character["level"], new_level)
-    new_job_class = progression["job_class"] if progression else character["job_class"]
-    new_job_tier = progression["job_tier"] if progression else character["job_tier"]
+    _process_job_progression(db, character, character["level"], new_level)
 
     db.execute(
         """UPDATE characters
            SET level = ?, exp = ?, currency = ?, current_hp = ?, current_mp = ?,
                battles_count = battles_count + 1, wins_count = wins_count + ?,
-               job_class = ?, job_tier = ?, pending_boss_monster_id = NULL,
+               pending_boss_monster_id = NULL,
                level_bonus_hp = level_bonus_hp + ?, level_bonus_mp = level_bonus_mp + ?,
                level_bonus_str = level_bonus_str + ?, level_bonus_def = level_bonus_def + ?,
                level_bonus_agi = level_bonus_agi + ?, level_bonus_luk = level_bonus_luk + ?
            WHERE id = ?""",
         (
             new_level, new_exp, new_currency, result["player_hp"], result["player_mp"],
-            1 if result["won"] else 0, new_job_class, new_job_tier,
+            1 if result["won"] else 0,
             stat_gain["hp"], stat_gain["mp"], stat_gain["str"],
             stat_gain["def"], stat_gain["agi"], stat_gain["luk"],
             character["character_id"],
@@ -906,6 +914,16 @@ def game_hunt_boss_room():
         db, session["user_id"], session["username"], "hunt",
         detail=f"[魔王房間] {ground['name']} {outcome_detail}", ip_address=request.remote_addr,
     )
+
+    if new_level > character["level"]:
+        updated = dict(character)
+        updated["level"] = new_level
+        for stat in ("hp", "mp", "str", "def", "agi", "luk"):
+            updated[f"level_bonus_{stat}"] = character[f"level_bonus_{stat}"] + stat_gain[stat]
+        stats_after = character_final_stats(updated, equipped_items, settings)
+    else:
+        stats_after = None
+
     db.commit()
     db.close()
 
@@ -926,6 +944,8 @@ def game_hunt_boss_room():
         player_mp=result["player_mp"],
         max_mp=stats["mp"],
         player_stats=stats,
+        stats_after=stats_after,
+        stat_labels=STAT_LABELS,
     )
 
 
@@ -1676,7 +1696,12 @@ def character_page():
     can_promote_tier1 = character["job_tier"] == 0 and character["level"] >= 10
     can_promote_tier2 = character["job_tier"] == 1 and character["level"] >= 30
     can_promote_tier3 = character["job_tier"] == 2 and character["level"] >= 70
-    can_rebirth = character["job_tier"] == 3 and character["level"] >= 120
+    mastery_count = len(mastery_names)
+    can_promote_tier4 = (
+        character["job_tier"] == 3 and character["level"] >= 120
+        and character["rebirth_count"] >= 3 and mastery_count >= 3
+    )
+    can_rebirth = character["job_tier"] == 3 and character["level"] >= 120 and not can_promote_tier4
     tier2_choices = TIER2_CHILDREN_BY_FAMILY.get(character["job_class"], [])
     tier3_choices = TIER3_CHILDREN_BY_PARENT.get(character["job_class"], [])
     win_rate = (
@@ -1721,6 +1746,7 @@ def character_page():
         can_promote_tier1=can_promote_tier1,
         can_promote_tier2=can_promote_tier2,
         can_promote_tier3=can_promote_tier3,
+        can_promote_tier4=can_promote_tier4,
         can_rebirth=can_rebirth,
         tier1_jobs=TIER1_JOBS,
         tier2_choices=tier2_choices,
@@ -1776,6 +1802,7 @@ def character_promote_tier1():
 
     settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
     equipped_items = _fetch_equipped_items(db, character)
+    stats_before = character_final_stats(character, equipped_items, settings)
     floor = _snapshot_stat_floor(character, equipped_items, settings)
 
     db.execute(
@@ -1794,10 +1821,21 @@ def character_promote_tier1():
         detail=job_name, ip_address=request.remote_addr,
     )
     db.commit()
-    db.close()
 
-    flash(f"一轉成功，成為「{job_name}」！")
-    return redirect(url_for("character_page"))
+    updated = dict(character)
+    updated["job_class"] = job_name
+    updated["job_tier"] = 1
+    updated.update(floor)
+    stats_after = character_final_stats(updated, equipped_items, settings)
+
+    db.close()
+    return render_template(
+        "job_change_result.html",
+        title=f"一轉成功，成為「{job_name}」！",
+        stats_before=stats_before,
+        stats_after=stats_after,
+        stat_labels=STAT_LABELS,
+    )
 
 
 @app.route("/character/promote/tier2", methods=["POST"])
@@ -1819,6 +1857,7 @@ def character_promote_tier2():
 
     settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
     equipped_items = _fetch_equipped_items(db, character)
+    stats_before = character_final_stats(character, equipped_items, settings)
     floor = _snapshot_stat_floor(character, equipped_items, settings)
 
     db.execute(
@@ -1837,10 +1876,21 @@ def character_promote_tier2():
         detail=job_name, ip_address=request.remote_addr,
     )
     db.commit()
-    db.close()
 
-    flash(f"二轉成功，成為「{job_name}」！")
-    return redirect(url_for("character_page"))
+    updated = dict(character)
+    updated["job_class"] = job_name
+    updated["job_tier"] = 2
+    updated.update(floor)
+    stats_after = character_final_stats(updated, equipped_items, settings)
+
+    db.close()
+    return render_template(
+        "job_change_result.html",
+        title=f"二轉成功，成為「{job_name}」！",
+        stats_before=stats_before,
+        stats_after=stats_after,
+        stat_labels=STAT_LABELS,
+    )
 
 
 @app.route("/character/promote/tier3", methods=["POST"])
@@ -1862,6 +1912,7 @@ def character_promote_tier3():
 
     settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
     equipped_items = _fetch_equipped_items(db, character)
+    stats_before = character_final_stats(character, equipped_items, settings)
     floor = _snapshot_stat_floor(character, equipped_items, settings)
 
     db.execute(
@@ -1880,10 +1931,78 @@ def character_promote_tier3():
         detail=job_name, ip_address=request.remote_addr,
     )
     db.commit()
-    db.close()
 
-    flash(f"三轉成功，成為「{job_name}」！")
-    return redirect(url_for("character_page"))
+    updated = dict(character)
+    updated["job_class"] = job_name
+    updated["job_tier"] = 3
+    updated.update(floor)
+    stats_after = character_final_stats(updated, equipped_items, settings)
+
+    db.close()
+    return render_template(
+        "job_change_result.html",
+        title=f"三轉成功，成為「{job_name}」！",
+        stats_before=stats_before,
+        stats_after=stats_after,
+        stat_labels=STAT_LABELS,
+    )
+
+
+@app.route("/character/promote/tier4", methods=["POST"])
+@character_required
+def character_promote_tier4():
+    db = get_db()
+    character = _character_for_promotion(db)
+
+    mastery_count = db.execute(
+        "SELECT COUNT(*) AS c FROM job_masteries WHERE character_id = ?",
+        (character["character_id"],),
+    ).fetchone()["c"]
+    if not (
+        character["job_tier"] == 3 and character["level"] >= 120
+        and character["rebirth_count"] >= 3 and mastery_count >= 3
+    ):
+        db.close()
+        flash("目前還不能四轉")
+        return redirect(url_for("character_page"))
+
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+    equipped_items = _fetch_equipped_items(db, character)
+    stats_before = character_final_stats(character, equipped_items, settings)
+    floor = _snapshot_stat_floor(character, equipped_items, settings)
+    job_name = _resolve_tier4_job(db, character["character_id"])
+
+    db.execute(
+        """UPDATE characters SET job_class = ?, job_tier = 4,
+               stat_floor_hp = ?, stat_floor_mp = ?, stat_floor_str = ?,
+               stat_floor_def = ?, stat_floor_agi = ?, stat_floor_luk = ?
+           WHERE id = ?""",
+        (
+            job_name, floor["stat_floor_hp"], floor["stat_floor_mp"], floor["stat_floor_str"],
+            floor["stat_floor_def"], floor["stat_floor_agi"], floor["stat_floor_luk"],
+            character["character_id"],
+        ),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "promote_tier4",
+        detail=job_name, ip_address=request.remote_addr,
+    )
+    db.commit()
+
+    updated = dict(character)
+    updated["job_class"] = job_name
+    updated["job_tier"] = 4
+    updated.update(floor)
+    stats_after = character_final_stats(updated, equipped_items, settings)
+
+    db.close()
+    return render_template(
+        "job_change_result.html",
+        title=f"四轉！你已臻至巔峰，成為「{job_name}」！",
+        stats_before=stats_before,
+        stats_after=stats_after,
+        stat_labels=STAT_LABELS,
+    )
 
 
 @app.route("/character/rebirth", methods=["POST"])
@@ -1896,6 +2015,10 @@ def character_rebirth():
         db.close()
         flash("目前還不能轉生")
         return redirect(url_for("character_page"))
+
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+    equipped_items = _fetch_equipped_items(db, character)
+    stats_before = character_final_stats(character, equipped_items, settings)
 
     db.execute(
         """UPDATE characters
@@ -1911,10 +2034,23 @@ def character_rebirth():
         detail=f"第 {character['rebirth_count'] + 1} 次轉生", ip_address=request.remote_addr,
     )
     db.commit()
-    db.close()
 
-    flash("轉生完成！等級重置為 10 級，職業回到初心者，準備踏上新的旅程")
-    return redirect(url_for("character_page"))
+    updated = dict(character)
+    updated["level"] = 10
+    updated["job_class"] = "初心者"
+    updated["job_tier"] = 0
+    for col in STAT_FLOOR_COLUMNS.values():
+        updated[col] = None
+    stats_after = character_final_stats(updated, equipped_items, settings)
+
+    db.close()
+    return render_template(
+        "job_change_result.html",
+        title="轉生完成！等級重置為 10 級，職業回到初心者，準備踏上新的旅程",
+        stats_before=stats_before,
+        stats_after=stats_after,
+        stat_labels=STAT_LABELS,
+    )
 
 
 @app.route("/character/learn_skill", methods=["POST"])
@@ -1979,20 +2115,18 @@ def character_debug_set_level():
         (session["user_id"],),
     ).fetchone()
 
-    # Route through the same mastery/four-zhuan check real hunts use, so this
-    # shortcut can actually be used to test that flow instead of silently
-    # skipping it.
-    progression = _process_job_progression(db, character, character["level"], level)
-    new_job_class = progression["job_class"] if progression else character["job_class"]
-    new_job_tier = progression["job_tier"] if progression else character["job_tier"]
+    # Route through the same mastery-recording check real hunts use, so this
+    # shortcut can actually be used to test that flow. 四轉 is no longer an
+    # automatic side effect here -- it's now an explicit player action.
+    _process_job_progression(db, character, character["level"], level)
 
     db.execute(
-        """UPDATE characters SET level = ?, exp = 0, job_class = ?, job_tier = ?,
+        """UPDATE characters SET level = ?, exp = 0,
                level_bonus_hp = ?, level_bonus_mp = ?, level_bonus_str = ?,
                level_bonus_def = ?, level_bonus_agi = ?, level_bonus_luk = ?
            WHERE id = ?""",
         (
-            level, new_job_class, new_job_tier,
+            level,
             LEVEL_STAT_GROWTH["hp"] * level_growth, LEVEL_STAT_GROWTH["mp"] * level_growth,
             LEVEL_STAT_GROWTH["str"] * level_growth, LEVEL_STAT_GROWTH["def"] * level_growth,
             LEVEL_STAT_GROWTH["agi"] * level_growth, LEVEL_STAT_GROWTH["luk"] * level_growth,
@@ -2002,10 +2136,7 @@ def character_debug_set_level():
     db.commit()
     db.close()
 
-    if progression:
-        flash(f"（除錯）等級已設為 {level}，並觸發四轉：「{new_job_class}」！")
-    else:
-        flash(f"（除錯）等級已設為 {level}")
+    flash(f"（除錯）等級已設為 {level}")
     return redirect(url_for("character_page"))
 
 

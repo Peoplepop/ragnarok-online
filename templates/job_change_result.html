@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}轉職結果 - 五行爭鋒{% endblock %}
+
+{% block content %}
+  <div class="panel" style="margin-bottom:20px;">
+    <h2 style="margin:0 0 8px; color:var(--gold-bright);">{{ title }}</h2>
+  </div>
+
+  <div class="panel" style="margin-bottom:20px;">
+    <h3 style="margin:0 0 10px; color:var(--gold-bright); font-size:15px;">屬性異動</h3>
+    <div style="display:flex; gap:20px; flex-wrap:wrap; font-size:13px; color:var(--text-dim);">
+      <div>HP {{ stats_before.hp }} → {{ stats_after.hp }}（{{ "+" if stats_after.hp - stats_before.hp >= 0 else "" }}{{ stats_after.hp - stats_before.hp }}）</div>
+      <div>MP {{ stats_before.mp }} → {{ stats_after.mp }}（{{ "+" if stats_after.mp - stats_before.mp >= 0 else "" }}{{ stats_after.mp - stats_before.mp }}）</div>
+      <div>{{ stat_labels.str }} {{ stats_before.str }} → {{ stats_after.str }}（{{ "+" if stats_after.str - stats_before.str >= 0 else "" }}{{ stats_after.str - stats_before.str }}）</div>
+      <div>{{ stat_labels.def }} {{ stats_before.def }} → {{ stats_after.def }}（{{ "+" if stats_after.def - stats_before.def >= 0 else "" }}{{ stats_after.def - stats_before.def }}）</div>
+      <div>{{ stat_labels.agi }} {{ stats_before.agi }} → {{ stats_after.agi }}（{{ "+" if stats_after.agi - stats_before.agi >= 0 else "" }}{{ stats_after.agi - stats_before.agi }}）</div>
+      <div>{{ stat_labels.luk }} {{ stats_before.luk }} → {{ stats_after.luk }}（{{ "+" if stats_after.luk - stats_before.luk >= 0 else "" }}{{ stats_after.luk - stats_before.luk }}）</div>
+    </div>
+  </div>
+
+  <a href="{{ url_for('game') }}" class="btn">回到遊戲畫面繼續遊戲</a>
+{% endblock %}
