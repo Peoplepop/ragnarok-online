@@ -1222,6 +1222,7 @@ def game_recover():
     character = db.execute(
         """SELECT characters.id, characters.level, characters.next_action_at, characters.currency,
                   characters.current_hp, characters.current_mp, map_tiles.tile_type,
+                  map_tiles.country_id AS tile_country_id,
                   characters.equipped_weapon_id, characters.equipped_armor_id,
                   characters.equipped_accessory_id, characters.job_class, characters.job_tier,
                   characters.rebirth_count, characters.stat_floor_hp, characters.stat_floor_mp,
@@ -1270,6 +1271,11 @@ def game_recover():
                next_action_at = ? WHERE id = ?""",
         (stats["hp"], stats["mp"], cost, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
     )
+    if cost and character["tile_country_id"] is not None:
+        db.execute(
+            "UPDATE countries SET treasury = treasury + ? WHERE id = ?",
+            (cost, character["tile_country_id"]),
+        )
     log_activity(
         db, session["user_id"], session["username"], "recover",
         detail=f"花費 {cost} 諸神幣", ip_address=request.remote_addr,
@@ -2020,6 +2026,56 @@ def character_rebirth():
     db.close()
 
     flash("轉生完成！等級重置為 10 級，職業回到初心者，準備踏上新的旅程")
+    return redirect(url_for("character_page"))
+
+
+@app.route("/character/debug/set_level", methods=["POST"])
+@admin_required
+@character_required
+def character_debug_set_level():
+    """Admin-only shortcut so the developer's own account can jump straight
+    to any level to eyeball stat growth, without grinding real EXP."""
+    try:
+        level = int(request.form.get("level", ""))
+    except ValueError:
+        flash("等級格式不正確")
+        return redirect(url_for("character_page"))
+
+    level = max(1, min(level, LEVEL_CAP))
+    db = get_db()
+    db.execute(
+        "UPDATE characters SET level = ?, exp = 0 WHERE user_id = ?",
+        (level, session["user_id"]),
+    )
+    db.commit()
+    db.close()
+
+    flash(f"（除錯）等級已設為 {level}")
+    return redirect(url_for("character_page"))
+
+
+@app.route("/character/debug/set_rebirth", methods=["POST"])
+@admin_required
+@character_required
+def character_debug_set_rebirth():
+    """Admin-only shortcut to directly set the rebirth count, so the stacking
+    stat bonus can be checked without actually grinding out 3 full lifetimes."""
+    try:
+        rebirth_count = int(request.form.get("rebirth_count", ""))
+    except ValueError:
+        flash("轉生次數格式不正確")
+        return redirect(url_for("character_page"))
+
+    rebirth_count = max(0, rebirth_count)
+    db = get_db()
+    db.execute(
+        "UPDATE characters SET rebirth_count = ? WHERE user_id = ?",
+        (rebirth_count, session["user_id"]),
+    )
+    db.commit()
+    db.close()
+
+    flash(f"（除錯）轉生次數已設為 {rebirth_count}")
     return redirect(url_for("character_page"))
 
 

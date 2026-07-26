@@ -82,6 +82,25 @@
     {% endif %}
   </div>
 
+  {% if session.is_admin %}
+  <div class="panel" style="margin-bottom:20px; border-color: rgba(224, 85, 90, 0.4);">
+    <h3 style="margin:0 0 10px; color:var(--danger); font-size:15px;">🛠️ 管理者除錯工具</h3>
+    <p class="hint" style="margin:0 0 10px;">僅供快速測試轉生數值變化，直接修改你自己角色的等級／轉生次數，不消耗冷卻時間</p>
+    <div style="display:flex; gap:20px; flex-wrap:wrap;">
+      <form method="post" action="{{ url_for('character_debug_set_level') }}" style="display:flex; gap:8px; align-items:center;">
+        <label style="margin:0; font-size:13px;">設定等級</label>
+        <input type="text" inputmode="numeric" name="level" value="{{ character.level }}" style="width:80px; margin-bottom:0;">
+        <button type="submit">套用</button>
+      </form>
+      <form method="post" action="{{ url_for('character_debug_set_rebirth') }}" style="display:flex; gap:8px; align-items:center;">
+        <label style="margin:0; font-size:13px;">設定轉生次數</label>
+        <input type="text" inputmode="numeric" name="rebirth_count" value="{{ character.rebirth_count }}" style="width:80px; margin-bottom:0;">
+        <button type="submit">套用</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
   <div class="panel" style="margin-bottom:20px;">
     <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">戰鬥數值</h3>
     <table style="width:100%; border-collapse:collapse; font-size:13px;">
