@@ -36,6 +36,19 @@
       <span><span style="color:var(--text-dim);">{{ role.label }}：</span>{{ role.holder or "（出缺）" }}</span>
       {% endfor %}
     </div>
+
+    {% if c.garrison_tiles is not none %}
+    <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
+      <div style="font-size:12px; color:var(--gold-bright); margin-bottom:6px;">
+        🛡️ 駐防人數（僅國王／參謀／大將軍可見）
+      </div>
+      <div style="display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color:var(--text-dim);">
+        {% for t in c.garrison_tiles %}
+        <span>{{ t.name }}：{{ t.garrison_count }} 人</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
   </div>
   {% endfor %}
 

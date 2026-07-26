@@ -436,9 +436,34 @@ def character_create():
     return redirect(url_for("game"))
 
 
-@app.route("/game")
-@character_required
-def game():
+def _relocate_or_clear_garrison(db, character_id, new_tile):
+    """If character_id currently has a garrison row, relocate it to new_tile
+    (refreshing stationed_at so a genuine relocation counts as a fresh "most
+    recent" stationing) when new_tile is a valid own-country fortress/town;
+    otherwise the destination isn't a legal garrison location, so the garrison
+    row is deleted entirely."""
+    garrison = db.execute(
+        "SELECT id FROM garrisons WHERE character_id = ?", (character_id,)
+    ).fetchone()
+    if garrison is None:
+        return
+    character = db.execute(
+        "SELECT country_id FROM characters WHERE id = ?", (character_id,)
+    ).fetchone()
+    valid = (
+        new_tile["tile_type"] in ("fortress", "town")
+        and new_tile["country_id"] == character["country_id"]
+    )
+    if valid:
+        db.execute(
+            "UPDATE garrisons SET tile_id = ?, stationed_at = datetime('now') WHERE character_id = ?",
+            (new_tile["id"], character_id),
+        )
+    else:
+        db.execute("DELETE FROM garrisons WHERE character_id = ?", (character_id,))
+
+
+def _render_game(**extra):
     db = get_db()
     character = db.execute(
         """SELECT characters.id AS character_id, characters.current_tile_id,
@@ -490,6 +515,21 @@ def game():
                 "level_label": level_label,
             })
     equipped_items = _fetch_equipped_items(db, character)
+
+    # Garrison status: fetched off the garrisons table itself (not inferred
+    # from current_tile_id) -- see game.html/point 12 for why this is
+    # defensive rather than assumed.
+    garrison = db.execute(
+        "SELECT tile_id, stationed_at FROM garrisons WHERE character_id = ?",
+        (character["character_id"],),
+    ).fetchone()
+    garrison_tile = None
+    if garrison is not None:
+        garrison_tile = next((t for t in tiles if t["tile_id"] == garrison["tile_id"]), None)
+    can_station_here = (
+        current_tile["tile_type"] in ("fortress", "town")
+        and current_tile["country_id"] == character["id"]
+    )
     db.close()
 
     stats = character_final_stats(character, equipped_items, settings)
@@ -554,8 +594,7 @@ def game():
     min_x, max_x = min(xs) - padding, max(xs) + padding
     min_y, max_y = min(ys) - padding, max(ys) + padding
 
-    return render_template(
-        "game.html",
+    context = dict(
         character=character,
         stats=stats,
         current_hp=current_hp,
@@ -574,7 +613,18 @@ def game():
         own_treasury=character["treasury"],
         hexes=hexes,
         view_box=f"{min_x:.1f} {min_y:.1f} {max_x - min_x:.1f} {max_y - min_y:.1f}",
+        garrison=garrison,
+        garrison_tile=garrison_tile,
+        can_station_here=can_station_here,
     )
+    context.update(extra)
+    return render_template("game.html", **context)
+
+
+@app.route("/game")
+@character_required
+def game():
+    return _render_game()
 
 
 @app.route("/game/move", methods=["POST"])
@@ -595,7 +645,7 @@ def game_move():
         "SELECT q, r FROM map_tiles WHERE id = ?", (character["current_tile_id"],)
     ).fetchone()
     target_tile = db.execute(
-        "SELECT id, q, r, tile_type, name FROM map_tiles WHERE id = ?",
+        "SELECT id, q, r, tile_type, name, country_id FROM map_tiles WHERE id = ?",
         (request.form.get("tile_id", ""),),
     ).fetchone()
 
@@ -611,11 +661,24 @@ def game_move():
 
     target_name = tile_display_name(target_tile["name"], target_tile["tile_type"])
 
+    garrison = db.execute(
+        "SELECT id FROM garrisons WHERE character_id = ?", (character["id"],)
+    ).fetchone()
+    if garrison is not None and request.form.get("confirm_garrison_move") != "1":
+        db.close()
+        flash(f"你目前正在駐防中，移動到「{target_name}」將會變更或解除駐防狀態，請確認是否繼續移動")
+        return _render_game(
+            pending_move_tile_id=target_tile["id"],
+            pending_move_tile_name=target_name,
+        )
+
     settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
     db.execute(
         "UPDATE characters SET current_tile_id = ?, next_action_at = ?, pending_boss_monster_id = NULL WHERE id = ?",
         (target_tile["id"], _next_action_at(settings["turn_wait_seconds"]), character["id"]),
     )
+    if garrison is not None:
+        _relocate_or_clear_garrison(db, character["id"], target_tile)
     log_activity(
         db, session["user_id"], session["username"], "move",
         detail=target_name, ip_address=request.remote_addr,
@@ -986,6 +1049,18 @@ def game_conquer():
         flash("這裡沒有可以攻打的敵方據點")
         return redirect(url_for("game"))
 
+    # Garrisoning anywhere (not necessarily at this tile) blocks attacking --
+    # you can't defend your own country's tiles and attack an enemy tile in
+    # the same breath. Withdrawal-and-attack combine into this one action
+    # once the player confirms, rather than wasting a separate turn.
+    own_garrison = db.execute(
+        "SELECT id FROM garrisons WHERE character_id = ?", (character["character_id"],)
+    ).fetchone()
+    if own_garrison is not None and request.form.get("confirm_withdraw_garrison") != "1":
+        db.close()
+        flash("你目前正在駐防中，攻打前必須先撤離駐防，請確認是否撤離並攻打")
+        return _render_game(pending_conquer_confirm=True)
+
     settings = db.execute(
         """SELECT turn_wait_seconds, town_defense_level, fortress_defense_level, rebirth_stat_bonus_percent
            FROM game_settings WHERE id = 1"""
@@ -1000,11 +1075,137 @@ def game_conquer():
         flash("HP 已耗盡，無法戰鬥，請先回到要塞回復")
         return redirect(url_for("game"))
 
+    if own_garrison is not None:
+        db.execute("DELETE FROM garrisons WHERE id = ?", (own_garrison["id"],))
+
     defending_country = db.execute(
         "SELECT * FROM countries WHERE id = ?", (character["tile_country_id"],)
     ).fetchone()
-    tower = defense_tower_stats(defending_country, character["tile_type"], settings)
     tile_name = tile_display_name(character["tile_name"], character["tile_type"])
+
+    # LIFO defender queue: the most recently-stationed garrison at this tile
+    # is fought first. Only once every garrisoned defender is cleared does an
+    # attack action reach the tile's NPC defense tower.
+    defender_row = db.execute(
+        """SELECT garrisons.id AS garrison_id, characters.id AS defender_id,
+                  characters.name AS defender_name, characters.level, characters.job_class,
+                  characters.job_tier, characters.rebirth_count,
+                  characters.stat_floor_hp, characters.stat_floor_mp, characters.stat_floor_str,
+                  characters.stat_floor_def, characters.stat_floor_agi, characters.stat_floor_luk,
+                  characters.level_bonus_hp, characters.level_bonus_mp, characters.level_bonus_str,
+                  characters.level_bonus_def, characters.level_bonus_agi, characters.level_bonus_luk,
+                  characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id,
+                  characters.pvp_battles_count, characters.pvp_wins_count,
+                  countries.*
+           FROM garrisons
+           JOIN characters ON characters.id = garrisons.character_id
+           JOIN countries ON countries.id = characters.country_id
+           WHERE garrisons.tile_id = ?
+           ORDER BY garrisons.stationed_at DESC
+           LIMIT 1""",
+        (character["current_tile_id"],),
+    ).fetchone()
+
+    if defender_row is not None:
+        # A PvP defender is on top of the stack -- fight them instead of the
+        # tower this action. Their stats are computed fresh at full HP/MP
+        # every time (character_final_stats), never their own possibly-
+        # damaged current_hp/current_mp from unrelated activity elsewhere --
+        # same approach defense_tower_stats already uses for the NPC tower.
+        # Their own learned skills do NOT trigger (same simplification
+        # defense_tower_stats already has: only the "player" side of
+        # run_battle ever gets usable_skills).
+        defender_equipped_items = _fetch_equipped_items(db, {
+            "equipped_weapon_id": defender_row["equipped_weapon_id"],
+            "equipped_armor_id": defender_row["equipped_armor_id"],
+            "equipped_accessory_id": defender_row["equipped_accessory_id"],
+        })
+        defender_stats = character_final_stats(defender_row, defender_equipped_items, settings)
+        defender_monster = {
+            "name": defender_row["defender_name"],
+            "hp": defender_stats["hp"], "atk": defender_stats["str"],
+            "def": defender_stats["def"], "agi": defender_stats["agi"],
+            "element": defender_row["element"],
+        }
+
+        result = run_battle(
+            character["character_name"], stats, character["element"], current_hp, defender_monster,
+            player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
+        )
+
+        # No currency/EXP for either side on a defender-vs-attacker duel --
+        # the only reward remains actually flipping the tile, which only
+        # happens once the tower itself falls. An attacker loss still
+        # forfeits half currency to the defending country's treasury exactly
+        # as an ordinary tower loss does.
+        currency_lost = 0
+        new_currency = character["currency"]
+        if result["won"]:
+            db.execute("DELETE FROM garrisons WHERE id = ?", (defender_row["garrison_id"],))
+            outcome_detail = f"擊敗了駐防於{tile_name}的{defender_row['defender_name']}"
+        else:
+            currency_lost = character["currency"] // 2
+            new_currency = character["currency"] - currency_lost
+            db.execute(
+                "UPDATE countries SET treasury = treasury + ? WHERE id = ?",
+                (currency_lost, defending_country["id"]),
+            )
+            outcome_detail = (
+                f"攻打{tile_name}時輸給了駐防的{defender_row['defender_name']}，"
+                f"身上{currency_lost}諸神幣被{defending_country['name']}沒收"
+            )
+
+        db.execute(
+            """UPDATE characters
+               SET currency = ?, current_hp = ?, current_mp = ?, next_action_at = ?,
+                   pvp_battles_count = pvp_battles_count + 1,
+                   pvp_wins_count = pvp_wins_count + ?,
+                   pending_boss_monster_id = NULL
+               WHERE id = ?""",
+            (
+                new_currency, result["player_hp"], result["player_mp"],
+                _next_action_at(settings["turn_wait_seconds"]),
+                1 if result["won"] else 0, character["character_id"],
+            ),
+        )
+        # Defender's own current_hp/current_mp are NOT touched (point 6 --
+        # always a fresh full-stats fight, no persisted damage carryover);
+        # only their PvP counters change, and their garrison row is removed
+        # above if they lost.
+        db.execute(
+            """UPDATE characters
+               SET pvp_battles_count = pvp_battles_count + 1,
+                   pvp_wins_count = pvp_wins_count + ?
+               WHERE id = ?""",
+            (0 if result["won"] else 1, defender_row["defender_id"]),
+        )
+        log_activity(
+            db, session["user_id"], session["username"],
+            "conquer_win" if result["won"] else "conquer_loss",
+            detail=outcome_detail, ip_address=request.remote_addr,
+        )
+        db.commit()
+        db.close()
+
+        return render_template(
+            "battle.html",
+            conquest=True,
+            captured_tile_name=tile_name,
+            defending_country_name=defending_country["name"],
+            monster=defender_monster,
+            log=result["log"],
+            won=result["won"],
+            currency_lost=currency_lost,
+            player_hp=result["player_hp"],
+            max_hp=stats["hp"],
+            player_mp=result["player_mp"],
+            max_mp=stats["mp"],
+            player_stats=stats,
+        )
+
+    # No PvP defender remains at this tile -- proceed exactly as the
+    # existing tower-fight logic, plus mayor assignment on a town capture.
+    tower = defense_tower_stats(defending_country, character["tile_type"], settings)
 
     result = run_battle(
         character["character_name"], stats, character["element"], current_hp, tower,
@@ -1015,8 +1216,12 @@ def game_conquer():
     if result["won"]:
         new_currency = character["currency"]
         db.execute(
-            "UPDATE map_tiles SET country_id = ? WHERE id = ?",
-            (character["id"], character["current_tile_id"]),
+            "UPDATE map_tiles SET country_id = ?, mayor_character_id = ? WHERE id = ?",
+            (
+                character["id"],
+                character["character_id"] if character["tile_type"] == "town" else None,
+                character["current_tile_id"],
+            ),
         )
         outcome_detail = f"攻下{tile_name}（原屬{defending_country['name']}）"
     else:
@@ -1063,6 +1268,75 @@ def game_conquer():
         max_mp=stats["mp"],
         player_stats=stats,
     )
+
+
+@app.route("/game/garrison/station", methods=["POST"])
+@character_required
+def game_garrison_station():
+    db = get_db()
+    character = db.execute(
+        "SELECT id, current_tile_id, country_id FROM characters WHERE user_id = ?",
+        (session["user_id"],),
+    ).fetchone()
+
+    existing = db.execute(
+        "SELECT id, tile_id FROM garrisons WHERE character_id = ?", (character["id"],)
+    ).fetchone()
+    if existing is not None:
+        db.close()
+        if existing["tile_id"] == character["current_tile_id"]:
+            flash("你已經駐防在這裡了")
+        else:
+            flash("你已經在別處駐防中，請先撤離駐防")
+        return redirect(url_for("game"))
+
+    tile = db.execute(
+        "SELECT id, tile_type, country_id, name FROM map_tiles WHERE id = ?",
+        (character["current_tile_id"],),
+    ).fetchone()
+    if (
+        tile is None
+        or tile["tile_type"] not in ("fortress", "town")
+        or tile["country_id"] != character["country_id"]
+    ):
+        db.close()
+        flash("只能在自己國家的要塞或城鎮駐防")
+        return redirect(url_for("game"))
+
+    db.execute(
+        "INSERT INTO garrisons (character_id, tile_id) VALUES (?, ?)",
+        (character["id"], tile["id"]),
+    )
+    tile_name = tile_display_name(tile["name"], tile["tile_type"])
+    log_activity(
+        db, session["user_id"], session["username"], "garrison_station",
+        detail=tile_name, ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+    flash(f"已駐防於「{tile_name}」")
+    return redirect(url_for("game"))
+
+
+@app.route("/game/garrison/withdraw", methods=["POST"])
+@character_required
+def game_garrison_withdraw():
+    db = get_db()
+    character = db.execute(
+        "SELECT id FROM characters WHERE user_id = ?", (session["user_id"],)
+    ).fetchone()
+    deleted = db.execute(
+        "DELETE FROM garrisons WHERE character_id = ?", (character["id"],)
+    ).rowcount
+    if deleted:
+        log_activity(
+            db, session["user_id"], session["username"], "garrison_withdraw",
+            ip_address=request.remote_addr,
+        )
+    db.commit()
+    db.close()
+    flash("已撤離駐防" if deleted else "你目前沒有在駐防")
+    return redirect(url_for("game"))
 
 
 @app.route("/game/recover", methods=["POST"])
@@ -1618,6 +1892,37 @@ def countries_page():
     character_names = {
         row["id"]: row["name"] for row in db.execute("SELECT id, name FROM characters").fetchall()
     }
+
+    # Garrison headcounts are only ever computed (and only ever shown) for
+    # the viewing character's OWN country, and only when that character
+    # holds one of its government seats -- never exposed for other countries.
+    own_character = db.execute(
+        "SELECT id, country_id FROM characters WHERE user_id = ?", (session["user_id"],)
+    ).fetchone()
+    own_country = next((c for c in countries if c["id"] == own_character["country_id"]), None)
+    is_officer = own_country is not None and own_character["id"] in (
+        own_country["king_character_id"],
+        own_country["advisor_character_id"],
+        own_country["general_character_id"],
+    )
+    garrison_tiles_by_country_id = {}
+    if is_officer:
+        tile_rows = db.execute(
+            """SELECT map_tiles.id AS tile_id, map_tiles.name, map_tiles.tile_type,
+                      COUNT(garrisons.id) AS garrison_count
+               FROM map_tiles LEFT JOIN garrisons ON garrisons.tile_id = map_tiles.id
+               WHERE map_tiles.country_id = ? AND map_tiles.tile_type IN ('fortress', 'town')
+               GROUP BY map_tiles.id
+               ORDER BY map_tiles.tile_type DESC, map_tiles.name""",
+            (own_country["id"],),
+        ).fetchall()
+        garrison_tiles_by_country_id[own_country["id"]] = [
+            {
+                "name": tile_display_name(r["name"], r["tile_type"]),
+                "garrison_count": r["garrison_count"],
+            }
+            for r in tile_rows
+        ]
     db.close()
 
     rows = []
@@ -1632,6 +1937,7 @@ def countries_page():
                 {"label": role["label"], "holder": character_names.get(c[role["column"]])}
                 for role in GOVERNMENT_ROLES
             ],
+            "garrison_tiles": garrison_tiles_by_country_id.get(c["id"]),
         })
 
     return render_template("countries.html", countries=rows, roles=GOVERNMENT_ROLES)
@@ -1653,7 +1959,8 @@ def character_page():
                   characters.level_bonus_def, characters.level_bonus_agi, characters.level_bonus_luk,
                   characters.equipped_weapon_id, characters.equipped_armor_id,
                   characters.equipped_accessory_id, characters.battles_count,
-                  characters.wins_count, countries.*
+                  characters.wins_count, characters.pvp_battles_count, characters.pvp_wins_count,
+                  countries.*
            FROM characters JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
         (session["user_id"],),
@@ -1719,6 +2026,10 @@ def character_page():
         round(character["wins_count"] / character["battles_count"] * 100, 1)
         if character["battles_count"] else None
     )
+    pvp_win_rate = (
+        round(character["pvp_wins_count"] / character["pvp_battles_count"] * 100, 1)
+        if character["pvp_battles_count"] else None
+    )
     overcomes = ELEMENT_OVERCOMES.get(character["element"])
     overcome_by = next(
         (k for k, v in ELEMENT_OVERCOMES.items() if v == character["element"]), None
@@ -1738,6 +2049,7 @@ def character_page():
         stats=stats,
         combat_stats=derived_combat_stats(stats),
         win_rate=win_rate,
+        pvp_win_rate=pvp_win_rate,
         overcomes=overcomes,
         overcome_by=overcome_by,
         element_overcome_bonus=round((ELEMENT_OVERCOME_BONUS - 1) * 100),

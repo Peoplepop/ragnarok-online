@@ -264,6 +264,10 @@ def _ensure_character_columns(conn):
         conn.execute("ALTER TABLE characters ADD COLUMN battles_count INTEGER NOT NULL DEFAULT 0")
     if "wins_count" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN wins_count INTEGER NOT NULL DEFAULT 0")
+    if "pvp_battles_count" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN pvp_battles_count INTEGER NOT NULL DEFAULT 0")
+    if "pvp_wins_count" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN pvp_wins_count INTEGER NOT NULL DEFAULT 0")
     if "bank_balance" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN bank_balance INTEGER NOT NULL DEFAULT 0")
     if "job_class" not in cols:
@@ -325,6 +329,12 @@ def _ensure_item_columns(conn):
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(items)")]
     if "country_id" not in cols:
         conn.execute("ALTER TABLE items ADD COLUMN country_id INTEGER")
+
+
+def _ensure_map_tile_columns(conn):
+    cols = [row["name"] for row in conn.execute("PRAGMA table_info(map_tiles)")]
+    if "mayor_character_id" not in cols:
+        conn.execute("ALTER TABLE map_tiles ADD COLUMN mayor_character_id INTEGER")
 
 
 def _upgrade_country_bonuses(conn):
@@ -475,6 +485,7 @@ def init_db():
     _ensure_country_columns(conn)
     _ensure_monster_columns(conn)
     _ensure_item_columns(conn)
+    _ensure_map_tile_columns(conn)
     _ensure_game_settings_columns(conn)
     conn.commit()
     conn.close()

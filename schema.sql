@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS characters (
     equipped_accessory_id INTEGER,
     battles_count INTEGER NOT NULL DEFAULT 0,
     wins_count INTEGER NOT NULL DEFAULT 0,
+    pvp_battles_count INTEGER NOT NULL DEFAULT 0,
+    pvp_wins_count INTEGER NOT NULL DEFAULT 0,
     bank_balance INTEGER NOT NULL DEFAULT 0,
     job_class TEXT NOT NULL DEFAULT '初心者',
     job_tier INTEGER NOT NULL DEFAULT 0,
@@ -87,7 +89,9 @@ CREATE TABLE IF NOT EXISTS map_tiles (
     tile_type TEXT NOT NULL,
     name TEXT NOT NULL,
     country_id INTEGER,
-    FOREIGN KEY (country_id) REFERENCES countries(id)
+    mayor_character_id INTEGER,
+    FOREIGN KEY (country_id) REFERENCES countries(id),
+    FOREIGN KEY (mayor_character_id) REFERENCES characters(id)
 );
 
 CREATE TABLE IF NOT EXISTS game_settings (
@@ -123,6 +127,15 @@ CREATE TABLE IF NOT EXISTS character_skills (
     learned_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(character_id, skill_key),
     FOREIGN KEY (character_id) REFERENCES characters(id)
+);
+
+CREATE TABLE IF NOT EXISTS garrisons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL UNIQUE,
+    tile_id INTEGER NOT NULL,
+    stationed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (character_id) REFERENCES characters(id),
+    FOREIGN KEY (tile_id) REFERENCES map_tiles(id)
 );
 
 CREATE TABLE IF NOT EXISTS hunting_grounds (
