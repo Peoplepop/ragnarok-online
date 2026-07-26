@@ -1974,22 +1974,38 @@ def character_debug_set_level():
     # good enough for eyeballing roughly how strong that level should feel.
     level_growth = max(0, level - 1)
     db = get_db()
+    character = db.execute(
+        "SELECT id AS character_id, level, job_class, job_tier, rebirth_count FROM characters WHERE user_id = ?",
+        (session["user_id"],),
+    ).fetchone()
+
+    # Route through the same mastery/four-zhuan check real hunts use, so this
+    # shortcut can actually be used to test that flow instead of silently
+    # skipping it.
+    progression = _process_job_progression(db, character, character["level"], level)
+    new_job_class = progression["job_class"] if progression else character["job_class"]
+    new_job_tier = progression["job_tier"] if progression else character["job_tier"]
+
     db.execute(
-        """UPDATE characters SET level = ?, exp = 0,
+        """UPDATE characters SET level = ?, exp = 0, job_class = ?, job_tier = ?,
                level_bonus_hp = ?, level_bonus_mp = ?, level_bonus_str = ?,
                level_bonus_def = ?, level_bonus_agi = ?, level_bonus_luk = ?
-           WHERE user_id = ?""",
+           WHERE id = ?""",
         (
-            level, LEVEL_STAT_GROWTH["hp"] * level_growth, LEVEL_STAT_GROWTH["mp"] * level_growth,
+            level, new_job_class, new_job_tier,
+            LEVEL_STAT_GROWTH["hp"] * level_growth, LEVEL_STAT_GROWTH["mp"] * level_growth,
             LEVEL_STAT_GROWTH["str"] * level_growth, LEVEL_STAT_GROWTH["def"] * level_growth,
             LEVEL_STAT_GROWTH["agi"] * level_growth, LEVEL_STAT_GROWTH["luk"] * level_growth,
-            session["user_id"],
+            character["character_id"],
         ),
     )
     db.commit()
     db.close()
 
-    flash(f"（除錯）等級已設為 {level}")
+    if progression:
+        flash(f"（除錯）等級已設為 {level}，並觸發四轉：「{new_job_class}」！")
+    else:
+        flash(f"（除錯）等級已設為 {level}")
     return redirect(url_for("character_page"))
 
 
