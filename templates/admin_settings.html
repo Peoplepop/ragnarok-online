@@ -18,8 +18,24 @@
           <input type="text" inputmode="numeric" name="exp_base" value="{{ settings.exp_base }}">
         </div>
         <div>
-          <label>每級經驗成長幅度 (%)</label>
-          <input type="text" inputmode="decimal" name="exp_growth_percent" value="{{ settings.exp_growth_percent }}">
+          <label>初心者成長率／級 (%)</label>
+          <input type="text" inputmode="decimal" name="exp_growth_novice_percent" value="{{ settings.exp_growth_novice_percent }}">
+        </div>
+        <div>
+          <label>二轉成長率／級 (%)</label>
+          <input type="text" inputmode="decimal" name="exp_growth_tier2_percent" value="{{ settings.exp_growth_tier2_percent }}">
+        </div>
+        <div>
+          <label>三轉成長率／級 (%)</label>
+          <input type="text" inputmode="decimal" name="exp_growth_tier3_percent" value="{{ settings.exp_growth_tier3_percent }}">
+        </div>
+        <div>
+          <label>四轉成長率／級 (%)</label>
+          <input type="text" inputmode="decimal" name="exp_growth_tier4_percent" value="{{ settings.exp_growth_tier4_percent }}">
+        </div>
+        <div>
+          <label>轉生加成 (%/次)</label>
+          <input type="text" inputmode="decimal" name="rebirth_stat_bonus_percent" value="{{ settings.rebirth_stat_bonus_percent }}">
         </div>
         <div>
           <label>裝備回收比例 (%)</label>
@@ -51,7 +67,9 @@
         </div>
       </div>
       <p class="hint" style="margin-bottom:16px;">
-        第 N 級所需經驗 = 基礎經驗值 ×（1 + 成長幅度%）^(N-1)，逐級複利成長；出售裝備可回收「原價 × 回收比例%」的諸神幣；
+        每級所需經驗依目前所在階段（初心者 1-30／二轉 30-70／三轉 70-120／四轉 120-{{ level_cap }}）套用對應成長率複利計算，
+        階段交界處會從上一階段結束的地方接續，不會斷層；建議成長率由高到低遞減。轉生每次疊加「轉生加成%」到六圍上，
+        無法作用於已被屬性下限鎖定的數值以下。出售裝備可回收「原價 × 回收比例%」的諸神幣；
         每次打怪有「首領遭遇機率%」的機率遇到該場地的首領，擊敗首領可得「一般怪物經驗 × 首領經驗倍率」的經驗值；
         商店買賣會有「商店稅率%」流入玩家所屬國家的國庫；回復站依實際回復的 HP+MP 點數收費；
         攻打城鎮/要塞時，防衛隊會以該國數值套用「城鎮/要塞防衛等級」現算戰力

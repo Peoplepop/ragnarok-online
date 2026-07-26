@@ -56,7 +56,12 @@ LEGACY_DEFAULT_COUNTRY_BONUSES = {
 # 五行相剋 (Wu Xing destructive cycle): key overcomes value.
 ELEMENT_OVERCOMES = {"金": "木", "木": "土", "土": "水", "水": "火", "火": "金"}
 
-LEVEL_CAP = 1000
+LEVEL_CAP = 200
+
+# The level cap used to be 1000 before the job/rebirth tier system replaced
+# the flat exp curve -- kept so _upgrade_hunting_ground_bounds can recognize
+# and bump an old "ultimate" hunting ground seeded under the old cap.
+LEGACY_ULTIMATE_MAX_LEVEL = 1000
 
 DEFAULT_HUNTING_GROUNDS = [
     {"tier": "beginner", "name": "初級打怪場", "min_level": 1, "max_level": 30, "monster_exp": 10},
@@ -155,6 +160,14 @@ def _ensure_character_columns(conn):
         conn.execute("ALTER TABLE characters ADD COLUMN bank_balance INTEGER NOT NULL DEFAULT 0")
     if "job_class" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN job_class TEXT NOT NULL DEFAULT '初心者'")
+    if "job_tier" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN job_tier INTEGER NOT NULL DEFAULT 0")
+    if "rebirth_count" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN rebirth_count INTEGER NOT NULL DEFAULT 0")
+    for stat_col in ("stat_floor_hp", "stat_floor_mp", "stat_floor_str",
+                     "stat_floor_def", "stat_floor_agi", "stat_floor_luk"):
+        if stat_col not in cols:
+            conn.execute(f"ALTER TABLE characters ADD COLUMN {stat_col} INTEGER")
     if "name" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN name TEXT")
         conn.execute(
@@ -225,6 +238,17 @@ def _upgrade_monster_elements(conn):
             )
 
 
+def _upgrade_hunting_ground_bounds(conn):
+    """One-time bump of the ultimate tier's max_level from the old LEVEL_CAP
+    (1000) to the new one (200, once the job/rebirth tier system replaced the
+    flat exp curve) -- skipped if an admin already customized it."""
+    row = conn.execute(
+        "SELECT id, max_level FROM hunting_grounds WHERE tier = 'ultimate'"
+    ).fetchone()
+    if row and row["max_level"] == LEGACY_ULTIMATE_MAX_LEVEL:
+        conn.execute("UPDATE hunting_grounds SET max_level = ? WHERE id = ?", (LEVEL_CAP, row["id"]))
+
+
 def _ensure_game_settings_columns(conn):
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(game_settings)")]
     if "sell_back_percent" not in cols:
@@ -241,6 +265,16 @@ def _ensure_game_settings_columns(conn):
         conn.execute("ALTER TABLE game_settings ADD COLUMN town_defense_level INTEGER NOT NULL DEFAULT 500")
     if "fortress_defense_level" not in cols:
         conn.execute("ALTER TABLE game_settings ADD COLUMN fortress_defense_level INTEGER NOT NULL DEFAULT 1000")
+    if "exp_growth_novice_percent" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN exp_growth_novice_percent REAL NOT NULL DEFAULT 6.6")
+    if "exp_growth_tier2_percent" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN exp_growth_tier2_percent REAL NOT NULL DEFAULT 6.0")
+    if "exp_growth_tier3_percent" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN exp_growth_tier3_percent REAL NOT NULL DEFAULT 0.8")
+    if "exp_growth_tier4_percent" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN exp_growth_tier4_percent REAL NOT NULL DEFAULT 0.8")
+    if "rebirth_stat_bonus_percent" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN rebirth_stat_bonus_percent REAL NOT NULL DEFAULT 15")
 
 
 def init_db():
@@ -307,6 +341,12 @@ def seed_defaults():
                    VALUES (?, ?, ?, ?, ?)""",
                 (g["tier"], g["name"], g["min_level"], g["max_level"], g["monster_exp"]),
             )
+    else:
+        _upgrade_hunting_ground_bounds(conn)
+
+    conn.execute(
+        "UPDATE characters SET level = ?, exp = 0 WHERE level > ?", (LEVEL_CAP, LEVEL_CAP)
+    )
 
     if conn.execute("SELECT COUNT(*) AS c FROM items").fetchone()["c"] == 0:
         for i in DEFAULT_ITEMS:

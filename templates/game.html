@@ -25,6 +25,12 @@
     </div>
   </div>
 
+  {% if job_action_available %}
+  <div class="panel" style="margin-bottom:20px; border-color: rgba(212, 175, 55, 0.5);">
+    <a href="{{ url_for('character_page') }}" style="color:var(--gold-bright); font-size:13px; text-decoration:none;">✨ 你已經可以在角色詳情頁進行升轉或轉生了 →</a>
+  </div>
+  {% endif %}
+
   <div class="panel" style="padding:0; overflow:auto;">
     <svg viewBox="{{ view_box }}" style="width:100%; height:auto; display:block;">
       {% for h in hexes %}

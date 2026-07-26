@@ -55,6 +55,14 @@ CREATE TABLE IF NOT EXISTS characters (
     wins_count INTEGER NOT NULL DEFAULT 0,
     bank_balance INTEGER NOT NULL DEFAULT 0,
     job_class TEXT NOT NULL DEFAULT '初心者',
+    job_tier INTEGER NOT NULL DEFAULT 0,
+    rebirth_count INTEGER NOT NULL DEFAULT 0,
+    stat_floor_hp INTEGER,
+    stat_floor_mp INTEGER,
+    stat_floor_str INTEGER,
+    stat_floor_def INTEGER,
+    stat_floor_agi INTEGER,
+    stat_floor_luk INTEGER,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (country_id) REFERENCES countries(id),
@@ -83,7 +91,21 @@ CREATE TABLE IF NOT EXISTS game_settings (
     shop_tax_percent REAL NOT NULL DEFAULT 5,
     heal_cost_per_point REAL NOT NULL DEFAULT 1,
     town_defense_level INTEGER NOT NULL DEFAULT 500,
-    fortress_defense_level INTEGER NOT NULL DEFAULT 1000
+    fortress_defense_level INTEGER NOT NULL DEFAULT 1000,
+    exp_growth_novice_percent REAL NOT NULL DEFAULT 6.6,
+    exp_growth_tier2_percent REAL NOT NULL DEFAULT 6.0,
+    exp_growth_tier3_percent REAL NOT NULL DEFAULT 0.8,
+    exp_growth_tier4_percent REAL NOT NULL DEFAULT 0.8,
+    rebirth_stat_bonus_percent REAL NOT NULL DEFAULT 15
+);
+
+CREATE TABLE IF NOT EXISTS job_masteries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL,
+    job_name TEXT NOT NULL,
+    mastered_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(character_id, job_name),
+    FOREIGN KEY (character_id) REFERENCES characters(id)
 );
 
 CREATE TABLE IF NOT EXISTS hunting_grounds (

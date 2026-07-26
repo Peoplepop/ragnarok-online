@@ -4,7 +4,7 @@
 {% block content %}
   <div class="panel" style="margin-bottom:20px;">
     <h2 style="margin:0 0 4px; color:var(--gold-bright);">{{ character.character_name }}</h2>
-    <div class="element" style="font-size:13px;">屬性：{{ character.element }}　|　所屬國家：{{ character.name }}　|　職業：{{ character.job_class }}</div>
+    <div class="element" style="font-size:13px;">屬性：{{ character.element }}　|　所屬國家：{{ character.name }}　|　職業：{{ character.job_class }}（{{ job_tier_label }}）</div>
     <p style="margin:6px 0 0; color:var(--text-dim); font-size:13px;">{{ character.description }}</p>
     {% if overcomes or overcome_by %}
     <p style="margin:6px 0 0; color:var(--text-dim); font-size:12px;">
@@ -42,6 +42,44 @@
       <span>戰勝次數 {{ character.wins_count }}</span>
       <span>勝率 {{ "%.1f"|format(win_rate) ~ "%" if win_rate is not none else "尚無紀錄" }}</span>
     </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:20px;">
+    <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">職業與轉生</h3>
+    <div style="display:flex; gap:14px; font-size:13px; color:var(--text-dim); margin-bottom:14px; flex-wrap:wrap;">
+      <span>轉生次數 {{ character.rebirth_count }}</span>
+      <span>已精通職業 {{ mastery_names|length }}/3{% if mastery_names %}（{{ mastery_names|join('、') }}）{% endif %}</span>
+    </div>
+
+    {% if can_promote_tier2 %}
+    <form method="post" action="{{ url_for('character_promote_tier2') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <select name="job_name">
+        {% for name, info in tier2_jobs.items() %}
+        <option value="{{ name }}">{{ name }}（{{ info.family }}・{{ '力量' if info.primary == 'str' else '防禦' if info.primary == 'def' else '敏捷' if info.primary == 'agi' else '幸運' }}側重）</option>
+        {% endfor %}
+      </select>
+      <button type="submit">二轉</button>
+    </form>
+    {% elif can_promote_tier3 %}
+    <form method="post" action="{{ url_for('character_promote_tier3') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <select name="job_name">
+        {% for name in tier3_choices %}
+        {% set info = tier3_job_info[name] %}
+        <option value="{{ name }}">{{ name }}（{{ '力量' if info.primary == 'str' else '防禦' if info.primary == 'def' else '敏捷' if info.primary == 'agi' else '幸運' }}＋{{ '力量' if info.secondary == 'str' else '防禦' if info.secondary == 'def' else '敏捷' if info.secondary == 'agi' else '幸運' }}）</option>
+        {% endfor %}
+      </select>
+      <button type="submit">三轉</button>
+    </form>
+    {% elif can_rebirth %}
+    <form method="post" action="{{ url_for('character_rebirth') }}">
+      <p class="hint" style="margin:0 0 10px;">轉生會將等級重置為 10 級、職業回到初心者，並清除目前的屬性下限；國家、金幣、銀行存款、裝備與背包都不受影響。</p>
+      <button type="submit">轉生</button>
+    </form>
+    {% else %}
+    <p class="hint" style="margin:0;">
+      {% if character.job_tier == 0 %}30 級可二轉{% elif character.job_tier == 2 %}70 級可三轉{% elif character.job_tier == 3 %}120 級可轉生{% else %}已四轉，繼續練功邁向封頂{% endif %}
+    </p>
+    {% endif %}
   </div>
 
   <div class="panel" style="margin-bottom:20px;">

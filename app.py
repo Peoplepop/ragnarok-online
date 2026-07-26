@@ -38,6 +38,9 @@ ACTION_LABELS = {
     "treasury_donate": "捐獻國庫",
     "conquer_win": "攻城成功",
     "conquer_loss": "攻城失敗",
+    "promote_tier2": "二轉",
+    "promote_tier3": "三轉",
+    "rebirth": "轉生",
 }
 
 SHOP_TYPE_LABELS = {
@@ -98,19 +101,100 @@ BASE_STATS = {
 # actually harder/beatable -- gear alone was the only source of growth before.
 LEVEL_STAT_GROWTH = {"hp": 5, "mp": 5, "str": 1, "def": 1, "agi": 1, "luk": 1}
 
+# Job tree: 3 base philosophies, each already forked into two 二轉 jobs (one
+# leaning each of the family's two stats); each 二轉 job forks again into two
+# 三轉 jobs that blend in a third stat. Not stored in its own table -- job_class
+# is just a string written into an existing characters column, so this is
+# pure business-logic configuration living next to compute_final_stats.
+TIER2_JOBS = {
+    "鋒劍士":   {"family": "劍修",   "primary": "str", "secondary": "def"},
+    "鐵衛劍師": {"family": "劍修",   "primary": "def", "secondary": "str"},
+    "疾風俠客": {"family": "游俠",   "primary": "agi", "secondary": "luk"},
+    "天機遊人": {"family": "游俠",   "primary": "luk", "secondary": "agi"},
+    "磐石陣師": {"family": "玄陣師", "primary": "def", "secondary": "luk"},
+    "易數先生": {"family": "玄陣師", "primary": "luk", "secondary": "def"},
+}
 
-def compute_final_stats(country, equipped_items=(), level=1):
+TIER3_JOBS = {
+    "裂地劍豪":   {"parent": "鋒劍士",   "primary": "str", "secondary": "agi"},
+    "煉體宗師":   {"parent": "鋒劍士",   "primary": "str", "secondary": "def"},
+    "不動劍聖":   {"parent": "鐵衛劍師", "primary": "def", "secondary": "luk"},
+    "回天鐵壁":   {"parent": "鐵衛劍師", "primary": "def", "secondary": "str"},
+    "追風劍影":   {"parent": "疾風俠客", "primary": "agi", "secondary": "str"},
+    "踏虛步影":   {"parent": "疾風俠客", "primary": "agi", "secondary": "def"},
+    "奇門遁甲師": {"parent": "天機遊人", "primary": "luk", "secondary": "def"},
+    "天命劍仙":   {"parent": "天機遊人", "primary": "luk", "secondary": "agi"},
+    "不壞金身":   {"parent": "磐石陣師", "primary": "def", "secondary": "str"},
+    "龜甲寒鐵陣": {"parent": "磐石陣師", "primary": "def", "secondary": "luk"},
+    "五行卜算師": {"parent": "易數先生", "primary": "luk", "secondary": "agi"},
+    "太乙真人":   {"parent": "易數先生", "primary": "luk", "secondary": "def"},
+}
+
+TIER3_CHILDREN_BY_PARENT = {}
+for _name, _info in TIER3_JOBS.items():
+    TIER3_CHILDREN_BY_PARENT.setdefault(_info["parent"], []).append(_name)
+
+# 四轉 is deterministic, not truly random: sum each mastered 三轉 job's
+# (primary weight 2 + secondary weight 1) across the character's 3 masteries,
+# take the highest-scoring stat; a tie among stats falls to the earth job.
+TIER4_JOB_BY_STAT = {"str": "業火尊者", "def": "青木道尊", "agi": "流水劍尊", "luk": "流金尊者"}
+TIER4_TIE_JOB = "厚土真尊"
+
+JOB_TIER_LABELS = {0: "初心者", 2: "二轉", 3: "三轉", 4: "四轉"}
+
+
+def compute_final_stats(country, equipped_items=(), level=1, job_bonus=None, rebirth_bonus_percent=0):
+    job_bonus = job_bonus or {}
     equip_bonus = {}
     for item in equipped_items:
         if item:
             equip_bonus[item["stat"]] = equip_bonus.get(item["stat"], 0) + item["stat_bonus"]
     level_bonus = max(0, level - 1)
     return {
-        key: round(base * (1 + country[bonus_field] / 100))
+        key: round(base * (1 + (country[bonus_field] + job_bonus.get(key, 0) + rebirth_bonus_percent) / 100))
         + equip_bonus.get(key, 0)
         + LEVEL_STAT_GROWTH[key] * level_bonus
         for key, (bonus_field, base) in BASE_STATS.items()
     }
+
+
+def job_stat_bonus_pct(job_class, job_tier):
+    """{stat: percent} bonus from the character's current job -- only ever
+    touches str/def/agi/luk, never hp/mp (unlike the rebirth bonus)."""
+    if job_tier == 2:
+        info = TIER2_JOBS.get(job_class)
+        return {info["primary"]: 10, info["secondary"]: 5} if info else {}
+    if job_tier == 3:
+        info = TIER3_JOBS.get(job_class)
+        return {info["primary"]: 15, info["secondary"]: 6} if info else {}
+    if job_tier == 4:
+        bonus = {"str": 8, "def": 8, "agi": 8, "luk": 8}
+        dominant = next((k for k, v in TIER4_JOB_BY_STAT.items() if v == job_class), None)
+        if dominant:
+            bonus[dominant] += 20
+        return bonus
+    return {}
+
+
+STAT_FLOOR_COLUMNS = {
+    "hp": "stat_floor_hp", "mp": "stat_floor_mp", "str": "stat_floor_str",
+    "def": "stat_floor_def", "agi": "stat_floor_agi", "luk": "stat_floor_luk",
+}
+
+
+def character_final_stats(character, equipped_items, settings):
+    """Like compute_final_stats, but layers in the character's job-tier bonus
+    and stacking rebirth bonus, then clamps every stat to its stat-floor
+    snapshot (if any) so a promotion can never make a stat go down. Rebirth
+    intentionally bypasses this floor -- see game_rebirth, which clears it."""
+    job_bonus = job_stat_bonus_pct(character["job_class"], character["job_tier"])
+    rebirth_bonus = character["rebirth_count"] * settings["rebirth_stat_bonus_percent"]
+    stats = compute_final_stats(character, equipped_items, character["level"], job_bonus, rebirth_bonus)
+    for key, col in STAT_FLOOR_COLUMNS.items():
+        floor = character[col]
+        if floor is not None:
+            stats[key] = max(stats[key], floor)
+    return stats
 
 
 def defense_tower_stats(country, tile_type, settings):
@@ -134,10 +218,28 @@ def _current_hp_mp(character, stats):
     return max(0, min(hp, stats["hp"])), max(0, min(mp, stats["mp"]))
 
 
+# Growth rate is tier-dependent (initiate/二轉/三轉/四轉), deliberately
+# non-increasing band to band. Bands compound continuously across their
+# boundary -- each new band picks up exactly where the previous one's cost
+# left off (same magnitude at the first level of a band, then that band's
+# own rate takes over from the next level on), so there's no discontinuity.
+EXP_TIER_BANDS = [
+    (1, 29, "exp_growth_novice_percent"),
+    (30, 69, "exp_growth_tier2_percent"),
+    (70, 119, "exp_growth_tier3_percent"),
+    (120, LEVEL_CAP - 1, "exp_growth_tier4_percent"),
+]
+
+
 def exp_required_for_level(level, settings):
-    """EXP needed to advance from `level` to `level + 1`, compounding
-    exp_growth_percent per level on top of exp_base."""
-    return round(settings["exp_base"] * (1 + settings["exp_growth_percent"] / 100) ** (level - 1))
+    """EXP needed to advance from `level` to `level + 1`."""
+    anchor = settings["exp_base"]
+    for start, end, field in EXP_TIER_BANDS:
+        rate = settings[field]
+        if level <= end:
+            return round(anchor * (1 + rate / 100) ** (level - start))
+        anchor *= (1 + rate / 100) ** (end - start)
+    return round(anchor)
 
 
 def apply_exp(level, exp, gained, settings):
@@ -153,6 +255,46 @@ def apply_exp(level, exp, gained, settings):
     if level >= LEVEL_CAP:
         level, exp = LEVEL_CAP, 0
     return level, exp
+
+
+def _resolve_tier4_job(db, character_id):
+    """Deterministic (not random) 四轉 outcome: tally primary(x2)/secondary(x1)
+    stat weight across the character's 3 mastered 三轉 jobs, take the argmax
+    stat; a tie among stats falls to the earth job."""
+    tally = {"str": 0, "def": 0, "agi": 0, "luk": 0}
+    for row in db.execute(
+        "SELECT job_name FROM job_masteries WHERE character_id = ?", (character_id,)
+    ):
+        info = TIER3_JOBS.get(row["job_name"])
+        if info:
+            tally[info["primary"]] += 2
+            tally[info["secondary"]] += 1
+    best = max(tally.values())
+    winners = [stat for stat, score in tally.items() if score == best]
+    if len(winners) != 1:
+        return TIER4_TIE_JOB
+    return TIER4_JOB_BY_STAT[winners[0]]
+
+
+def _process_job_progression(db, character, old_level, new_level):
+    """Fires once per crossing into level 120 while in a 三轉 job. Registers
+    (idempotently) mastery of the current job, then checks whether the
+    character has now met every 四轉 requirement (3rd rebirth done, 3 distinct
+    masteries recorded). Returns {'job_class':..., 'job_tier': 4} to merge
+    into the pending characters UPDATE, or None if nothing changed."""
+    if character["job_tier"] != 3 or new_level < 120 or old_level >= 120:
+        return None
+    db.execute(
+        "INSERT OR IGNORE INTO job_masteries (character_id, job_name) VALUES (?, ?)",
+        (character["character_id"], character["job_class"]),
+    )
+    mastery_count = db.execute(
+        "SELECT COUNT(*) AS c FROM job_masteries WHERE character_id = ?",
+        (character["character_id"],),
+    ).fetchone()["c"]
+    if character["rebirth_count"] >= 3 and mastery_count >= 3:
+        return {"job_class": _resolve_tier4_job(db, character["character_id"]), "job_tier": 4}
+    return None
 
 
 # --- Combat formula tuning ------------------------------------------------
@@ -665,7 +807,10 @@ def game():
                   characters.currency, characters.bank_balance, characters.level, characters.exp,
                   characters.next_action_at, characters.equipped_weapon_id, characters.equipped_armor_id,
                   characters.equipped_accessory_id, characters.name AS character_name,
-                  characters.current_hp, characters.current_mp, countries.*
+                  characters.current_hp, characters.current_mp, characters.job_class, characters.job_tier,
+                  characters.rebirth_count, characters.stat_floor_hp, characters.stat_floor_mp,
+                  characters.stat_floor_str, characters.stat_floor_def, characters.stat_floor_agi,
+                  characters.stat_floor_luk, countries.*
            FROM characters JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
         (session["user_id"],),
@@ -695,7 +840,7 @@ def game():
     ]
     db.close()
 
-    stats = compute_final_stats(character, equipped_items, character["level"])
+    stats = character_final_stats(character, equipped_items, settings)
     current_hp, current_mp = _current_hp_mp(character, stats)
 
     exp_needed = (
@@ -712,6 +857,11 @@ def game():
         current_tile["tile_type"] in ("fortress", "town")
         and current_tile["country_id"] is not None
         and current_tile["country_id"] != character["id"]
+    )
+    job_action_available = (
+        (character["job_tier"] == 0 and character["level"] >= 30)
+        or (character["job_tier"] == 2 and character["level"] >= 70)
+        or (character["job_tier"] == 3 and character["level"] >= 120)
     )
     defense_level = (
         settings["fortress_defense_level"] if current_tile["tile_type"] == "fortress"
@@ -766,6 +916,7 @@ def game():
         recover_cost=recover_cost,
         can_attack_tile=can_attack_tile,
         defense_level=defense_level,
+        job_action_available=job_action_available,
         own_treasury=character["treasury"],
         hexes=hexes,
         view_box=f"{min_x:.1f} {min_y:.1f} {max_x - min_x:.1f} {max_y - min_y:.1f}",
@@ -830,6 +981,9 @@ def game_hunt():
         """SELECT characters.id AS character_id, characters.level, characters.exp, characters.next_action_at,
                   characters.current_hp, characters.current_mp, characters.currency, characters.name AS character_name,
                   characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id,
+                  characters.job_class, characters.job_tier, characters.rebirth_count,
+                  characters.stat_floor_hp, characters.stat_floor_mp, characters.stat_floor_str,
+                  characters.stat_floor_def, characters.stat_floor_agi, characters.stat_floor_luk,
                   map_tiles.tile_type, countries.*
            FROM characters
            JOIN map_tiles ON map_tiles.id = characters.current_tile_id
@@ -856,6 +1010,8 @@ def game_hunt():
         flash("請選擇一個有效的打怪場")
         return redirect(url_for("game"))
 
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+
     equipped_ids = [
         character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
     ]
@@ -863,15 +1019,13 @@ def game_hunt():
         db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
         for item_id in equipped_ids if item_id
     ]
-    stats = compute_final_stats(character, equipped_items, character["level"])
+    stats = character_final_stats(character, equipped_items, settings)
     current_hp, _current_mp = _current_hp_mp(character, stats)
 
     if current_hp <= 0:
         db.close()
         flash("HP 已耗盡，無法戰鬥，請先回到要塞回復")
         return redirect(url_for("game"))
-
-    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
 
     monsters = db.execute(
         "SELECT * FROM monsters WHERE hunting_ground_id = ?", (ground["id"],)
@@ -904,14 +1058,20 @@ def game_hunt():
         currency_lost = character["currency"]
         new_currency = 0
 
+    progression = _process_job_progression(db, character, character["level"], new_level)
+    new_job_class = progression["job_class"] if progression else character["job_class"]
+    new_job_tier = progression["job_tier"] if progression else character["job_tier"]
+
     db.execute(
         """UPDATE characters
            SET level = ?, exp = ?, currency = ?, current_hp = ?, next_action_at = ?,
-               battles_count = battles_count + 1, wins_count = wins_count + ?
+               battles_count = battles_count + 1, wins_count = wins_count + ?,
+               job_class = ?, job_tier = ?
            WHERE id = ?""",
         (
             new_level, new_exp, new_currency, result["player_hp"],
             _next_action_at(settings["turn_wait_seconds"]), 1 if result["won"] else 0,
+            new_job_class, new_job_tier,
             character["character_id"],
         ),
     )
@@ -951,6 +1111,9 @@ def game_conquer():
                   characters.exp, characters.next_action_at, characters.current_hp, characters.current_mp,
                   characters.currency, characters.name AS character_name,
                   characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id,
+                  characters.job_class, characters.job_tier, characters.rebirth_count,
+                  characters.stat_floor_hp, characters.stat_floor_mp, characters.stat_floor_str,
+                  characters.stat_floor_def, characters.stat_floor_agi, characters.stat_floor_luk,
                   map_tiles.tile_type, map_tiles.country_id AS tile_country_id, map_tiles.name AS tile_name,
                   countries.*
            FROM characters
@@ -974,6 +1137,11 @@ def game_conquer():
         flash("這裡沒有可以攻打的敵方據點")
         return redirect(url_for("game"))
 
+    settings = db.execute(
+        """SELECT turn_wait_seconds, town_defense_level, fortress_defense_level, rebirth_stat_bonus_percent
+           FROM game_settings WHERE id = 1"""
+    ).fetchone()
+
     equipped_ids = [
         character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
     ]
@@ -981,7 +1149,7 @@ def game_conquer():
         db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
         for item_id in equipped_ids if item_id
     ]
-    stats = compute_final_stats(character, equipped_items, character["level"])
+    stats = character_final_stats(character, equipped_items, settings)
     current_hp, _current_mp = _current_hp_mp(character, stats)
 
     if current_hp <= 0:
@@ -989,9 +1157,6 @@ def game_conquer():
         flash("HP 已耗盡，無法戰鬥，請先回到要塞回復")
         return redirect(url_for("game"))
 
-    settings = db.execute(
-        "SELECT turn_wait_seconds, town_defense_level, fortress_defense_level FROM game_settings WHERE id = 1"
-    ).fetchone()
     defending_country = db.execute(
         "SELECT * FROM countries WHERE id = ?", (character["tile_country_id"],)
     ).fetchone()
@@ -1058,7 +1223,10 @@ def game_recover():
         """SELECT characters.id, characters.level, characters.next_action_at, characters.currency,
                   characters.current_hp, characters.current_mp, map_tiles.tile_type,
                   characters.equipped_weapon_id, characters.equipped_armor_id,
-                  characters.equipped_accessory_id, countries.*
+                  characters.equipped_accessory_id, characters.job_class, characters.job_tier,
+                  characters.rebirth_count, characters.stat_floor_hp, characters.stat_floor_mp,
+                  characters.stat_floor_str, characters.stat_floor_def, characters.stat_floor_agi,
+                  characters.stat_floor_luk, countries.*
            FROM characters
            JOIN map_tiles ON map_tiles.id = characters.current_tile_id
            JOIN countries ON countries.id = characters.country_id
@@ -1076,6 +1244,10 @@ def game_recover():
         flash("只能在要塞內回復 HP／MP")
         return redirect(url_for("game"))
 
+    settings = db.execute(
+        "SELECT turn_wait_seconds, heal_cost_per_point, rebirth_stat_bonus_percent FROM game_settings WHERE id = 1"
+    ).fetchone()
+
     equipped_ids = [
         character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
     ]
@@ -1083,12 +1255,9 @@ def game_recover():
         db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
         for item_id in equipped_ids if item_id
     ]
-    stats = compute_final_stats(character, equipped_items, character["level"])
+    stats = character_final_stats(character, equipped_items, settings)
     current_hp, current_mp = _current_hp_mp(character, stats)
 
-    settings = db.execute(
-        "SELECT turn_wait_seconds, heal_cost_per_point FROM game_settings WHERE id = 1"
-    ).fetchone()
     missing = (stats["hp"] - current_hp) + (stats["mp"] - current_mp)
     cost = round(missing * settings["heal_cost_per_point"])
     if cost > character["currency"]:
@@ -1611,6 +1780,9 @@ def character_page():
         """SELECT characters.id AS character_id, characters.level, characters.exp,
                   characters.next_action_at, characters.name AS character_name,
                   characters.current_hp, characters.current_mp, characters.job_class,
+                  characters.job_tier, characters.rebirth_count, characters.stat_floor_hp,
+                  characters.stat_floor_mp, characters.stat_floor_str, characters.stat_floor_def,
+                  characters.stat_floor_agi, characters.stat_floor_luk,
                   characters.equipped_weapon_id, characters.equipped_armor_id,
                   characters.equipped_accessory_id, characters.battles_count,
                   characters.wins_count, countries.*
@@ -1620,6 +1792,11 @@ def character_page():
     ).fetchone()
 
     settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+    mastery_names = [
+        row["job_name"] for row in db.execute(
+            "SELECT job_name FROM job_masteries WHERE character_id = ?", (character["character_id"],)
+        )
+    ]
     equipped_ids = [
         character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
     ]
@@ -1647,12 +1824,16 @@ def character_page():
 
     db.close()
 
-    stats = compute_final_stats(character, equipped_items, character["level"])
+    stats = character_final_stats(character, equipped_items, settings)
     current_hp, current_mp = _current_hp_mp(character, stats)
     exp_needed = (
         exp_required_for_level(character["level"], settings)
         if character["level"] < LEVEL_CAP else None
     )
+    can_promote_tier2 = character["job_tier"] == 0 and character["level"] >= 30
+    can_promote_tier3 = character["job_tier"] == 2 and character["level"] >= 70
+    can_rebirth = character["job_tier"] == 3 and character["level"] >= 120
+    tier3_choices = TIER3_CHILDREN_BY_PARENT.get(character["job_class"], [])
     win_rate = (
         round(character["wins_count"] / character["battles_count"] * 100, 1)
         if character["battles_count"] else None
@@ -1681,7 +1862,165 @@ def character_page():
         inventory_items=inventory_items,
         shop_type_labels=SHOP_TYPE_LABELS,
         cooldown_seconds=_cooldown_remaining_seconds(character["next_action_at"]),
+        job_tier_label=JOB_TIER_LABELS.get(character["job_tier"], ""),
+        mastery_names=mastery_names,
+        can_promote_tier2=can_promote_tier2,
+        can_promote_tier3=can_promote_tier3,
+        can_rebirth=can_rebirth,
+        tier2_jobs=TIER2_JOBS,
+        tier3_choices=tier3_choices,
+        tier3_job_info=TIER3_JOBS,
     )
+
+
+def _character_for_promotion(db):
+    return db.execute(
+        """SELECT characters.id AS character_id, characters.level, characters.job_tier,
+                  characters.job_class, characters.rebirth_count,
+                  characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id,
+                  characters.stat_floor_hp, characters.stat_floor_mp, characters.stat_floor_str,
+                  characters.stat_floor_def, characters.stat_floor_agi, characters.stat_floor_luk,
+                  countries.*
+           FROM characters JOIN countries ON countries.id = characters.country_id
+           WHERE characters.user_id = ?""",
+        (session["user_id"],),
+    ).fetchone()
+
+
+def _snapshot_stat_floor(character, equipped_items, settings):
+    """Pre-promotion stats (already folded against any existing floor via
+    character_final_stats' own max()) become the new floor -- so a promotion
+    can never make any stat go down, chained across multiple promotions."""
+    stats = character_final_stats(character, equipped_items, settings)
+    return {STAT_FLOOR_COLUMNS[key]: value for key, value in stats.items()}
+
+
+@app.route("/character/promote/tier2", methods=["POST"])
+@character_required
+def character_promote_tier2():
+    db = get_db()
+    character = _character_for_promotion(db)
+
+    job_name = request.form.get("job_name", "")
+    if character["job_tier"] != 0 or character["level"] < 30:
+        db.close()
+        flash("目前還不能二轉")
+        return redirect(url_for("character_page"))
+    if job_name not in TIER2_JOBS:
+        db.close()
+        flash("請選擇一個有效的職業")
+        return redirect(url_for("character_page"))
+
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+    equipped_ids = [
+        character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
+    ]
+    equipped_items = [
+        db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        for item_id in equipped_ids if item_id
+    ]
+    floor = _snapshot_stat_floor(character, equipped_items, settings)
+
+    db.execute(
+        """UPDATE characters SET job_class = ?, job_tier = 2,
+               stat_floor_hp = ?, stat_floor_mp = ?, stat_floor_str = ?,
+               stat_floor_def = ?, stat_floor_agi = ?, stat_floor_luk = ?
+           WHERE id = ?""",
+        (
+            job_name, floor["stat_floor_hp"], floor["stat_floor_mp"], floor["stat_floor_str"],
+            floor["stat_floor_def"], floor["stat_floor_agi"], floor["stat_floor_luk"],
+            character["character_id"],
+        ),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "promote_tier2",
+        detail=job_name, ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    flash(f"二轉成功，成為「{job_name}」！")
+    return redirect(url_for("character_page"))
+
+
+@app.route("/character/promote/tier3", methods=["POST"])
+@character_required
+def character_promote_tier3():
+    db = get_db()
+    character = _character_for_promotion(db)
+
+    job_name = request.form.get("job_name", "")
+    valid_choices = TIER3_CHILDREN_BY_PARENT.get(character["job_class"], [])
+    if character["job_tier"] != 2 or character["level"] < 70:
+        db.close()
+        flash("目前還不能三轉")
+        return redirect(url_for("character_page"))
+    if job_name not in valid_choices:
+        db.close()
+        flash("請選擇一個有效的職業")
+        return redirect(url_for("character_page"))
+
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+    equipped_ids = [
+        character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
+    ]
+    equipped_items = [
+        db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+        for item_id in equipped_ids if item_id
+    ]
+    floor = _snapshot_stat_floor(character, equipped_items, settings)
+
+    db.execute(
+        """UPDATE characters SET job_class = ?, job_tier = 3,
+               stat_floor_hp = ?, stat_floor_mp = ?, stat_floor_str = ?,
+               stat_floor_def = ?, stat_floor_agi = ?, stat_floor_luk = ?
+           WHERE id = ?""",
+        (
+            job_name, floor["stat_floor_hp"], floor["stat_floor_mp"], floor["stat_floor_str"],
+            floor["stat_floor_def"], floor["stat_floor_agi"], floor["stat_floor_luk"],
+            character["character_id"],
+        ),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "promote_tier3",
+        detail=job_name, ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    flash(f"三轉成功，成為「{job_name}」！")
+    return redirect(url_for("character_page"))
+
+
+@app.route("/character/rebirth", methods=["POST"])
+@character_required
+def character_rebirth():
+    db = get_db()
+    character = _character_for_promotion(db)
+
+    if character["job_tier"] != 3 or character["level"] < 120:
+        db.close()
+        flash("目前還不能轉生")
+        return redirect(url_for("character_page"))
+
+    db.execute(
+        """UPDATE characters
+           SET rebirth_count = rebirth_count + 1, level = 10, exp = 0,
+               job_class = '初心者', job_tier = 0,
+               stat_floor_hp = NULL, stat_floor_mp = NULL, stat_floor_str = NULL,
+               stat_floor_def = NULL, stat_floor_agi = NULL, stat_floor_luk = NULL
+           WHERE id = ?""",
+        (character["character_id"],),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "rebirth",
+        detail=f"第 {character['rebirth_count'] + 1} 次轉生", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    flash("轉生完成！等級重置為 10 級，職業回到初心者，準備踏上新的旅程")
+    return redirect(url_for("character_page"))
 
 
 @app.route("/admin")
@@ -1844,7 +2183,7 @@ def admin_settings():
     db.close()
     return render_template(
         "admin_settings.html",
-        settings=settings, hunting_grounds=hunting_grounds, active_tab="settings",
+        settings=settings, hunting_grounds=hunting_grounds, active_tab="settings", level_cap=LEVEL_CAP,
     )
 
 
@@ -1854,7 +2193,11 @@ def admin_update_game_settings():
     try:
         turn_wait_seconds = int(request.form.get("turn_wait_seconds", ""))
         exp_base = int(request.form.get("exp_base", ""))
-        exp_growth_percent = float(request.form.get("exp_growth_percent", ""))
+        exp_growth_novice_percent = float(request.form.get("exp_growth_novice_percent", ""))
+        exp_growth_tier2_percent = float(request.form.get("exp_growth_tier2_percent", ""))
+        exp_growth_tier3_percent = float(request.form.get("exp_growth_tier3_percent", ""))
+        exp_growth_tier4_percent = float(request.form.get("exp_growth_tier4_percent", ""))
+        rebirth_stat_bonus_percent = float(request.form.get("rebirth_stat_bonus_percent", ""))
         sell_back_percent = float(request.form.get("sell_back_percent", ""))
         boss_encounter_percent = float(request.form.get("boss_encounter_percent", ""))
         boss_exp_multiplier = float(request.form.get("boss_exp_multiplier", ""))
@@ -1866,8 +2209,17 @@ def admin_update_game_settings():
         flash("設定值格式不正確")
         return redirect(url_for("admin_settings"))
 
-    if turn_wait_seconds < 0 or exp_base < 1 or exp_growth_percent < 0:
+    if turn_wait_seconds < 0 or exp_base < 1:
         flash("設定值必須是正數")
+        return redirect(url_for("admin_settings"))
+
+    if min(exp_growth_novice_percent, exp_growth_tier2_percent,
+           exp_growth_tier3_percent, exp_growth_tier4_percent) < 0:
+        flash("各階段成長率不可為負數")
+        return redirect(url_for("admin_settings"))
+
+    if rebirth_stat_bonus_percent < 0:
+        flash("轉生加成不可為負數")
         return redirect(url_for("admin_settings"))
 
     if sell_back_percent < 0 or sell_back_percent > 100:
@@ -1889,12 +2241,16 @@ def admin_update_game_settings():
     db = get_db()
     db.execute(
         """UPDATE game_settings
-           SET turn_wait_seconds = ?, exp_base = ?, exp_growth_percent = ?, sell_back_percent = ?,
+           SET turn_wait_seconds = ?, exp_base = ?, exp_growth_novice_percent = ?,
+               exp_growth_tier2_percent = ?, exp_growth_tier3_percent = ?, exp_growth_tier4_percent = ?,
+               rebirth_stat_bonus_percent = ?, sell_back_percent = ?,
                boss_encounter_percent = ?, boss_exp_multiplier = ?, shop_tax_percent = ?,
                heal_cost_per_point = ?, town_defense_level = ?, fortress_defense_level = ?
            WHERE id = 1""",
         (
-            turn_wait_seconds, exp_base, exp_growth_percent, sell_back_percent,
+            turn_wait_seconds, exp_base, exp_growth_novice_percent,
+            exp_growth_tier2_percent, exp_growth_tier3_percent, exp_growth_tier4_percent,
+            rebirth_stat_bonus_percent, sell_back_percent,
             boss_encounter_percent, boss_exp_multiplier, shop_tax_percent,
             heal_cost_per_point, town_defense_level, fortress_defense_level,
         ),
