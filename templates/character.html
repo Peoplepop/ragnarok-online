@@ -51,14 +51,31 @@
       <span>已精通職業 {{ mastery_names|length }}/3{% if mastery_names %}（{{ mastery_names|join('、') }}）{% endif %}</span>
     </div>
 
-    {% if current_skill %}
+    {% if usable_skills %}
     <div style="font-size:13px; color:var(--text-dim); margin-bottom:14px; padding:10px 12px; background:var(--panel-2); border-radius:6px;">
-      <span style="color:var(--gold-bright);">絕學：{{ current_skill.name }}</span>
-      　消耗 MP {{ current_skill.mp_cost }}
-      　觸發機率 {{ current_skill.trigger_chance }}%
-      　傷害倍率 {{ current_skill.multiplier }}x（以{{ stat_labels[current_skill.stat] }}計算）
-      <p class="hint" style="margin:4px 0 0;">戰鬥時每次攻擊都會判定是否改為使出絕學，MP 不足或未觸發時改為普通攻擊</p>
+      <div style="color:var(--gold-bright); margin-bottom:6px;">目前可用技能（戰鬥時依威力由高到低依序嘗試觸發，MP不足或未觸發則改用下一個或普通攻擊）</div>
+      {% for skill in usable_skills %}
+      <div>{{ skill.name }}　消耗 MP {{ skill.mp_cost }}　觸發機率 {{ skill.trigger_chance }}%　傷害倍率 {{ skill.multiplier }}x（以{{ stat_labels[skill.stat] }}計算）</div>
+      {% endfor %}
     </div>
+    {% endif %}
+
+    {% if learnable_skills %}
+    <div style="margin-bottom:14px;">
+      <div style="color:var(--gold-bright); font-size:13px; margin-bottom:6px;">可學習技能</div>
+      {% for skill in learnable_skills %}
+      <form method="post" action="{{ url_for('character_learn_skill') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--text-dim); margin-bottom:6px;">
+        <input type="hidden" name="skill_key" value="{{ skill.key }}">
+        <span>{{ skill.name }}（MP{{ skill.mp_cost }}／{{ skill.trigger_chance }}%／{{ skill.multiplier }}x／以{{ stat_labels[skill.stat] }}計算）</span>
+        <span>費用 {{ skill.learn_cost }} 諸神幣</span>
+        <button type="submit" {% if character.currency < skill.learn_cost %}disabled{% endif %}>學習</button>
+      </form>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if learned_locked_skills %}
+    <p class="hint" style="margin:0 0 14px;">已學會但目前無法使用（跨職業樹，唯有四轉可解鎖全部已學技能）：{{ learned_locked_skills|map(attribute='name')|join('、') }}</p>
     {% endif %}
 
     {% if can_promote_tier2 %}

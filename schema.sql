@@ -108,6 +108,15 @@ CREATE TABLE IF NOT EXISTS job_masteries (
     FOREIGN KEY (character_id) REFERENCES characters(id)
 );
 
+CREATE TABLE IF NOT EXISTS character_skills (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL,
+    skill_key TEXT NOT NULL,
+    learned_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(character_id, skill_key),
+    FOREIGN KEY (character_id) REFERENCES characters(id)
+);
+
 CREATE TABLE IF NOT EXISTS hunting_grounds (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tier TEXT UNIQUE NOT NULL,
