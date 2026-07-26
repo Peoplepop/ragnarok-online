@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}國家詳情 - 諸神的黃昏{% endblock %}
+{% block title %}國家詳情 - 五行爭鋒{% endblock %}
 
 {% block content %}
   <h2 style="color: var(--gold-bright); font-size: 18px; margin-top:0;">國家詳情</h2>
@@ -38,4 +38,6 @@
     </div>
   </div>
   {% endfor %}
+
+  <p style="margin-top:20px;"><a href="{{ url_for('game') }}" class="btn">← 返回主畫面</a></p>
 {% endblock %}

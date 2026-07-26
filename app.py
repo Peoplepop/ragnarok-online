@@ -742,7 +742,7 @@ def game():
             "cy": cy,
             "color": color,
             "tile_type": t["tile_type"],
-            "name": t["display_name"],
+            "name": t["name"],
             "country_name": t["country_name"],
             "is_player_here": t["tile_id"] == character["current_tile_id"],
         })

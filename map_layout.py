@@ -1,4 +1,4 @@
-"""Hex-grid geometry and the world map layout for 諸神的黃昏.
+"""Hex-grid geometry and the world map layout for 五行爭鋒.
 
 Countries are seeded in this fixed order (matches db.DEFAULT_COUNTRIES):
 金 百鍊流金國, 木 翡翠靈木國, 水 蔚藍千泉國, 火 紅蓮業火國, 土 萬物母育國.
@@ -19,20 +19,19 @@ COUNTRY_TILE_NAMES = [
     ("母育城", ["沃土村", "大地灣"]),   # 土 萬物母育國
 ]
 
-_CN_DIGITS = "〇一二三四五六七八九"
-
-
-def _cn_number(n):
-    """Chinese numeral for 1-99, e.g. 11 -> 十一, 20 -> 二十."""
-    if n < 10:
-        return _CN_DIGITS[n]
-    tens, ones = divmod(n, 10)
-    prefix = "" if tens == 1 else _CN_DIGITS[tens]
-    return prefix + "十" + (_CN_DIGITS[ones] if ones else "")
+# Unclaimed cells (37 total minus the 15 country-owned tiles = 22, 3 of which
+# get overwritten to mountain by _apply_manual_overrides) get a real place
+# name instead of a numbered "廢墟N" placeholder -- one entry per remaining
+# cell in generation order, so this list must have at least 22 entries.
+NEUTRAL_TOWN_NAMES = [
+    "清風鎮", "望江村", "石橋鎮", "竹溪村", "青雲驛", "白露莊", "桃源里", "落霞鄉",
+    "幽篁里", "曉月鎮", "靜水村", "孤峰鎮", "雲夢澤", "秋水鎮", "古渡口", "蘆花村",
+    "疏影莊", "寒煙渡", "松風嶺", "明月灣", "遠山村", "溪雲鎮",
+]
 
 
 def _neutral_name(i):
-    return f"廢墟{_cn_number(i)}"
+    return NEUTRAL_TOWN_NAMES[i - 1]
 
 
 # Manual overrides layered on top of the procedural layout below, per the
@@ -40,10 +39,10 @@ def _neutral_name(i):
 # Axial shift directions (dq, dr) as they read on screen, per axial_to_pixel:
 #   (0,-1) up, (0,1) down, (-1,0) up-left, (1,0) down-right,
 #   (1,-1) up-right, (-1,1) down-left.
-_MOUNTAIN_CELLS = {(2, -1), (0, 0), (0, 1)}  # was 廢墟九 / 十九 / 十四
+_MOUNTAIN_CELLS = {(2, -1), (0, 0), (0, 1)}  # was 幽篁里 / 松風嶺 / 秋水鎮
 _TERRITORY_SHIFTS = [
-    (4, (-1, 0)),  # 萬物母育國 moves one step 左上 (up-left), onto 廢墟十五/十六
-    (0, (0, 1)),   # 百鍊流金國 moves one step 下 (down)
+    (4, (-1, 0)),  # 萬物母育國 moves one step 左上 (up-left), onto 蘆花村/古渡口
+    (0, (0, 1)),   # 百鍊流金國 moves one step 下 (down), onto 疏影莊/寒煙渡
 ]
 
 

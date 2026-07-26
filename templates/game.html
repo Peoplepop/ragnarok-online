@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ character.character_name }} - 諸神的黃昏{% endblock %}
+{% block title %}{{ character.character_name }} - 五行爭鋒{% endblock %}
 {% block body_class %}wide{% endblock %}
 
 {% block content %}
@@ -35,7 +35,6 @@
           fill-opacity="{{ '0.55' if h.tile_type == 'town' else ('0.30' if h.tile_type == 'neutral' else ('1' if h.tile_type == 'mountain' else '0.85')) }}"
           stroke="rgba(232,226,208,0.35)"
           stroke-width="1.2"
-          stroke-dasharray="{{ '4,3' if h.tile_type == 'neutral' else 'none' }}"
         />
         <text
           x="{{ h.cx }}" y="{{ h.cy }}"
@@ -43,7 +42,7 @@
           font-size="{{ '13' if h.tile_type == 'fortress' else '11' }}"
           font-weight="{{ '700' if h.tile_type == 'fortress' else '400' }}"
           fill="{{ 'var(--text-dim)' if h.tile_type == 'neutral' else ('var(--text)' if h.tile_type == 'mountain' else '#1a1408') }}"
-        >{{ h.name }}</text>
+        >{% if h.tile_type == 'fortress' %}<tspan x="{{ h.cx }}" dy="-0.55em">{{ h.name }}</tspan><tspan x="{{ h.cx }}" dy="1.15em">要塞</tspan>{% else %}{{ h.name }}{% endif %}</text>
         {% if h.is_player_here %}
         <circle cx="{{ h.cx }}" cy="{{ h.cy - 18 }}" r="9" fill="none" stroke="#ffffff" stroke-width="2.5">
           <animate attributeName="r" values="8;16;8" dur="1.6s" repeatCount="indefinite" />
@@ -57,7 +56,6 @@
   </div>
 
   <div style="display:flex; gap:18px; margin-top:14px; font-size:12px; color:var(--text-dim); flex-wrap:wrap;">
-    <span>▫️ 虛線灰框 = 待佔領城鎮</span>
     <span>⛰️ 深色實心 = 山嶺（無法通行、無法佔領）</span>
     <span>⚪ 閃爍白點 = 你目前所在位置</span>
   </div>
