@@ -51,6 +51,16 @@
       <span>已精通職業 {{ mastery_names|length }}/3{% if mastery_names %}（{{ mastery_names|join('、') }}）{% endif %}</span>
     </div>
 
+    {% if current_skill %}
+    <div style="font-size:13px; color:var(--text-dim); margin-bottom:14px; padding:10px 12px; background:var(--panel-2); border-radius:6px;">
+      <span style="color:var(--gold-bright);">絕學：{{ current_skill.name }}</span>
+      　消耗 MP {{ current_skill.mp_cost }}
+      　觸發機率 {{ current_skill.trigger_chance }}%
+      　傷害倍率 {{ current_skill.multiplier }}x（以{{ stat_labels[current_skill.stat] }}計算）
+      <p class="hint" style="margin:4px 0 0;">戰鬥時每次攻擊都會判定是否改為使出絕學，MP 不足或未觸發時改為普通攻擊</p>
+    </div>
+    {% endif %}
+
     {% if can_promote_tier2 %}
     <form method="post" action="{{ url_for('character_promote_tier2') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
       <select name="job_name">

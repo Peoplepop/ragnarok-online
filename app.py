@@ -142,6 +142,59 @@ TIER4_TIE_JOB = "厚土真尊"
 
 JOB_TIER_LABELS = {0: "初心者", 2: "二轉", 3: "三轉", 4: "四轉"}
 
+# Job skills: one signature move per job (初心者 has none -- plain attacks only).
+# Damage multiplier and trigger chance are deliberately inverse and tier-scaled:
+# higher tier -> higher multiplier -> lower chance, bottoming out at exactly 25%
+# for 四轉 (the strongest tier never goes lower than that floor). A skill uses
+# the job's own primary stat as its damage source instead of always STR, so
+# non-str builds (agi/luk jobs) get real payoff from their stat investment.
+SKILL_TIER_TUNING = {
+    2: {"mp_cost": 20, "multiplier": 1.6, "trigger_chance": 55},
+    3: {"mp_cost": 35, "multiplier": 2.2, "trigger_chance": 40},
+    4: {"mp_cost": 55, "multiplier": 3.2, "trigger_chance": 25},
+}
+
+TIER2_SKILL_NAMES = {
+    "鋒劍士": "鋒芒斬", "鐵衛劍師": "鐵壁震擊", "疾風俠客": "疾風連斬",
+    "天機遊人": "天機一擲", "磐石陣師": "磐石震陣", "易數先生": "易數返煞",
+}
+
+TIER3_SKILL_NAMES = {
+    "裂地劍豪": "裂地劍氣", "煉體宗師": "煉體崩拳", "不動劍聖": "不動如山",
+    "回天鐵壁": "回天一擊", "追風劍影": "追風縱影斬", "踏虛步影": "踏虛幻影襲",
+    "奇門遁甲師": "奇門封陣", "天命劍仙": "天命劍雨", "不壞金身": "不壞金鐘",
+    "龜甲寒鐵陣": "龜甲寒鐵擊", "五行卜算師": "五行逆卜", "太乙真人": "太乙護體咒",
+}
+
+TIER4_SKILL_NAMES = {
+    "業火尊者": "業火焚天", "青木道尊": "青木不朽", "流水劍尊": "流水無痕劍",
+    "流金尊者": "流金運轉劫", "厚土真尊": "厚土鎮世",
+}
+
+
+def _build_job_skills():
+    skills = {}
+    for job, info in TIER2_JOBS.items():
+        skills[job] = {"name": TIER2_SKILL_NAMES[job], "stat": info["primary"], **SKILL_TIER_TUNING[2]}
+    for job, info in TIER3_JOBS.items():
+        skills[job] = {"name": TIER3_SKILL_NAMES[job], "stat": info["primary"], **SKILL_TIER_TUNING[3]}
+    for stat, job in TIER4_JOB_BY_STAT.items():
+        skills[job] = {"name": TIER4_SKILL_NAMES[job], "stat": stat, **SKILL_TIER_TUNING[4]}
+    skills[TIER4_TIE_JOB] = {"name": TIER4_SKILL_NAMES[TIER4_TIE_JOB], "stat": "avg", **SKILL_TIER_TUNING[4]}
+    return skills
+
+
+JOB_SKILLS = _build_job_skills()
+
+
+def _skill_damage_stat_value(stats, stat):
+    if stat == "avg":
+        return round((stats["str"] + stats["def"] + stats["agi"] + stats["luk"]) / 4)
+    return stats[stat]
+
+
+STAT_LABELS = {"str": "力量", "def": "防禦", "agi": "敏捷", "luk": "幸運", "avg": "六圍平均"}
+
 
 def compute_final_stats(country, equipped_items=(), level=1, job_bonus=None, rebirth_bonus_percent=0):
     job_bonus = job_bonus or {}
@@ -373,8 +426,9 @@ def derived_combat_stats(stats):
 
 
 def _combat_hit(
-    attacker_name, attacker_str, attacker_agi, attacker_luk, attacker_element,
+    attacker_name, attacker_atk, attacker_agi, attacker_luk, attacker_element,
     defender_name, defender_def, defender_luk, defender_element,
+    damage_multiplier=1.0, skill_name=None,
 ):
     if random.random() * 100 >= _hit_chance_pct(attacker_luk):
         return 0, f"{attacker_name} 的攻擊沒有命中"
@@ -385,7 +439,7 @@ def _combat_hit(
     is_crit = random.random() * 100 < _crit_chance_pct(attacker_agi)
     crit_mult = random.uniform(*CRIT_DAMAGE_RANGE) if is_crit else 1.0
     elem_mult = elemental_multiplier(attacker_element, defender_element)
-    raw_damage = attacker_str * random.uniform(*STR_DAMAGE_RANGE) * crit_mult * elem_mult
+    raw_damage = attacker_atk * random.uniform(*STR_DAMAGE_RANGE) * crit_mult * elem_mult * damage_multiplier
 
     reduction = min(DEF_REDUCTION_HARD_CAP, _def_reduction_fraction(defender_def) * random.uniform(*DEF_REDUCTION_JITTER))
     damage = max(1, round(raw_damage * (1 - reduction)))
@@ -394,21 +448,35 @@ def _combat_hit(
         suffix += "（屬性相剋！）"
     elif elem_mult < 1:
         suffix += "（屬性被剋）"
-    return damage, f"{attacker_name} 攻擊 {defender_name}，造成 {damage} 點傷害{suffix}"
+    verb = f"使出「{skill_name}」，攻擊" if skill_name else "攻擊"
+    return damage, f"{attacker_name} {verb} {defender_name}，造成 {damage} 點傷害{suffix}"
 
 
 BATTLE_ROUND_CAP = 60
 
 
-def run_battle(player_name, player_stats, player_element, player_hp, monster):
+def _roll_job_skill(job_class, current_mp):
+    """None if the job has no signature skill, MP is too low, or the
+    per-hit trigger roll (tier-scaled, floor 25%) simply misses -- in every
+    one of those cases the caller just falls back to a plain attack."""
+    skill = JOB_SKILLS.get(job_class)
+    if not skill or current_mp < skill["mp_cost"]:
+        return None
+    if random.random() * 100 >= skill["trigger_chance"]:
+        return None
+    return skill
+
+
+def run_battle(player_name, player_stats, player_element, player_hp, monster, player_mp=0, job_class=None):
     """Resolves an entire fight in one shot. Turn order and extra attacks are
     driven purely by attack speed (AGI*SPEED_PER_AGI): whoever is faster always
     goes first each round, and gets +1 extra attack per EXTRA_ATTACK_SPEED_STEP
     of speed lead. Monsters have no LUK column so they use 0 (baseline hit/dodge
     only), but they do roll crits off their own AGI and carry their own
-    element for the Wu Xing damage multiplier."""
+    element for the Wu Xing damage multiplier. Each player attack independently
+    rolls whether the character's job skill fires instead of a plain hit."""
     log = []
-    p_hp, m_hp = player_hp, monster["hp"]
+    p_hp, m_hp, p_mp = player_hp, monster["hp"], player_mp
 
     player_speed = player_stats["agi"] * SPEED_PER_AGI
     monster_speed = monster["agi"] * SPEED_PER_AGI
@@ -421,12 +489,22 @@ def run_battle(player_name, player_stats, player_element, player_hp, monster):
     extra_attacks = speed_lead // EXTRA_ATTACK_SPEED_STEP
 
     def attack_once(attacker):
-        nonlocal p_hp, m_hp
+        nonlocal p_hp, m_hp, p_mp
         if attacker == "player":
-            dmg, line = _combat_hit(
-                player_name, player_stats["str"], player_stats["agi"], player_stats["luk"], player_element,
-                monster["name"], monster["def"], 0, monster["element"],
-            )
+            skill = _roll_job_skill(job_class, p_mp)
+            if skill:
+                p_mp -= skill["mp_cost"]
+                atk_value = _skill_damage_stat_value(player_stats, skill["stat"])
+                dmg, line = _combat_hit(
+                    player_name, atk_value, player_stats["agi"], player_stats["luk"], player_element,
+                    monster["name"], monster["def"], 0, monster["element"],
+                    damage_multiplier=skill["multiplier"], skill_name=skill["name"],
+                )
+            else:
+                dmg, line = _combat_hit(
+                    player_name, player_stats["str"], player_stats["agi"], player_stats["luk"], player_element,
+                    monster["name"], monster["def"], 0, monster["element"],
+                )
             m_hp = max(0, m_hp - dmg)
             log.append(f"{line}（{monster['name']} 剩餘 HP {m_hp}）")
         else:
@@ -448,7 +526,7 @@ def run_battle(player_name, player_stats, player_element, player_hp, monster):
             break
         attack_once(slower)
 
-    return {"log": log, "won": m_hp <= 0 and p_hp > 0, "player_hp": p_hp, "monster_hp": m_hp}
+    return {"log": log, "won": m_hp <= 0 and p_hp > 0, "player_hp": p_hp, "player_mp": p_mp, "monster_hp": m_hp}
 
 
 init_db()
@@ -1020,7 +1098,7 @@ def game_hunt():
         for item_id in equipped_ids if item_id
     ]
     stats = character_final_stats(character, equipped_items, settings)
-    current_hp, _current_mp = _current_hp_mp(character, stats)
+    current_hp, current_mp = _current_hp_mp(character, stats)
 
     if current_hp <= 0:
         db.close()
@@ -1040,7 +1118,10 @@ def game_hunt():
         return redirect(url_for("game"))
     monster = random.choice(pool)
 
-    result = run_battle(character["character_name"], stats, character["element"], current_hp, monster)
+    result = run_battle(
+        character["character_name"], stats, character["element"], current_hp, monster,
+        player_mp=current_mp, job_class=character["job_class"],
+    )
 
     exp_gain = 0
     currency_gain = 0
@@ -1055,8 +1136,8 @@ def game_hunt():
         new_level, new_exp = apply_exp(character["level"], character["exp"], exp_gain, settings)
         new_currency = character["currency"] + currency_gain
     else:
-        currency_lost = character["currency"]
-        new_currency = 0
+        currency_lost = character["currency"] // 2
+        new_currency = character["currency"] - currency_lost
 
     progression = _process_job_progression(db, character, character["level"], new_level)
     new_job_class = progression["job_class"] if progression else character["job_class"]
@@ -1064,12 +1145,12 @@ def game_hunt():
 
     db.execute(
         """UPDATE characters
-           SET level = ?, exp = ?, currency = ?, current_hp = ?, next_action_at = ?,
+           SET level = ?, exp = ?, currency = ?, current_hp = ?, current_mp = ?, next_action_at = ?,
                battles_count = battles_count + 1, wins_count = wins_count + ?,
                job_class = ?, job_tier = ?
            WHERE id = ?""",
         (
-            new_level, new_exp, new_currency, result["player_hp"],
+            new_level, new_exp, new_currency, result["player_hp"], result["player_mp"],
             _next_action_at(settings["turn_wait_seconds"]), 1 if result["won"] else 0,
             new_job_class, new_job_tier,
             character["character_id"],
@@ -1099,6 +1180,8 @@ def game_hunt():
         currency_lost=currency_lost,
         player_hp=result["player_hp"],
         max_hp=stats["hp"],
+        player_mp=result["player_mp"],
+        max_mp=stats["mp"],
     )
 
 
@@ -1150,7 +1233,7 @@ def game_conquer():
         for item_id in equipped_ids if item_id
     ]
     stats = character_final_stats(character, equipped_items, settings)
-    current_hp, _current_mp = _current_hp_mp(character, stats)
+    current_hp, current_mp = _current_hp_mp(character, stats)
 
     if current_hp <= 0:
         db.close()
@@ -1163,7 +1246,10 @@ def game_conquer():
     tower = defense_tower_stats(defending_country, character["tile_type"], settings)
     tile_name = tile_display_name(character["tile_name"], character["tile_type"])
 
-    result = run_battle(character["character_name"], stats, character["element"], current_hp, tower)
+    result = run_battle(
+        character["character_name"], stats, character["element"], current_hp, tower,
+        player_mp=current_mp, job_class=character["job_class"],
+    )
 
     currency_lost = 0
     if result["won"]:
@@ -1174,8 +1260,8 @@ def game_conquer():
         )
         outcome_detail = f"攻下{tile_name}（原屬{defending_country['name']}）"
     else:
-        currency_lost = character["currency"]
-        new_currency = 0
+        currency_lost = character["currency"] // 2
+        new_currency = character["currency"] - currency_lost
         db.execute(
             "UPDATE countries SET treasury = treasury + ? WHERE id = ?",
             (currency_lost, defending_country["id"]),
@@ -1186,11 +1272,11 @@ def game_conquer():
 
     db.execute(
         """UPDATE characters
-           SET currency = ?, current_hp = ?, next_action_at = ?,
+           SET currency = ?, current_hp = ?, current_mp = ?, next_action_at = ?,
                battles_count = battles_count + 1, wins_count = wins_count + ?
            WHERE id = ?""",
         (
-            new_currency, result["player_hp"], _next_action_at(settings["turn_wait_seconds"]),
+            new_currency, result["player_hp"], result["player_mp"], _next_action_at(settings["turn_wait_seconds"]),
             1 if result["won"] else 0, character["character_id"],
         ),
     )
@@ -1212,6 +1298,8 @@ def game_conquer():
         currency_lost=currency_lost,
         player_hp=result["player_hp"],
         max_hp=stats["hp"],
+        player_mp=result["player_mp"],
+        max_mp=stats["mp"],
     )
 
 
@@ -1848,6 +1936,7 @@ def character_page():
     overcome_by = next(
         (k for k, v in ELEMENT_OVERCOMES.items() if v == character["element"]), None
     )
+    current_skill = JOB_SKILLS.get(character["job_class"])
 
     return render_template(
         "character.html",
@@ -1876,6 +1965,8 @@ def character_page():
         tier2_jobs=TIER2_JOBS,
         tier3_choices=tier3_choices,
         tier3_job_info=TIER3_JOBS,
+        current_skill=current_skill,
+        stat_labels=STAT_LABELS,
     )
 
 

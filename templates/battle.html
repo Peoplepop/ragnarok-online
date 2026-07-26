@@ -52,7 +52,7 @@
         {% if player_hp <= 0 %}，HP 已耗盡，請回到要塞選擇「回復」{% endif %}
       </p>
     {% endif %}
-    <p style="margin:10px 0 0; font-size:13px; color:var(--text-dim);">你目前 HP {{ player_hp }}/{{ max_hp }}</p>
+    <p style="margin:10px 0 0; font-size:13px; color:var(--text-dim);">你目前 HP {{ player_hp }}/{{ max_hp }}　MP {{ player_mp }}/{{ max_mp }}</p>
   </div>
 
   <a href="{{ url_for('game') }}" class="btn">← 返回主畫面</a>
