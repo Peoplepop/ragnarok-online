@@ -29,6 +29,7 @@ ACTION_LABELS = {
     "promote_tier4": "四轉",
     "rebirth": "轉生",
     "learn_skill": "學習技能",
+    "debug_reset": "（除錯）重置角色",
 }
 
 SHOP_TYPE_LABELS = {

@@ -147,6 +147,9 @@
         <input type="text" inputmode="numeric" name="rebirth_count" value="{{ character.rebirth_count }}" style="width:80px; margin-bottom:0;">
         <button type="submit">套用</button>
       </form>
+      <form method="post" action="{{ url_for('character_debug_reset') }}" onsubmit="return confirm('確定要重置角色嗎？等級、職業、轉生次數與精通紀錄都會清空，此動作無法復原。');">
+        <button type="submit">🔄 重置為 1 級初心者</button>
+      </form>
     </div>
   </div>
   {% endif %}

@@ -1702,8 +1702,19 @@ def character_page():
         and character["rebirth_count"] >= 3 and mastery_count >= 3
     )
     can_rebirth = character["job_tier"] == 3 and character["level"] >= 120 and not can_promote_tier4
-    tier2_choices = TIER2_CHILDREN_BY_FAMILY.get(character["job_class"], [])
-    tier3_choices = TIER3_CHILDREN_BY_PARENT.get(character["job_class"], [])
+    mastered = set(mastery_names)
+    # A tier2 job whose both tier3 children are already mastered is excluded,
+    # so a future rebirth into this family never dead-ends at tier3 with zero
+    # choices left; a tier3 job that's already mastered is excluded outright
+    # (rebirthing into it again would waste the life re-mastering nothing new).
+    tier2_choices = [
+        name for name in TIER2_CHILDREN_BY_FAMILY.get(character["job_class"], [])
+        if not set(TIER3_CHILDREN_BY_PARENT.get(name, [])) <= mastered
+    ]
+    tier3_choices = [
+        name for name in TIER3_CHILDREN_BY_PARENT.get(character["job_class"], [])
+        if name not in mastered
+    ]
     win_rate = (
         round(character["wins_count"] / character["battles_count"] * 100, 1)
         if character["battles_count"] else None
@@ -1758,6 +1769,14 @@ def character_page():
         learned_locked_skills=learned_locked_skills,
         stat_labels=STAT_LABELS,
     )
+
+
+def _mastered_job_names(db, character_id):
+    return {
+        row["job_name"] for row in db.execute(
+            "SELECT job_name FROM job_masteries WHERE character_id = ?", (character_id,)
+        )
+    }
 
 
 def _character_for_promotion(db):
@@ -1845,7 +1864,11 @@ def character_promote_tier2():
     character = _character_for_promotion(db)
 
     job_name = request.form.get("job_name", "")
-    valid_choices = TIER2_CHILDREN_BY_FAMILY.get(character["job_class"], [])
+    mastered = _mastered_job_names(db, character["character_id"])
+    valid_choices = [
+        name for name in TIER2_CHILDREN_BY_FAMILY.get(character["job_class"], [])
+        if not set(TIER3_CHILDREN_BY_PARENT.get(name, [])) <= mastered
+    ]
     if character["job_tier"] != 1 or character["level"] < 30:
         db.close()
         flash("目前還不能二轉")
@@ -1900,7 +1923,11 @@ def character_promote_tier3():
     character = _character_for_promotion(db)
 
     job_name = request.form.get("job_name", "")
-    valid_choices = TIER3_CHILDREN_BY_PARENT.get(character["job_class"], [])
+    mastered = _mastered_job_names(db, character["character_id"])
+    valid_choices = [
+        name for name in TIER3_CHILDREN_BY_PARENT.get(character["job_class"], [])
+        if name not in mastered
+    ]
     if character["job_tier"] != 2 or character["level"] < 70:
         db.close()
         flash("目前還不能三轉")
@@ -2162,6 +2189,43 @@ def character_debug_set_rebirth():
     db.close()
 
     flash(f"（除錯）轉生次數已設為 {rebirth_count}")
+    return redirect(url_for("character_page"))
+
+
+@app.route("/character/debug/reset", methods=["POST"])
+@admin_required
+@character_required
+def character_debug_reset():
+    """Admin-only one-click reset back to a brand new 初心者, so the whole
+    job/rebirth/four-zhuan flow can be tested again from scratch. Currency,
+    country, equipment and inventory are left untouched (same policy as a
+    normal rebirth) -- this only wipes progression state."""
+    db = get_db()
+    character = db.execute(
+        "SELECT id AS character_id FROM characters WHERE user_id = ?", (session["user_id"],)
+    ).fetchone()
+
+    db.execute("DELETE FROM job_masteries WHERE character_id = ?", (character["character_id"],))
+    db.execute(
+        """UPDATE characters
+           SET level = 1, exp = 0, rebirth_count = 0,
+               job_class = '初心者', job_tier = 0,
+               current_hp = NULL, current_mp = NULL, pending_boss_monster_id = NULL,
+               stat_floor_hp = NULL, stat_floor_mp = NULL, stat_floor_str = NULL,
+               stat_floor_def = NULL, stat_floor_agi = NULL, stat_floor_luk = NULL,
+               level_bonus_hp = 0, level_bonus_mp = 0, level_bonus_str = 0,
+               level_bonus_def = 0, level_bonus_agi = 0, level_bonus_luk = 0
+           WHERE id = ?""",
+        (character["character_id"],),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "debug_reset",
+        detail="重置為初心者 1 級", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    flash("（除錯）角色已重置為 1 級初心者，精通紀錄已清空")
     return redirect(url_for("character_page"))
 
 
