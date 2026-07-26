@@ -6,7 +6,11 @@
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
       <h2 style="margin:0; color:var(--gold-bright); font-size:18px;">
         {% if conquest %}
+        {% if bandit_fight %}
+        討伐山賊：{{ captured_tile_name }}
+        {% else %}
         攻城戰：{{ captured_tile_name }}
+        {% endif %}
         {% else %}
         {{ ground.name }}
         {% if monster.is_boss %}
@@ -16,7 +20,11 @@
       </h2>
       <span style="font-size:13px; color:var(--text-dim);">
         {% if conquest %}
+        {% if bandit_fight %}
+        討伐盤據於此的「山賊領主」
+        {% else %}
         挑戰「{{ defending_country_name }}」的守軍
+        {% endif %}
         {% else %}
         遭遇了「{{ monster.name }}」
         {% endif %}
@@ -38,8 +46,8 @@
       <div style="color:var(--text-dim);">力量 {{ player_stats.str }}　防禦 {{ player_stats.def }}　敏捷 {{ player_stats.agi }}　幸運 {{ player_stats.luk }}</div>
     </div>
     <div>
-      <div style="color:var(--danger); margin-bottom:4px;">{% if conquest %}守軍{% else %}敵方{% endif %}</div>
-      <div style="color:var(--text-dim);">HP {{ monster.hp }}</div>
+      <div style="color:var(--danger); margin-bottom:4px;">{% if bandit_fight %}山賊領主{% elif conquest %}守軍{% else %}敵方{% endif %}</div>
+      <div style="color:var(--text-dim);">HP {{ monster.hp }}{% if bandit_fight %}/{{ bandit_hp_max }}{% endif %}</div>
       <div style="color:var(--text-dim);">攻擊 {{ monster.atk }}　防禦 {{ monster.def }}　敏捷 {{ monster.agi }}</div>
     </div>
   </div>
@@ -53,7 +61,9 @@
     {% if won %}
       <h3 style="margin:0 0 8px; color:var(--gold-bright);">🎉 戰鬥勝利！</h3>
       <p style="margin:0; font-size:13px; color:var(--text-dim);">
-        {% if conquest %}
+        {% if bandit_fight %}
+        占領了無主之地「{{ captured_tile_name }}」，正式收歸「{{ defending_country_name }}」領土！並自動成為城主
+        {% elif conquest %}
         擊退了「{{ defending_country_name }}」的守軍，成功占領「{{ captured_tile_name }}」！
         {% else %}
         擊敗了「{{ monster.name }}」，獲得 {{ exp_gain }} 經驗值、{{ currency_gain }} 諸神幣
@@ -61,9 +71,14 @@
         {% endif %}
       </p>
     {% else %}
-      <h3 style="margin:0 0 8px; color:var(--danger);">💀 戰鬥失敗</h3>
+      <h3 style="margin:0 0 8px; color:{% if bandit_fight and not attacker_defeated %}var(--gold-bright){% else %}var(--danger){% endif %};">
+        {% if bandit_fight and not attacker_defeated %}⚔️ 交鋒告一段落{% else %}💀 戰鬥失敗{% endif %}
+      </h3>
       <p style="margin:0; font-size:13px; color:var(--text-dim);">
-        {% if conquest %}
+        {% if bandit_fight %}
+        山賊領主 HP 削減至 {{ bandit_hp_remaining }}/{{ bandit_hp_max }}，尚未擊敗
+        {% if currency_lost %}，你的 HP 已耗盡，身上 {{ currency_lost }} 諸神幣也化為烏有{% endif %}
+        {% elif conquest %}
         攻城失敗，「{{ defending_country_name }}」擊退了這次進攻
         {% if currency_lost %}，身上 {{ currency_lost }} 諸神幣被沒收充作對方的防守獎勵{% endif %}
         {% else %}

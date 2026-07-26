@@ -1,3 +1,4 @@
+from db import LEVEL_CAP
 from game_data.constants import BASE_STATS, LEVEL_STAT_GROWTH
 from game_data.equipment import _equipment_set_bonus
 from game_data.jobs import job_stat_bonus_pct
@@ -64,6 +65,46 @@ def defense_tower_stats(country, tile_type, settings):
         "name": f"{country['name']}守軍",
         "hp": s["hp"], "atk": s["str"], "def": s["def"], "agi": s["agi"],
         "element": country["element"],
+    }
+
+
+# --- Bandit lord (neutral-tile guardian) -----------------------------------
+# Every neutral map tile is guarded by the same single fixed NPC -- unlike
+# the per-tile generated hunting-ground roster, there's exactly one "山賊領主"
+# stat profile reused everywhere. Its atk/def/agi are computed the same way
+# defense_tower_stats builds a town/fortress's NPC defenders (compute_final_stats
+# at a fixed level, no gear), but with an all-zero bonus dict since a bandit
+# isn't aligned to any country -- then only its HP is scaled way up, because
+# (unlike every other fight in this game) bandit_hp persists across separate
+# /game/conquer actions and never regenerates: depleting it is meant to take
+# several repeat attacks, not one lucky roll.
+#
+# BANDIT_HP_MULTIPLIER was picked by simulating a representative max-level
+# solo attacker (Lv200, 四轉 job, 轉生 x3, a country str bonus + a 3-piece
+# equipment set) against this profile with run_battle: at x70 raw HP, that
+# attacker depleted it solo in ~9-12 repeated actions across 300 simulated
+# trials (average ~10.7) -- comfortably inside the "5-20 actions" target.
+_BANDIT_LORD_NAME = "山賊領主"
+_BANDIT_LORD_ZERO_BONUS = {
+    "hp_bonus": 0, "mp_bonus": 0, "str_bonus": 0, "def_bonus": 0, "agi_bonus": 0, "luk_bonus": 0,
+}
+BANDIT_HP_MULTIPLIER = 70
+
+
+def _bandit_lord_stats(settings=None):
+    """Builds the fixed monster-shaped stat profile for the neutral-tile
+    bandit lord: name, atk/def/agi, and its MAX hp (settings is accepted but
+    currently unused -- kept for signature symmetry with defense_tower_stats
+    in case a future admin-tunable multiplier is added to game_settings).
+    Callers resolving a fight against a specific tile must overwrite the
+    returned dict's "hp" key with that tile's persisted (possibly already-
+    damaged) map_tiles.bandit_hp instead of using this max value directly."""
+    s = compute_final_stats(_BANDIT_LORD_ZERO_BONUS, [], LEVEL_CAP)
+    return {
+        "name": _BANDIT_LORD_NAME,
+        "hp": s["hp"] * BANDIT_HP_MULTIPLIER,
+        "atk": s["str"], "def": s["def"], "agi": s["agi"],
+        "element": "",
     }
 
 

@@ -38,7 +38,7 @@ from game_data.equipment import (
 )
 from game_data.stats import (
     compute_final_stats, STAT_FLOOR_COLUMNS, character_final_stats, defense_tower_stats,
-    _current_hp_mp,
+    _current_hp_mp, _bandit_lord_stats,
 )
 from game_data.progression import (
     EXP_TIER_BANDS, exp_required_for_level, LEVEL_UP_TOTAL_POINTS, LEVEL_UP_STAT_POINT_CAP,
@@ -484,7 +484,7 @@ def _render_game(**extra):
     tiles = [
         dict(row) for row in db.execute(
             """SELECT map_tiles.id AS tile_id, map_tiles.q, map_tiles.r, map_tiles.tile_type,
-                      map_tiles.name, map_tiles.country_id,
+                      map_tiles.name, map_tiles.country_id, map_tiles.bandit_hp,
                       countries.element, countries.name AS country_name
                FROM map_tiles LEFT JOIN countries ON countries.id = map_tiles.country_id"""
         ).fetchall()
@@ -546,10 +546,20 @@ def _render_game(**extra):
     recover_cost = round(missing * settings["heal_cost_per_point"])
 
     can_attack_tile = (
-        current_tile["tile_type"] in ("fortress", "town")
-        and current_tile["country_id"] is not None
-        and current_tile["country_id"] != character["id"]
+        current_tile["tile_type"] == "neutral"
+        or (
+            current_tile["tile_type"] in ("fortress", "town")
+            and current_tile["country_id"] is not None
+            and current_tile["country_id"] != character["id"]
+        )
     )
+    bandit_hp_max = None
+    bandit_hp = None
+    if current_tile["tile_type"] == "neutral":
+        bandit_hp_max = _bandit_lord_stats(settings)["hp"]
+        # Read-only view: falls back to the max when NULL rather than writing
+        # the lazy-init back to the DB -- only game_conquer() ever persists it.
+        bandit_hp = current_tile["bandit_hp"] if current_tile["bandit_hp"] is not None else bandit_hp_max
     job_action_available = (
         (character["job_tier"] == 0 and character["level"] >= 10)
         or (character["job_tier"] == 1 and character["level"] >= 30)
@@ -609,6 +619,8 @@ def _render_game(**extra):
         recover_cost=recover_cost,
         can_attack_tile=can_attack_tile,
         defense_level=defense_level,
+        bandit_hp=bandit_hp,
+        bandit_hp_max=bandit_hp_max,
         job_action_available=job_action_available,
         own_treasury=character["treasury"],
         hexes=hexes,
@@ -1012,6 +1024,114 @@ def game_hunt_boss_room():
     )
 
 
+def _resolve_bandit_conquest(db, character, settings, stats, current_hp, current_mp):
+    """Neutral-tile fight against the persistent-HP 山賊領主 (bandit lord) --
+    the one deliberate exception to this game's usual single-action instant
+    win/loss battle model (see the module note above _bandit_lord_stats in
+    game_data/stats.py). bandit_hp survives across separate /game/conquer
+    actions and never regenerates; only a killing blow flips the tile to an
+    ordinary country-owned town, with the finishing attacker installed as
+    mayor -- matching the existing garrison system's town-capture rule."""
+    tile_name = tile_display_name(character["tile_name"], character["tile_type"])
+    bandit_profile = _bandit_lord_stats(settings)
+    bandit_hp_max = bandit_profile["hp"]
+
+    tile_row = db.execute(
+        "SELECT bandit_hp FROM map_tiles WHERE id = ?", (character["current_tile_id"],)
+    ).fetchone()
+    bandit_hp_before = tile_row["bandit_hp"] if tile_row["bandit_hp"] is not None else bandit_hp_max
+
+    bandit_monster = dict(bandit_profile)
+    bandit_monster["hp"] = bandit_hp_before
+
+    result = run_battle(
+        character["character_name"], stats, character["element"], current_hp, bandit_monster,
+        player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
+    )
+
+    bandit_hp_after = result["monster_hp"]
+    # monster_hp <= 0 always coincides with the player still being alive at
+    # that instant (run_battle's loop breaks the moment either side hits 0,
+    # so a simultaneous double-KO can't happen) -- i.e. this is equivalent to
+    # result["won"], just phrased the way the spec's mechanics are: "if the
+    # resulting monster_hp <= 0, the bandit is dead."
+    tile_captured = bandit_hp_after <= 0
+
+    # Modeled like a normal PvE loss (game_hunt), NOT the country-vs-country
+    # conquer loss rule -- there's no owning country's treasury for a
+    # neutral-tile fight to pay into, so a forfeited half-currency simply
+    # vanishes. This is keyed off the attacker's own ending HP rather than
+    # off a plain "not tile_captured", because bandit_hp is deliberately
+    # tuned to take several actions to deplete: BATTLE_ROUND_CAP is routinely
+    # hit with both sides still standing, and that "inconclusive" outcome is
+    # neither a capture nor a defeat -- it must not cost the attacker anything.
+    currency_lost = 0
+    new_currency = character["currency"]
+    if result["player_hp"] <= 0:
+        currency_lost = character["currency"] // 2
+        new_currency = character["currency"] - currency_lost
+
+    if tile_captured:
+        db.execute(
+            """UPDATE map_tiles
+               SET country_id = ?, tile_type = 'town', mayor_character_id = ?, bandit_hp = NULL
+               WHERE id = ?""",
+            (character["id"], character["character_id"], character["current_tile_id"]),
+        )
+        outcome_detail = f"擊敗盤據於{tile_name}的山賊領主，將無主之地收歸領土並自動成為城主"
+    else:
+        db.execute(
+            "UPDATE map_tiles SET bandit_hp = ? WHERE id = ?",
+            (bandit_hp_after, character["current_tile_id"]),
+        )
+        if currency_lost:
+            outcome_detail = (
+                f"攻打{tile_name}的山賊領主時力竭倒下，身上{currency_lost}諸神幣化為烏有"
+                f"（山賊領主剩餘 HP {bandit_hp_after}/{bandit_hp_max}）"
+            )
+        else:
+            outcome_detail = f"削弱了{tile_name}的山賊領主（剩餘 HP {bandit_hp_after}/{bandit_hp_max}）"
+
+    db.execute(
+        """UPDATE characters
+           SET currency = ?, current_hp = ?, current_mp = ?, next_action_at = ?,
+               battles_count = battles_count + 1, wins_count = wins_count + ?,
+               pending_boss_monster_id = NULL
+           WHERE id = ?""",
+        (
+            new_currency, result["player_hp"], result["player_mp"], _next_action_at(settings["turn_wait_seconds"]),
+            1 if tile_captured else 0, character["character_id"],
+        ),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "conquer_win" if tile_captured else "conquer_loss",
+        detail=outcome_detail, ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    return render_template(
+        "battle.html",
+        conquest=True,
+        bandit_fight=True,
+        captured_tile_name=tile_name,
+        defending_country_name=character["name"],  # attacker's own country, once captured
+        monster=bandit_monster,
+        log=result["log"],
+        won=tile_captured,
+        tile_captured=tile_captured,
+        attacker_defeated=result["player_hp"] <= 0,
+        currency_lost=currency_lost,
+        player_hp=result["player_hp"],
+        max_hp=stats["hp"],
+        player_mp=result["player_mp"],
+        max_mp=stats["mp"],
+        player_stats=stats,
+        bandit_hp_remaining=max(0, bandit_hp_after),
+        bandit_hp_max=bandit_hp_max,
+    )
+
+
 @app.route("/game/conquer", methods=["POST"])
 @character_required
 def game_conquer():
@@ -1040,11 +1160,13 @@ def game_conquer():
         flash("還在冷卻中，請稍候再行動")
         return redirect(url_for("game"))
 
-    if (
-        character["tile_type"] not in ("fortress", "town")
-        or character["tile_country_id"] is None
-        or character["tile_country_id"] == character["id"]
-    ):
+    is_neutral_target = character["tile_type"] == "neutral"
+    is_enemy_town_target = (
+        character["tile_type"] in ("fortress", "town")
+        and character["tile_country_id"] is not None
+        and character["tile_country_id"] != character["id"]
+    )
+    if not is_neutral_target and not is_enemy_town_target:
         db.close()
         flash("這裡沒有可以攻打的敵方據點")
         return redirect(url_for("game"))
@@ -1077,6 +1199,9 @@ def game_conquer():
 
     if own_garrison is not None:
         db.execute("DELETE FROM garrisons WHERE id = ?", (own_garrison["id"],))
+
+    if is_neutral_target:
+        return _resolve_bandit_conquest(db, character, settings, stats, current_hp, current_mp)
 
     defending_country = db.execute(
         "SELECT * FROM countries WHERE id = ?", (character["tile_country_id"],)

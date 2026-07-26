@@ -335,6 +335,12 @@ def _ensure_map_tile_columns(conn):
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(map_tiles)")]
     if "mayor_character_id" not in cols:
         conn.execute("ALTER TABLE map_tiles ADD COLUMN mayor_character_id INTEGER")
+    if "bandit_hp" not in cols:
+        # NULL means "not yet damaged, full HP" -- lazily initialized to the
+        # bandit lord's max HP the first time anyone attacks that neutral
+        # tile (see _bandit_lord_stats/game_conquer), rather than eagerly
+        # seeded for every neutral tile at map-generation time.
+        conn.execute("ALTER TABLE map_tiles ADD COLUMN bandit_hp INTEGER")
 
 
 def _upgrade_country_bonuses(conn):

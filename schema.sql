@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS map_tiles (
     name TEXT NOT NULL,
     country_id INTEGER,
     mayor_character_id INTEGER,
+    bandit_hp INTEGER,
     FOREIGN KEY (country_id) REFERENCES countries(id),
     FOREIGN KEY (mayor_character_id) REFERENCES characters(id)
 );
