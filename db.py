@@ -82,30 +82,103 @@ DEFAULT_ITEMS = [
     {"shop_type": "accessory", "name": "金戒指", "price": 800, "stat": "luk", "stat_bonus": 20},
 ]
 
-# Monster stats are tuned to be roughly fair for a character right at the
-# start of that ground's level range (base stats + LEVEL_STAT_GROWTH from
-# app.py, before any gear) -- they get easier as you outlevel the tier.
-DEFAULT_MONSTERS = [
-    {"tier": "beginner", "name": "潑皮野狼", "is_boss": 0, "hp": 70, "atk": 14, "def": 5, "agi": 10, "currency_reward": 15, "element": "木"},
-    {"tier": "beginner", "name": "荒野土狼", "is_boss": 0, "hp": 85, "atk": 16, "def": 6, "agi": 12, "currency_reward": 18, "element": "土"},
-    {"tier": "beginner", "name": "銹刃盜賊", "is_boss": 0, "hp": 75, "atk": 15, "def": 7, "agi": 14, "currency_reward": 20, "element": "金"},
-    {"tier": "beginner", "name": "荒原狼王", "is_boss": 1, "hp": 300, "atk": 30, "def": 12, "agi": 20, "currency_reward": 100, "element": "木"},
-
-    {"tier": "intermediate", "name": "赤鱗蜥蜴", "is_boss": 0, "hp": 160, "atk": 26, "def": 13, "agi": 18, "currency_reward": 35, "element": "火"},
-    {"tier": "intermediate", "name": "岩甲蟹", "is_boss": 0, "hp": 200, "atk": 24, "def": 18, "agi": 14, "currency_reward": 38, "element": "土"},
-    {"tier": "intermediate", "name": "黑霧遊魂", "is_boss": 0, "hp": 150, "atk": 30, "def": 10, "agi": 26, "currency_reward": 36, "element": "水"},
-    {"tier": "intermediate", "name": "熔岩巨蠍王", "is_boss": 1, "hp": 650, "atk": 55, "def": 25, "agi": 32, "currency_reward": 220, "element": "火"},
-
-    {"tier": "advanced", "name": "鋼骨巨魔", "is_boss": 0, "hp": 320, "atk": 50, "def": 28, "agi": 26, "currency_reward": 70, "element": "金"},
-    {"tier": "advanced", "name": "幽冥劍靈", "is_boss": 0, "hp": 280, "atk": 58, "def": 22, "agi": 38, "currency_reward": 75, "element": "水"},
-    {"tier": "advanced", "name": "血眸狂虎", "is_boss": 0, "hp": 350, "atk": 52, "def": 25, "agi": 34, "currency_reward": 72, "element": "火"},
-    {"tier": "advanced", "name": "深淵魔狼王", "is_boss": 1, "hp": 1100, "atk": 90, "def": 45, "agi": 45, "currency_reward": 450, "element": "水"},
-
-    {"tier": "ultimate", "name": "天穹巨龍裔", "is_boss": 0, "hp": 600, "atk": 85, "def": 40, "agi": 42, "currency_reward": 150, "element": "金"},
-    {"tier": "ultimate", "name": "虛空吞噬者", "is_boss": 0, "hp": 550, "atk": 95, "def": 35, "agi": 50, "currency_reward": 160, "element": "土"},
-    {"tier": "ultimate", "name": "混沌石像鬼", "is_boss": 0, "hp": 700, "atk": 75, "def": 50, "agi": 35, "currency_reward": 155, "element": "土"},
-    {"tier": "ultimate", "name": "終焉魔神", "is_boss": 1, "hp": 2000, "atk": 150, "def": 70, "agi": 60, "currency_reward": 900, "element": "火"},
+# Monster roster, generated rather than hand-typed: every 5-level bracket
+# within a hunting ground gets 2 regular monsters (two long-running species
+# per tier, escalating through an adjective ladder as the bracket climbs),
+# plus exactly one 守衛怪 (guardian) and one 魔王 (boss, at the tier's milestone
+# level: 30/70/120/200) per tier. Regular-monster stats interpolate linearly
+# from a tier's low anchor (its first bracket) to its high anchor (its last
+# bracket, i.e. the milestone level); guardian = high anchor x1.2, boss = high
+# anchor x1.5 (per design: "魔王比一般[milestone]級怪物的各項屬性再多50%").
+_MONSTER_TIER_CONFIG = [
+    {
+        "tier": "beginner", "min_level": 1, "max_level": 30, "brackets": 6,
+        "low": {"hp": 70, "atk": 14, "def": 6, "agi": 10, "currency_reward": 15},
+        "high": {"hp": 220, "atk": 24, "def": 10, "agi": 18, "currency_reward": 70},
+        "species": [("野狼", "木"), ("山豬", "土")],
+        "adjectives": ["弱小", "普通", "精壯", "兇猛", "兇暴", "狂暴"],
+        "guardian": {"name": "荒野守衛犀", "element": "土"},
+        "boss": {"name": "荒原狼王", "element": "木"},
+    },
+    {
+        "tier": "intermediate", "min_level": 31, "max_level": 70, "brackets": 8,
+        "low": {"hp": 170, "atk": 27, "def": 14, "agi": 19, "currency_reward": 38},
+        "high": {"hp": 480, "atk": 42, "def": 22, "agi": 30, "currency_reward": 160},
+        "species": [("蜥蜴", "火"), ("遊魂", "水")],
+        "adjectives": ["幼年", "普通", "精壯", "兇猛", "猛烈", "兇暴", "狂暴", "嗜血"],
+        "guardian": {"name": "熔岩守衛犬", "element": "火"},
+        "boss": {"name": "熔岩巨蠍王", "element": "火"},
+    },
+    {
+        "tier": "advanced", "min_level": 71, "max_level": 120, "brackets": 10,
+        "low": {"hp": 320, "atk": 50, "def": 25, "agi": 30, "currency_reward": 75},
+        "high": {"hp": 800, "atk": 75, "def": 38, "agi": 48, "currency_reward": 320},
+        "species": [("巨魔", "金"), ("劍靈", "水")],
+        "adjectives": ["幼年", "普通", "精壯", "兇猛", "猛烈", "兇暴", "狂暴", "嗜血", "煞氣", "修羅化"],
+        "guardian": {"name": "幽冥守衛靈", "element": "水"},
+        "boss": {"name": "深淵魔狼王", "element": "水"},
+    },
+    {
+        "tier": "ultimate", "min_level": 121, "max_level": LEVEL_CAP, "brackets": 16,
+        "low": {"hp": 620, "atk": 85, "def": 42, "agi": 48, "currency_reward": 160},
+        "high": {"hp": 1400, "atk": 130, "def": 65, "agi": 75, "currency_reward": 650},
+        "species": [("巨龍裔", "金"), ("石像鬼", "土")],
+        "adjectives": [
+            "幼年", "普通", "精壯", "兇猛", "猛烈", "兇暴", "狂暴", "嗜血",
+            "煞氣", "修羅化", "半神化", "神威", "天怒", "滅世", "混沌", "終焉",
+        ],
+        "guardian": {"name": "虛空守衛神", "element": "土"},
+        "boss": {"name": "終焉魔神", "element": "火"},
+    },
 ]
+
+GUARDIAN_STAT_MULT = 1.2
+GUARDIAN_CURRENCY_MULT = 2.5
+BOSS_STAT_MULT = 1.5
+BOSS_CURRENCY_MULT = 5.0
+_STAT_KEYS = ("hp", "atk", "def", "agi")
+
+
+def _build_default_monsters():
+    monsters = []
+    for cfg in _MONSTER_TIER_CONFIG:
+        n = cfg["brackets"]
+        low, high = cfg["low"], cfg["high"]
+        for i, adjective in enumerate(cfg["adjectives"]):
+            t = i / (n - 1) if n > 1 else 0
+            stats = {k: round(low[k] + (high[k] - low[k]) * t) for k in _STAT_KEYS}
+            currency = round(low["currency_reward"] + (high["currency_reward"] - low["currency_reward"]) * t)
+            level_min = cfg["min_level"] + i * 5
+            level_max = level_min + 4
+            for species, element in cfg["species"]:
+                monsters.append({
+                    "tier": cfg["tier"], "name": f"{adjective}{species}", "is_boss": 0, "is_guardian": 0,
+                    "level_min": level_min, "level_max": level_max,
+                    "hp": stats["hp"], "atk": stats["atk"], "def": stats["def"], "agi": stats["agi"],
+                    "currency_reward": currency, "element": element,
+                })
+        guardian_stats = {k: round(high[k] * GUARDIAN_STAT_MULT) for k in _STAT_KEYS}
+        monsters.append({
+            "tier": cfg["tier"], "name": cfg["guardian"]["name"], "is_boss": 0, "is_guardian": 1,
+            "level_min": None, "level_max": None,
+            "hp": guardian_stats["hp"], "atk": guardian_stats["atk"],
+            "def": guardian_stats["def"], "agi": guardian_stats["agi"],
+            "currency_reward": round(high["currency_reward"] * GUARDIAN_CURRENCY_MULT),
+            "element": cfg["guardian"]["element"],
+        })
+        boss_stats = {k: round(high[k] * BOSS_STAT_MULT) for k in _STAT_KEYS}
+        monsters.append({
+            "tier": cfg["tier"], "name": cfg["boss"]["name"], "is_boss": 1, "is_guardian": 0,
+            "level_min": None, "level_max": None,
+            "hp": boss_stats["hp"], "atk": boss_stats["atk"],
+            "def": boss_stats["def"], "agi": boss_stats["agi"],
+            "currency_reward": round(high["currency_reward"] * BOSS_CURRENCY_MULT),
+            "element": cfg["boss"]["element"],
+        })
+    return monsters
+
+
+DEFAULT_MONSTERS = _build_default_monsters()
 
 
 def get_db():
@@ -197,6 +270,12 @@ def _ensure_monster_columns(conn):
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(monsters)")]
     if "element" not in cols:
         conn.execute("ALTER TABLE monsters ADD COLUMN element TEXT NOT NULL DEFAULT ''")
+    if "is_guardian" not in cols:
+        conn.execute("ALTER TABLE monsters ADD COLUMN is_guardian INTEGER NOT NULL DEFAULT 0")
+    if "level_min" not in cols:
+        conn.execute("ALTER TABLE monsters ADD COLUMN level_min INTEGER")
+    if "level_max" not in cols:
+        conn.execute("ALTER TABLE monsters ADD COLUMN level_max INTEGER")
 
 
 def _upgrade_country_bonuses(conn):
@@ -238,6 +317,35 @@ def _upgrade_monster_elements(conn):
             )
 
 
+def _rebuild_monster_roster(conn):
+    """One-time full replace of the monsters table with the level-bracketed
+    roster (2 named monsters per 5-level bracket + 1 守衛怪 + 1 魔王 per tier),
+    detected by the absence of any is_guardian=1 row. No admin UI ever edits
+    monsters directly, so a full wipe+reseed is safe here (unlike the
+    legacy-value-check pattern used for country bonuses)."""
+    has_guardian = conn.execute(
+        "SELECT COUNT(*) AS c FROM monsters WHERE is_guardian = 1"
+    ).fetchone()["c"]
+    if has_guardian:
+        return
+    conn.execute("DELETE FROM monsters")
+    ground_ids = {
+        row["tier"]: row["id"] for row in conn.execute("SELECT id, tier FROM hunting_grounds")
+    }
+    for m in DEFAULT_MONSTERS:
+        conn.execute(
+            """INSERT INTO monsters
+               (hunting_ground_id, name, is_boss, is_guardian, level_min, level_max,
+                hp, atk, def, agi, currency_reward, element)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                ground_ids[m["tier"]], m["name"], m["is_boss"], m["is_guardian"],
+                m["level_min"], m["level_max"],
+                m["hp"], m["atk"], m["def"], m["agi"], m["currency_reward"], m["element"],
+            ),
+        )
+
+
 def _upgrade_hunting_ground_bounds(conn):
     """One-time bump of the ultimate tier's max_level from the old LEVEL_CAP
     (1000) to the new one (200, once the job/rebirth tier system replaced the
@@ -275,6 +383,12 @@ def _ensure_game_settings_columns(conn):
         conn.execute("ALTER TABLE game_settings ADD COLUMN exp_growth_tier4_percent REAL NOT NULL DEFAULT 0.8")
     if "rebirth_stat_bonus_percent" not in cols:
         conn.execute("ALTER TABLE game_settings ADD COLUMN rebirth_stat_bonus_percent REAL NOT NULL DEFAULT 15")
+    if "guardian_encounter_percent" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN guardian_encounter_percent REAL NOT NULL DEFAULT 2")
+    if "boss_room_trigger_percent" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN boss_room_trigger_percent REAL NOT NULL DEFAULT 50")
+    if "guardian_exp_multiplier" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN guardian_exp_multiplier REAL NOT NULL DEFAULT 2")
 
 
 def init_db():
@@ -363,15 +477,19 @@ def seed_defaults():
         }
         for m in DEFAULT_MONSTERS:
             conn.execute(
-                """INSERT INTO monsters (hunting_ground_id, name, is_boss, hp, atk, def, agi, currency_reward, element)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO monsters
+                   (hunting_ground_id, name, is_boss, is_guardian, level_min, level_max,
+                    hp, atk, def, agi, currency_reward, element)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    ground_ids[m["tier"]], m["name"], m["is_boss"],
+                    ground_ids[m["tier"]], m["name"], m["is_boss"], m["is_guardian"],
+                    m["level_min"], m["level_max"],
                     m["hp"], m["atk"], m["def"], m["agi"], m["currency_reward"], m["element"],
                 ),
             )
     else:
         _upgrade_monster_elements(conn)
+        _rebuild_monster_roster(conn)
 
     conn.commit()
     conn.close()

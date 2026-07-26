@@ -1245,36 +1245,68 @@ def game_hunt():
     monsters = db.execute(
         "SELECT * FROM monsters WHERE hunting_ground_id = ?", (ground["id"],)
     ).fetchall()
-    regulars = [m for m in monsters if not m["is_boss"]]
-    bosses = [m for m in monsters if m["is_boss"]]
-    is_boss_fight = bool(bosses) and random.random() * 100 < settings["boss_encounter_percent"]
-    pool = bosses if is_boss_fight else (regulars or bosses)
-    if not pool:
+    regulars_in_bracket = [
+        m for m in monsters
+        if not m["is_boss"] and not m["is_guardian"]
+        and m["level_min"] is not None and m["level_min"] <= character["level"] <= m["level_max"]
+    ]
+    regulars_any = [m for m in monsters if not m["is_boss"] and not m["is_guardian"]]
+    guardian = next((m for m in monsters if m["is_guardian"]), None)
+    boss = next((m for m in monsters if m["is_boss"]), None)
+    regular_pool = regulars_in_bracket or regulars_any
+    if not regular_pool and not guardian:
         db.close()
         flash("這個打怪場目前還沒有設定怪物")
         return redirect(url_for("game"))
-    monster = random.choice(pool)
 
-    result = run_battle(
-        character["character_name"], stats, character["element"], current_hp, monster,
-        player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
-    )
+    is_guardian_fight = bool(guardian) and random.random() * 100 < settings["guardian_encounter_percent"]
+    first_monster = guardian if is_guardian_fight else random.choice(regular_pool)
 
-    exp_gain = 0
-    currency_gain = 0
+    usable_skills = _character_usable_skills(db, character)
+    level, exp, currency = character["level"], character["exp"], character["currency"]
+    hp, mp = current_hp, current_mp
+    exp_gain_total = 0
+    currency_gain_total = 0
     currency_lost = 0
-    new_level, new_exp = character["level"], character["exp"]
-    if result["won"]:
-        exp_gain = ground["monster_exp"]
-        if monster["is_boss"]:
-            exp_gain = round(exp_gain * settings["boss_exp_multiplier"])
-        currency_gain = monster["currency_reward"]
-        currency_gain = round(currency_gain * (1 + gold_luk_bonus_pct(stats["luk"]) / 100))
-        new_level, new_exp = apply_exp(character["level"], character["exp"], exp_gain, settings)
-        new_currency = character["currency"] + currency_gain
-    else:
-        currency_lost = character["currency"] // 2
-        new_currency = character["currency"] - currency_lost
+    log = []
+    won = False
+    boss_room_triggered = False
+    final_monster = first_monster
+
+    def resolve_fight(monster, exp_multiplier):
+        nonlocal level, exp, currency, hp, mp, exp_gain_total, currency_gain_total, currency_lost, log, won
+        result = run_battle(
+            character["character_name"], stats, character["element"], hp, monster,
+            player_mp=mp, usable_skills=usable_skills,
+        )
+        hp, mp = result["player_hp"], result["player_mp"]
+        log.extend(result["log"])
+        won = result["won"]
+        if won:
+            gain = round(ground["monster_exp"] * exp_multiplier)
+            reward = round(monster["currency_reward"] * (1 + gold_luk_bonus_pct(stats["luk"]) / 100))
+            level, exp = apply_exp(level, exp, gain, settings)
+            currency += reward
+            exp_gain_total += gain
+            currency_gain_total += reward
+        else:
+            lost = currency // 2
+            currency -= lost
+            currency_lost = lost
+        return won
+
+    fight1_won = resolve_fight(first_monster, settings["guardian_exp_multiplier"] if is_guardian_fight else 1.0)
+
+    if (
+        is_guardian_fight and fight1_won and boss is not None and hp > 0
+        and random.random() * 100 < settings["boss_room_trigger_percent"]
+    ):
+        boss_room_triggered = True
+        final_monster = boss
+        log.append(f"擊敗{first_monster['name']}，觸發魔王房間，{boss['name']}現身！")
+        resolve_fight(boss, settings["boss_exp_multiplier"])
+
+    new_level, new_exp, new_currency = level, exp, currency
 
     progression = _process_job_progression(db, character, character["level"], new_level)
     new_job_class = progression["job_class"] if progression else character["job_class"]
@@ -1287,16 +1319,20 @@ def game_hunt():
                job_class = ?, job_tier = ?
            WHERE id = ?""",
         (
-            new_level, new_exp, new_currency, result["player_hp"], result["player_mp"],
-            _next_action_at(settings["turn_wait_seconds"]), 1 if result["won"] else 0,
+            new_level, new_exp, new_currency, hp, mp,
+            _next_action_at(settings["turn_wait_seconds"]), 1 if won else 0,
             new_job_class, new_job_tier,
             character["character_id"],
         ),
     )
     outcome_detail = (
-        f"擊敗{monster['name']}，+{exp_gain} EXP +{currency_gain} 諸神幣"
-        if result["won"] else f"敗給{monster['name']}，身上 {currency_lost} 諸神幣化為烏有"
+        f"擊敗{final_monster['name']}，+{exp_gain_total} EXP +{currency_gain_total} 諸神幣"
+        if won else f"敗給{final_monster['name']}，身上 {currency_lost} 諸神幣化為烏有"
     )
+    if boss_room_triggered:
+        outcome_detail = f"[魔王房間] {outcome_detail}"
+    elif is_guardian_fight:
+        outcome_detail = f"[守衛怪] {outcome_detail}"
     log_activity(
         db, session["user_id"], session["username"], "hunt",
         detail=f"{ground['name']} {outcome_detail}", ip_address=request.remote_addr,
@@ -1307,17 +1343,20 @@ def game_hunt():
     return render_template(
         "battle.html",
         ground=ground,
-        monster=monster,
-        log=result["log"],
-        won=result["won"],
+        monster=final_monster,
+        guardian_encounter=is_guardian_fight,
+        guardian_monster=first_monster if is_guardian_fight else None,
+        boss_room_triggered=boss_room_triggered,
+        log=log,
+        won=won,
         leveled_up=new_level > character["level"],
         new_level=new_level,
-        exp_gain=exp_gain,
-        currency_gain=currency_gain,
+        exp_gain=exp_gain_total,
+        currency_gain=currency_gain_total,
         currency_lost=currency_lost,
-        player_hp=result["player_hp"],
+        player_hp=hp,
         max_hp=stats["hp"],
-        player_mp=result["player_mp"],
+        player_mp=mp,
         max_mp=stats["mp"],
     )
 
@@ -2538,7 +2577,9 @@ def admin_update_game_settings():
         exp_growth_tier4_percent = float(request.form.get("exp_growth_tier4_percent", ""))
         rebirth_stat_bonus_percent = float(request.form.get("rebirth_stat_bonus_percent", ""))
         sell_back_percent = float(request.form.get("sell_back_percent", ""))
-        boss_encounter_percent = float(request.form.get("boss_encounter_percent", ""))
+        guardian_encounter_percent = float(request.form.get("guardian_encounter_percent", ""))
+        guardian_exp_multiplier = float(request.form.get("guardian_exp_multiplier", ""))
+        boss_room_trigger_percent = float(request.form.get("boss_room_trigger_percent", ""))
         boss_exp_multiplier = float(request.form.get("boss_exp_multiplier", ""))
         shop_tax_percent = float(request.form.get("shop_tax_percent", ""))
         heal_cost_per_point = float(request.form.get("heal_cost_per_point", ""))
@@ -2565,8 +2606,12 @@ def admin_update_game_settings():
         flash("裝備回收比例必須介於 0 到 100 之間")
         return redirect(url_for("admin_settings"))
 
-    if boss_encounter_percent < 0 or boss_encounter_percent > 100 or boss_exp_multiplier < 1:
-        flash("首領遭遇機率須介於 0 到 100，經驗倍率須大於等於 1")
+    if (
+        guardian_encounter_percent < 0 or guardian_encounter_percent > 100
+        or boss_room_trigger_percent < 0 or boss_room_trigger_percent > 100
+        or guardian_exp_multiplier < 1 or boss_exp_multiplier < 1
+    ):
+        flash("守衛怪遭遇機率／魔王房間觸發機率須介於 0 到 100，經驗倍率須大於等於 1")
         return redirect(url_for("admin_settings"))
 
     if shop_tax_percent < 0 or shop_tax_percent > 100 or heal_cost_per_point < 0:
@@ -2583,14 +2628,16 @@ def admin_update_game_settings():
            SET turn_wait_seconds = ?, exp_base = ?, exp_growth_novice_percent = ?,
                exp_growth_tier2_percent = ?, exp_growth_tier3_percent = ?, exp_growth_tier4_percent = ?,
                rebirth_stat_bonus_percent = ?, sell_back_percent = ?,
-               boss_encounter_percent = ?, boss_exp_multiplier = ?, shop_tax_percent = ?,
+               guardian_encounter_percent = ?, guardian_exp_multiplier = ?,
+               boss_room_trigger_percent = ?, boss_exp_multiplier = ?, shop_tax_percent = ?,
                heal_cost_per_point = ?, town_defense_level = ?, fortress_defense_level = ?
            WHERE id = 1""",
         (
             turn_wait_seconds, exp_base, exp_growth_novice_percent,
             exp_growth_tier2_percent, exp_growth_tier3_percent, exp_growth_tier4_percent,
             rebirth_stat_bonus_percent, sell_back_percent,
-            boss_encounter_percent, boss_exp_multiplier, shop_tax_percent,
+            guardian_encounter_percent, guardian_exp_multiplier,
+            boss_room_trigger_percent, boss_exp_multiplier, shop_tax_percent,
             heal_cost_per_point, town_defense_level, fortress_defense_level,
         ),
     )
