@@ -58,7 +58,6 @@ GOVERNMENT_ROLES = [
 
 # Below this level, 升級軟糖 may still be used to skip grinding; past it,
 # levelling only comes from killing monsters.
-LEVEL_CANDY_MAX_LEVEL = 500
 
 def tile_display_name(name, tile_type):
     return f"{name}要塞" if tile_type == "fortress" else name
