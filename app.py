@@ -2114,6 +2114,17 @@ def admin_logs():
     return render_template("admin_logs.html", logs=logs, active_tab="logs")
 
 
+@app.route("/admin/logs/clear", methods=["POST"])
+@admin_required
+def admin_clear_logs():
+    db = get_db()
+    db.execute("DELETE FROM activity_log")
+    db.commit()
+    db.close()
+    flash("系統紀錄已清空")
+    return redirect(url_for("admin_logs"))
+
+
 @app.route("/admin/countries/<int:country_id>", methods=["POST"])
 @admin_required
 def admin_update_country(country_id):
