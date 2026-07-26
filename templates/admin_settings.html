@@ -102,11 +102,8 @@
           <label>最高等級</label>
           <input type="text" inputmode="numeric" name="max_level" value="{{ g.max_level }}">
         </div>
-        <div>
-          <label>擊殺經驗值</label>
-          <input type="text" inputmode="numeric" name="monster_exp" value="{{ g.monster_exp }}">
-        </div>
       </div>
+      <p class="hint" style="margin:8px 0 0;">擊殺經驗值改由每隻怪物自己的數值決定（依 5 級為一區間遞增），不再是整個打怪場統一的數字</p>
       <button type="submit">儲存「{{ g.name }}」</button>
     </form>
   </div>

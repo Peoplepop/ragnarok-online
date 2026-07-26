@@ -134,7 +134,9 @@ CREATE TABLE IF NOT EXISTS items (
     name TEXT NOT NULL,
     price INTEGER NOT NULL DEFAULT 0,
     stat TEXT NOT NULL,
-    stat_bonus INTEGER NOT NULL DEFAULT 0
+    stat_bonus INTEGER NOT NULL DEFAULT 0,
+    country_id INTEGER,
+    FOREIGN KEY (country_id) REFERENCES countries(id)
 );
 
 CREATE TABLE IF NOT EXISTS inventory (
@@ -160,6 +162,7 @@ CREATE TABLE IF NOT EXISTS monsters (
     def INTEGER NOT NULL,
     agi INTEGER NOT NULL,
     currency_reward INTEGER NOT NULL DEFAULT 0,
+    exp_reward INTEGER NOT NULL DEFAULT 0,
     element TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (hunting_ground_id) REFERENCES hunting_grounds(id)
 );

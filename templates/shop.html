@@ -60,6 +60,7 @@
 
   <div class="panel" style="margin-bottom:20px;">
     <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">購買裝備</h3>
+    <p class="hint" style="margin-top:0;">標示【○○套裝】的裝備只在該國要塞販售，武器／防具／飾品同屬一套穿滿 2 件或 3 件會有額外屬性加成</p>
     <form method="post" action="{{ url_for('game_shop_buy') }}">
       {% for shop_type, label in shop_type_labels.items() %}
       {% if shop_items[shop_type] %}
@@ -69,6 +70,7 @@
           {% for item in shop_items[shop_type] %}
           <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
             <input type="checkbox" name="item_ids" value="{{ item.id }}" class="turn-action-control">
+            {% if item.set_country_name %}<span style="color:var(--gold-bright);">【{{ item.set_country_name }}套裝】</span>{% endif %}
             {{ item.name }}（{{ item.stat }}+{{ item.stat_bonus }}，{{ item.price }} 諸神幣）
           </label>
           {% endfor %}

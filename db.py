@@ -71,16 +71,48 @@ DEFAULT_HUNTING_GROUNDS = [
 ]
 
 DEFAULT_ITEMS = [
-    {"shop_type": "weapon", "name": "木劍", "price": 50, "stat": "str", "stat_bonus": 2},
-    {"shop_type": "weapon", "name": "鐵劍", "price": 200, "stat": "str", "stat_bonus": 8},
-    {"shop_type": "weapon", "name": "秘銀劍", "price": 800, "stat": "str", "stat_bonus": 20},
-    {"shop_type": "armor", "name": "布甲", "price": 50, "stat": "def", "stat_bonus": 2},
-    {"shop_type": "armor", "name": "鐵甲", "price": 200, "stat": "def", "stat_bonus": 8},
-    {"shop_type": "armor", "name": "龍鱗甲", "price": 800, "stat": "def", "stat_bonus": 20},
-    {"shop_type": "accessory", "name": "銅戒指", "price": 50, "stat": "luk", "stat_bonus": 2},
-    {"shop_type": "accessory", "name": "銀戒指", "price": 200, "stat": "luk", "stat_bonus": 8},
-    {"shop_type": "accessory", "name": "金戒指", "price": 800, "stat": "luk", "stat_bonus": 20},
+    {"shop_type": "weapon", "name": "木劍", "price": 50, "stat": "str", "stat_bonus": 2, "country_name": None},
+    {"shop_type": "weapon", "name": "鐵劍", "price": 200, "stat": "str", "stat_bonus": 8, "country_name": None},
+    {"shop_type": "weapon", "name": "秘銀劍", "price": 800, "stat": "str", "stat_bonus": 20, "country_name": None},
+    {"shop_type": "armor", "name": "布甲", "price": 50, "stat": "def", "stat_bonus": 2, "country_name": None},
+    {"shop_type": "armor", "name": "鐵甲", "price": 200, "stat": "def", "stat_bonus": 8, "country_name": None},
+    {"shop_type": "armor", "name": "龍鱗甲", "price": 800, "stat": "def", "stat_bonus": 20, "country_name": None},
+    {"shop_type": "accessory", "name": "銅戒指", "price": 50, "stat": "luk", "stat_bonus": 2, "country_name": None},
+    {"shop_type": "accessory", "name": "銀戒指", "price": 200, "stat": "luk", "stat_bonus": 8, "country_name": None},
+    {"shop_type": "accessory", "name": "金戒指", "price": 800, "stat": "luk", "stat_bonus": 20, "country_name": None},
 ]
+
+# Country-themed equipment sets: only sold in that country's own fortress
+# shop (items.country_id), priced well above the top regular tier (800) per
+# the "套裝必須比一般裝備貴" requirement. The 4 elemental countries stack all
+# 3 pieces onto their own signature stat (so the set rewards committing to
+# one stat hard); the balanced earth country instead spreads its 3 pieces
+# across str/def/luk like ordinary gear, matching its "六圍均衡" theme. Set
+# bonuses for wearing 2 or 3 pieces together are computed at combat-stat
+# time in app.py (SET_BONUS_TIERS / EARTH_SET_BONUS_TIERS), not stored here.
+SET_ITEM_PRICE = 1400
+SET_ITEM_STAT_BONUS = 26
+DEFAULT_SET_ITEMS = [
+    {"shop_type": "weapon", "name": "流金劍", "stat": "luk", "country_name": "百鍊流金國"},
+    {"shop_type": "armor", "name": "流金鎧", "stat": "luk", "country_name": "百鍊流金國"},
+    {"shop_type": "accessory", "name": "流金墜飾", "stat": "luk", "country_name": "百鍊流金國"},
+    {"shop_type": "weapon", "name": "靈木劍", "stat": "def", "country_name": "翡翠靈木國"},
+    {"shop_type": "armor", "name": "靈木鎧", "stat": "def", "country_name": "翡翠靈木國"},
+    {"shop_type": "accessory", "name": "靈木墜飾", "stat": "def", "country_name": "翡翠靈木國"},
+    {"shop_type": "weapon", "name": "千泉劍", "stat": "agi", "country_name": "蔚藍千泉國"},
+    {"shop_type": "armor", "name": "千泉鎧", "stat": "agi", "country_name": "蔚藍千泉國"},
+    {"shop_type": "accessory", "name": "千泉墜飾", "stat": "agi", "country_name": "蔚藍千泉國"},
+    {"shop_type": "weapon", "name": "業火劍", "stat": "str", "country_name": "紅蓮業火國"},
+    {"shop_type": "armor", "name": "業火鎧", "stat": "str", "country_name": "紅蓮業火國"},
+    {"shop_type": "accessory", "name": "業火墜飾", "stat": "str", "country_name": "紅蓮業火國"},
+    {"shop_type": "weapon", "name": "母育劍", "stat": "str", "country_name": "萬物母育國"},
+    {"shop_type": "armor", "name": "母育鎧", "stat": "def", "country_name": "萬物母育國"},
+    {"shop_type": "accessory", "name": "母育墜飾", "stat": "luk", "country_name": "萬物母育國"},
+]
+for _set_item in DEFAULT_SET_ITEMS:
+    _set_item["price"] = SET_ITEM_PRICE
+    _set_item["stat_bonus"] = SET_ITEM_STAT_BONUS
+DEFAULT_ITEMS = DEFAULT_ITEMS + DEFAULT_SET_ITEMS
 
 # Monster roster, generated rather than hand-typed: every 5-level bracket
 # within a hunting ground gets 2 regular monsters (two long-running species
@@ -93,8 +125,8 @@ DEFAULT_ITEMS = [
 _MONSTER_TIER_CONFIG = [
     {
         "tier": "beginner", "min_level": 1, "max_level": 30, "brackets": 6,
-        "low": {"hp": 70, "atk": 14, "def": 6, "agi": 10, "currency_reward": 15},
-        "high": {"hp": 220, "atk": 24, "def": 10, "agi": 18, "currency_reward": 70},
+        "low": {"hp": 70, "atk": 14, "def": 6, "agi": 10, "currency_reward": 15, "exp_reward": 9},
+        "high": {"hp": 220, "atk": 24, "def": 10, "agi": 18, "currency_reward": 70, "exp_reward": 15},
         "species": [("野狼", "木"), ("山豬", "土")],
         "adjectives": ["弱小", "普通", "精壯", "兇猛", "兇暴", "狂暴"],
         "guardian": {"name": "荒野守衛犀", "element": "土"},
@@ -102,8 +134,8 @@ _MONSTER_TIER_CONFIG = [
     },
     {
         "tier": "intermediate", "min_level": 31, "max_level": 70, "brackets": 8,
-        "low": {"hp": 170, "atk": 27, "def": 14, "agi": 19, "currency_reward": 38},
-        "high": {"hp": 480, "atk": 42, "def": 22, "agi": 30, "currency_reward": 160},
+        "low": {"hp": 170, "atk": 27, "def": 14, "agi": 19, "currency_reward": 38, "exp_reward": 18},
+        "high": {"hp": 480, "atk": 42, "def": 22, "agi": 30, "currency_reward": 160, "exp_reward": 28},
         "species": [("蜥蜴", "火"), ("遊魂", "水")],
         "adjectives": ["幼年", "普通", "精壯", "兇猛", "猛烈", "兇暴", "狂暴", "嗜血"],
         "guardian": {"name": "熔岩守衛犬", "element": "火"},
@@ -111,8 +143,8 @@ _MONSTER_TIER_CONFIG = [
     },
     {
         "tier": "advanced", "min_level": 71, "max_level": 120, "brackets": 10,
-        "low": {"hp": 320, "atk": 50, "def": 25, "agi": 30, "currency_reward": 75},
-        "high": {"hp": 800, "atk": 75, "def": 38, "agi": 48, "currency_reward": 320},
+        "low": {"hp": 320, "atk": 50, "def": 25, "agi": 30, "currency_reward": 75, "exp_reward": 36},
+        "high": {"hp": 800, "atk": 75, "def": 38, "agi": 48, "currency_reward": 320, "exp_reward": 54},
         "species": [("巨魔", "金"), ("劍靈", "水")],
         "adjectives": ["幼年", "普通", "精壯", "兇猛", "猛烈", "兇暴", "狂暴", "嗜血", "煞氣", "修羅化"],
         "guardian": {"name": "幽冥守衛靈", "element": "水"},
@@ -120,8 +152,8 @@ _MONSTER_TIER_CONFIG = [
     },
     {
         "tier": "ultimate", "min_level": 121, "max_level": LEVEL_CAP, "brackets": 16,
-        "low": {"hp": 620, "atk": 85, "def": 42, "agi": 48, "currency_reward": 160},
-        "high": {"hp": 1400, "atk": 130, "def": 65, "agi": 75, "currency_reward": 650},
+        "low": {"hp": 620, "atk": 85, "def": 42, "agi": 48, "currency_reward": 160, "exp_reward": 72},
+        "high": {"hp": 1400, "atk": 130, "def": 65, "agi": 75, "currency_reward": 650, "exp_reward": 104},
         "species": [("巨龍裔", "金"), ("石像鬼", "土")],
         "adjectives": [
             "幼年", "普通", "精壯", "兇猛", "猛烈", "兇暴", "狂暴", "嗜血",
@@ -148,6 +180,7 @@ def _build_default_monsters():
             t = i / (n - 1) if n > 1 else 0
             stats = {k: round(low[k] + (high[k] - low[k]) * t) for k in _STAT_KEYS}
             currency = round(low["currency_reward"] + (high["currency_reward"] - low["currency_reward"]) * t)
+            exp = round(low["exp_reward"] + (high["exp_reward"] - low["exp_reward"]) * t)
             level_min = cfg["min_level"] + i * 5
             level_max = level_min + 4
             for species, element in cfg["species"]:
@@ -155,7 +188,7 @@ def _build_default_monsters():
                     "tier": cfg["tier"], "name": f"{adjective}{species}", "is_boss": 0, "is_guardian": 0,
                     "level_min": level_min, "level_max": level_max,
                     "hp": stats["hp"], "atk": stats["atk"], "def": stats["def"], "agi": stats["agi"],
-                    "currency_reward": currency, "element": element,
+                    "currency_reward": currency, "exp_reward": exp, "element": element,
                 })
         guardian_stats = {k: round(high[k] * GUARDIAN_STAT_MULT) for k in _STAT_KEYS}
         monsters.append({
@@ -164,6 +197,7 @@ def _build_default_monsters():
             "hp": guardian_stats["hp"], "atk": guardian_stats["atk"],
             "def": guardian_stats["def"], "agi": guardian_stats["agi"],
             "currency_reward": round(high["currency_reward"] * GUARDIAN_CURRENCY_MULT),
+            "exp_reward": high["exp_reward"],
             "element": cfg["guardian"]["element"],
         })
         boss_stats = {k: round(high[k] * BOSS_STAT_MULT) for k in _STAT_KEYS}
@@ -173,6 +207,7 @@ def _build_default_monsters():
             "hp": boss_stats["hp"], "atk": boss_stats["atk"],
             "def": boss_stats["def"], "agi": boss_stats["agi"],
             "currency_reward": round(high["currency_reward"] * BOSS_CURRENCY_MULT),
+            "exp_reward": high["exp_reward"],
             "element": cfg["boss"]["element"],
         })
     return monsters
@@ -278,6 +313,14 @@ def _ensure_monster_columns(conn):
         conn.execute("ALTER TABLE monsters ADD COLUMN level_min INTEGER")
     if "level_max" not in cols:
         conn.execute("ALTER TABLE monsters ADD COLUMN level_max INTEGER")
+    if "exp_reward" not in cols:
+        conn.execute("ALTER TABLE monsters ADD COLUMN exp_reward INTEGER NOT NULL DEFAULT 0")
+
+
+def _ensure_item_columns(conn):
+    cols = [row["name"] for row in conn.execute("PRAGMA table_info(items)")]
+    if "country_id" not in cols:
+        conn.execute("ALTER TABLE items ADD COLUMN country_id INTEGER")
 
 
 def _upgrade_country_bonuses(conn):
@@ -319,16 +362,41 @@ def _upgrade_monster_elements(conn):
             )
 
 
+def _upgrade_items(conn, country_ids_by_name):
+    """Add-only: inserts any DEFAULT_ITEMS row (currently just the 5 country
+    equipment sets) that isn't already present by exact name. Unlike the
+    monster roster this never deletes existing rows -- items can be sitting
+    in a character's inventory or equipped slot, so removing one would
+    dangle a foreign key."""
+    existing_names = {row["name"] for row in conn.execute("SELECT name FROM items")}
+    for i in DEFAULT_ITEMS:
+        if i["name"] in existing_names:
+            continue
+        conn.execute(
+            """INSERT INTO items (shop_type, name, price, stat, stat_bonus, country_id)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                i["shop_type"], i["name"], i["price"], i["stat"], i["stat_bonus"],
+                country_ids_by_name.get(i["country_name"]),
+            ),
+        )
+
+
 def _rebuild_monster_roster(conn):
     """One-time full replace of the monsters table with the level-bracketed
-    roster (2 named monsters per 5-level bracket + 1 守衛怪 + 1 魔王 per tier),
-    detected by the absence of any is_guardian=1 row. No admin UI ever edits
-    monsters directly, so a full wipe+reseed is safe here (unlike the
+    roster (2 named monsters per 5-level bracket + 1 守衛怪 + 1 魔王 per tier).
+    Runs again if the table predates is_guardian (old flat roster) OR predates
+    exp_reward (every generated row has a positive exp_reward, so a stray 0
+    means the column was just added and never backfilled). No admin UI ever
+    edits monsters directly, so a full wipe+reseed is safe here (unlike the
     legacy-value-check pattern used for country bonuses)."""
     has_guardian = conn.execute(
         "SELECT COUNT(*) AS c FROM monsters WHERE is_guardian = 1"
     ).fetchone()["c"]
-    if has_guardian:
+    has_unset_exp = conn.execute(
+        "SELECT COUNT(*) AS c FROM monsters WHERE exp_reward = 0"
+    ).fetchone()["c"]
+    if has_guardian and not has_unset_exp:
         return
     conn.execute("DELETE FROM monsters")
     ground_ids = {
@@ -338,12 +406,12 @@ def _rebuild_monster_roster(conn):
         conn.execute(
             """INSERT INTO monsters
                (hunting_ground_id, name, is_boss, is_guardian, level_min, level_max,
-                hp, atk, def, agi, currency_reward, element)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                hp, atk, def, agi, currency_reward, exp_reward, element)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 ground_ids[m["tier"]], m["name"], m["is_boss"], m["is_guardian"],
                 m["level_min"], m["level_max"],
-                m["hp"], m["atk"], m["def"], m["agi"], m["currency_reward"], m["element"],
+                m["hp"], m["atk"], m["def"], m["agi"], m["currency_reward"], m["exp_reward"], m["element"],
             ),
         )
 
@@ -402,6 +470,7 @@ def init_db():
     _ensure_character_columns(conn)
     _ensure_country_columns(conn)
     _ensure_monster_columns(conn)
+    _ensure_item_columns(conn)
     _ensure_game_settings_columns(conn)
     conn.commit()
     conn.close()
@@ -464,13 +533,21 @@ def seed_defaults():
         "UPDATE characters SET level = ?, exp = 0 WHERE level > ?", (LEVEL_CAP, LEVEL_CAP)
     )
 
+    country_ids_by_name = {
+        row["name"]: row["id"] for row in conn.execute("SELECT id, name FROM countries")
+    }
     if conn.execute("SELECT COUNT(*) AS c FROM items").fetchone()["c"] == 0:
         for i in DEFAULT_ITEMS:
             conn.execute(
-                """INSERT INTO items (shop_type, name, price, stat, stat_bonus)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (i["shop_type"], i["name"], i["price"], i["stat"], i["stat_bonus"]),
+                """INSERT INTO items (shop_type, name, price, stat, stat_bonus, country_id)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    i["shop_type"], i["name"], i["price"], i["stat"], i["stat_bonus"],
+                    country_ids_by_name.get(i["country_name"]),
+                ),
             )
+    else:
+        _upgrade_items(conn, country_ids_by_name)
 
     if conn.execute("SELECT COUNT(*) AS c FROM monsters").fetchone()["c"] == 0:
         ground_ids = {
@@ -481,12 +558,12 @@ def seed_defaults():
             conn.execute(
                 """INSERT INTO monsters
                    (hunting_ground_id, name, is_boss, is_guardian, level_min, level_max,
-                    hp, atk, def, agi, currency_reward, element)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    hp, atk, def, agi, currency_reward, exp_reward, element)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     ground_ids[m["tier"]], m["name"], m["is_boss"], m["is_guardian"],
                     m["level_min"], m["level_max"],
-                    m["hp"], m["atk"], m["def"], m["agi"], m["currency_reward"], m["element"],
+                    m["hp"], m["atk"], m["def"], m["agi"], m["currency_reward"], m["exp_reward"], m["element"],
                 ),
             )
     else:

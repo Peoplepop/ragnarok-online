@@ -330,12 +330,73 @@ def _character_usable_skills(db, character):
     return _ordered_usable_skills(_usable_skill_keys(character, learned_keys))
 
 
+# Country-themed equipment sets (db.py's DEFAULT_SET_ITEMS): items carry a
+# `set_element` field (that item's origin country's element, via a JOIN --
+# see _fetch_equipped_items) when they belong to one of these sets. Wearing
+# 2 or 3 pieces from the *same* country's set grants a flat bonus on top of
+# each piece's own stat_bonus. The 4 elemental countries concentrate their
+# bonus on that element's signature stat (matching how the set's own 3
+# pieces all buff that one stat too); the balanced earth country (土) has no
+# single signature stat, so its bonus spreads evenly across all four instead.
+SET_SIGNATURE_STAT = {"金": "luk", "木": "def", "水": "agi", "火": "str"}
+SET_BONUS_TIERS = {2: 15, 3: 40}
+EARTH_SET_BONUS_TIERS = {2: 8, 3: 20}
+
+
+def _equipment_set_bonus(equipped_items):
+    counts = {}
+    for item in equipped_items:
+        element = item["set_element"] if item is not None else None
+        if element:
+            counts[element] = counts.get(element, 0) + 1
+    bonus = {}
+    for element, count in counts.items():
+        if count < 2:
+            continue
+        tier = 3 if count >= 3 else 2
+        if element == "土":
+            for stat in ("str", "def", "agi", "luk"):
+                bonus[stat] = bonus.get(stat, 0) + EARTH_SET_BONUS_TIERS[tier]
+        else:
+            stat = SET_SIGNATURE_STAT.get(element)
+            if stat:
+                bonus[stat] = bonus.get(stat, 0) + SET_BONUS_TIERS[tier]
+    return bonus
+
+
+def _active_set_summaries(equipped_items):
+    """Human-readable version of _equipment_set_bonus for the character
+    sheet: one entry per country-set with >=2 pieces equipped, naming the
+    country, how many pieces (of 3) are worn, and what that grants."""
+    counts = {}
+    names = {}
+    for item in equipped_items:
+        element = item["set_element"] if item is not None else None
+        if element:
+            counts[element] = counts.get(element, 0) + 1
+            names[element] = item["set_country_name"]
+    summaries = []
+    for element, count in counts.items():
+        if count < 2:
+            continue
+        tier = 3 if count >= 3 else 2
+        if element == "土":
+            bonus_text = "、".join(f"{STAT_LABELS[s]} +{EARTH_SET_BONUS_TIERS[tier]}" for s in ("str", "def", "agi", "luk"))
+        else:
+            stat = SET_SIGNATURE_STAT.get(element)
+            bonus_text = f"{STAT_LABELS[stat]} +{SET_BONUS_TIERS[tier]}" if stat else ""
+        summaries.append({"country_name": names[element], "count": count, "bonus_text": bonus_text})
+    return summaries
+
+
 def compute_final_stats(country, equipped_items=(), level=1, job_bonus=None, rebirth_bonus_percent=0):
     job_bonus = job_bonus or {}
     equip_bonus = {}
     for item in equipped_items:
         if item:
             equip_bonus[item["stat"]] = equip_bonus.get(item["stat"], 0) + item["stat_bonus"]
+    for stat, amount in _equipment_set_bonus(equipped_items).items():
+        equip_bonus[stat] = equip_bonus.get(stat, 0) + amount
     level_bonus = max(0, level - 1)
     return {
         key: round(base * (1 + (country[bonus_field] + job_bonus.get(key, 0) + rebirth_bonus_percent) / 100))
@@ -403,6 +464,24 @@ def _current_hp_mp(character, stats):
     hp = character["current_hp"] if character["current_hp"] is not None else stats["hp"]
     mp = character["current_mp"] if character["current_mp"] is not None else stats["mp"]
     return max(0, min(hp, stats["hp"])), max(0, min(mp, stats["mp"]))
+
+
+def _fetch_equipped_items(db, character):
+    """Equipped weapon/armor/accessory rows, each carrying a `set_element`
+    field (the item's origin country's element, NULL for ordinary gear) so
+    compute_final_stats can tally equipment-set bonuses."""
+    equipped_ids = [
+        character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
+    ]
+    return [
+        db.execute(
+            """SELECT items.*, countries.element AS set_element, countries.name AS set_country_name
+               FROM items LEFT JOIN countries ON countries.id = items.country_id
+               WHERE items.id = ?""",
+            (item_id,),
+        ).fetchone()
+        for item_id in equipped_ids if item_id
+    ]
 
 
 # Growth rate is tier-dependent (initiate/二轉/三轉/四轉), deliberately
@@ -1074,13 +1153,7 @@ def game():
                 "id": m["id"], "name": m["name"], "ground_name": m["ground_name"],
                 "level_label": level_label,
             })
-    equipped_ids = [
-        character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
-    ]
-    equipped_items = [
-        db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-        for item_id in equipped_ids if item_id
-    ]
+    equipped_items = _fetch_equipped_items(db, character)
     db.close()
 
     stats = character_final_stats(character, equipped_items, settings)
@@ -1267,13 +1340,7 @@ def game_hunt():
 
     settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
 
-    equipped_ids = [
-        character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
-    ]
-    equipped_items = [
-        db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-        for item_id in equipped_ids if item_id
-    ]
+    equipped_items = _fetch_equipped_items(db, character)
     stats = character_final_stats(character, equipped_items, settings)
     current_hp, current_mp = _current_hp_mp(character, stats)
 
@@ -1325,7 +1392,7 @@ def game_hunt():
             exp_multiplier = settings["boss_exp_multiplier"]
         else:
             exp_multiplier = 1.0
-        exp_gain = round(ground["monster_exp"] * exp_multiplier)
+        exp_gain = round(monster["exp_reward"] * exp_multiplier)
         currency_gain = round(monster["currency_reward"] * (1 + gold_luk_bonus_pct(stats["luk"]) / 100))
         new_level, new_exp = apply_exp(
             character["level"], character["exp"], exp_gain, settings,
@@ -1424,13 +1491,7 @@ def game_hunt_boss_room():
         return redirect(url_for("game"))
 
     settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
-    equipped_ids = [
-        character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
-    ]
-    equipped_items = [
-        db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-        for item_id in equipped_ids if item_id
-    ]
+    equipped_items = _fetch_equipped_items(db, character)
     stats = character_final_stats(character, equipped_items, settings)
     current_hp, current_mp = _current_hp_mp(character, stats)
 
@@ -1454,7 +1515,7 @@ def game_hunt_boss_room():
     currency_lost = 0
     new_level, new_exp = character["level"], character["exp"]
     if result["won"]:
-        exp_gain = round(ground["monster_exp"] * settings["boss_exp_multiplier"])
+        exp_gain = round(boss["exp_reward"] * settings["boss_exp_multiplier"])
         currency_gain = round(boss["currency_reward"] * (1 + gold_luk_bonus_pct(stats["luk"]) / 100))
         new_level, new_exp = apply_exp(
             character["level"], character["exp"], exp_gain, settings,
@@ -1551,13 +1612,7 @@ def game_conquer():
            FROM game_settings WHERE id = 1"""
     ).fetchone()
 
-    equipped_ids = [
-        character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
-    ]
-    equipped_items = [
-        db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-        for item_id in equipped_ids if item_id
-    ]
+    equipped_items = _fetch_equipped_items(db, character)
     stats = character_final_stats(character, equipped_items, settings)
     current_hp, current_mp = _current_hp_mp(character, stats)
 
@@ -1664,13 +1719,7 @@ def game_recover():
         "SELECT turn_wait_seconds, heal_cost_per_point, rebirth_stat_bonus_percent FROM game_settings WHERE id = 1"
     ).fetchone()
 
-    equipped_ids = [
-        character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
-    ]
-    equipped_items = [
-        db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-        for item_id in equipped_ids if item_id
-    ]
+    equipped_items = _fetch_equipped_items(db, character)
     stats = character_final_stats(character, equipped_items, settings)
     current_hp, current_mp = _current_hp_mp(character, stats)
 
@@ -1712,6 +1761,7 @@ def _character_for_shop(db):
     return db.execute(
         """SELECT characters.id, characters.currency, characters.bank_balance,
                   characters.next_action_at, characters.country_id, map_tiles.tile_type,
+                  map_tiles.country_id AS tile_country_id,
                   characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id
            FROM characters JOIN map_tiles ON map_tiles.id = characters.current_tile_id
            WHERE characters.user_id = ?""",
@@ -1734,7 +1784,13 @@ def game_shop():
         "SELECT turn_wait_seconds, sell_back_percent FROM game_settings WHERE id = 1"
     ).fetchone()
 
-    all_items = db.execute("SELECT * FROM items ORDER BY shop_type, price").fetchall()
+    all_items = db.execute(
+        """SELECT items.*, countries.name AS set_country_name
+           FROM items LEFT JOIN countries ON countries.id = items.country_id
+           WHERE items.country_id IS NULL OR items.country_id = ?
+           ORDER BY items.shop_type, items.price""",
+        (character["tile_country_id"],),
+    ).fetchall()
     shop_items = {shop_type: [] for shop_type in SHOP_TYPE_LABELS}
     for item in all_items:
         shop_items[item["shop_type"]].append(item)
@@ -2226,13 +2282,7 @@ def character_page():
         )
     ]
     learned_keys = _learned_skill_keys(db, character["character_id"])
-    equipped_ids = [
-        character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
-    ]
-    equipped_items = [
-        db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-        for item_id in equipped_ids if item_id
-    ]
+    equipped_items = _fetch_equipped_items(db, character)
 
     equipped_slots = []
     for shop_type, label in SLOT_LABELS.items():
@@ -2271,6 +2321,7 @@ def character_page():
     overcome_by = next(
         (k for k, v in ELEMENT_OVERCOMES.items() if v == character["element"]), None
     )
+    active_sets = _active_set_summaries(equipped_items)
     learnable_skills = _learnable_skills(character, learned_keys)
     usable_keys = _usable_skill_keys(character, learned_keys)
     usable_skills = _ordered_usable_skills(usable_keys)
@@ -2295,6 +2346,7 @@ def character_page():
         exp_needed=exp_needed,
         equipped_items=equipped_items,
         equipped_slots=equipped_slots,
+        active_sets=active_sets,
         inventory_items=inventory_items,
         shop_type_labels=SHOP_TYPE_LABELS,
         cooldown_seconds=_cooldown_remaining_seconds(character["next_action_at"]),
@@ -2352,13 +2404,7 @@ def character_promote_tier2():
         return redirect(url_for("character_page"))
 
     settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
-    equipped_ids = [
-        character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
-    ]
-    equipped_items = [
-        db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-        for item_id in equipped_ids if item_id
-    ]
+    equipped_items = _fetch_equipped_items(db, character)
     floor = _snapshot_stat_floor(character, equipped_items, settings)
 
     db.execute(
@@ -2401,13 +2447,7 @@ def character_promote_tier3():
         return redirect(url_for("character_page"))
 
     settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
-    equipped_ids = [
-        character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
-    ]
-    equipped_items = [
-        db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-        for item_id in equipped_ids if item_id
-    ]
+    equipped_items = _fetch_equipped_items(db, character)
     floor = _snapshot_stat_floor(character, equipped_items, settings)
 
     db.execute(
@@ -2808,21 +2848,20 @@ def admin_update_hunting_ground(ground_id):
     try:
         min_level = int(request.form.get("min_level", ""))
         max_level = int(request.form.get("max_level", ""))
-        monster_exp = int(request.form.get("monster_exp", ""))
     except ValueError:
         flash("打怪場數值格式不正確")
         return redirect(url_for("admin_settings"))
 
-    if min_level < 1 or max_level < min_level or monster_exp < 0:
-        flash("打怪場等級區間或經驗值不合理")
+    if min_level < 1 or max_level < min_level:
+        flash("打怪場等級區間不合理")
         return redirect(url_for("admin_settings"))
 
     db = get_db()
     db.execute(
         """UPDATE hunting_grounds
-           SET name = ?, min_level = ?, max_level = ?, monster_exp = ?
+           SET name = ?, min_level = ?, max_level = ?
            WHERE id = ?""",
-        (name, min_level, max_level, monster_exp, ground_id),
+        (name, min_level, max_level, ground_id),
     )
     db.commit()
     db.close()
