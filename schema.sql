@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_login_at TEXT,
     last_seen_at TEXT,
-    is_online INTEGER NOT NULL DEFAULT 0
+    is_online INTEGER NOT NULL DEFAULT 0,
+    is_npc INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS activity_log (
@@ -74,6 +75,7 @@ CREATE TABLE IF NOT EXISTS characters (
     level_bonus_luk INTEGER NOT NULL DEFAULT 0,
     equipped_skill_1 TEXT,
     equipped_skill_2 TEXT,
+    is_npc INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (country_id) REFERENCES countries(id),

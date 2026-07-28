@@ -1,5 +1,6 @@
 import os
 import random
+import secrets
 import sqlite3
 import uuid
 from datetime import datetime, timedelta
@@ -90,9 +91,150 @@ def _backfill_level_bonus_columns():
     conn.close()
 
 
+
+# The 15 default NPC officeholders (國王/參謀/大將軍 x 5 countries) that
+# _seed_npc_officials seeds into the previously-always-empty government
+# seats. Each tuple is (country_name, root, role, name, level, job_class,
+# job_tier) -- root is the name fragment shared by that country's regalia
+# item names (e.g. "流金御劍"/"流金策劍"/"流金戰劍" for 百鍊流金國). Job
+# classes are verified against TIER3_JOBS/TIER4_JOB_BY_STAT/TIER4_TIE_JOB in
+# game_data/jobs.py; King is always job_tier=4 at level 220 (a deliberate,
+# one-time exception to the normal LEVEL_CAP=200 -- see the is_npc guard
+# added to the level clamp in db.py's seed_defaults()), Advisor/General are
+# always job_tier=3 at level 200.
+NPC_OFFICIAL_ROSTER = [
+    ("百鍊流金國", "流金", "king", "金璘尊", 220, "流金尊者", 4),
+    ("百鍊流金國", "流金", "advisor", "銀策", 200, "太乙真人", 3),
+    ("百鍊流金國", "流金", "general", "鋼鏑", 200, "天命劍仙", 3),
+    ("翡翠靈木國", "靈木", "king", "木牧尊", 220, "青木道尊", 4),
+    ("翡翠靈木國", "靈木", "advisor", "綠簡", 200, "龜甲寒鐵陣", 3),
+    ("翡翠靈木國", "靈木", "general", "蒼甲", 200, "回天鐵壁", 3),
+    ("蔚藍千泉國", "千泉", "king", "淵瀾尊", 220, "流水劍尊", 4),
+    ("蔚藍千泉國", "千泉", "advisor", "潮謀", 200, "踏虛步影", 3),
+    ("蔚藍千泉國", "千泉", "general", "浪鏑", 200, "追風劍影", 3),
+    ("紅蓮業火國", "業火", "king", "炎煌尊", 220, "業火尊者", 4),
+    ("紅蓮業火國", "業火", "advisor", "燼策", 200, "煉體宗師", 3),
+    ("紅蓮業火國", "業火", "general", "烈戈", 200, "裂地劍豪", 3),
+    ("萬物母育國", "母育", "king", "厚土尊", 220, "厚土真尊", 4),
+    ("萬物母育國", "母育", "advisor", "塋策", 200, "奇門遁甲師", 3),
+    ("萬物母育國", "母育", "general", "磐鏑", 200, "不壞金身", 3),
+]
+
+# role -> (countries.* seat column, "{root}{suffix}" regalia weapon/armor/
+# accessory name suffixes). Mirrors the 3 new 官職套裝 tiers seeded into
+# DEFAULT_ITEMS by db.py (GENERAL/ADVISOR/KING_SET_ITEM_*).
+_NPC_ROLE_COLUMN = {
+    "king": "king_character_id", "advisor": "advisor_character_id", "general": "general_character_id",
+}
+_NPC_ROLE_EQUIP_SUFFIXES = {
+    "king": ("御劍", "御鎧", "御冠"),
+    "advisor": ("策劍", "策鎧", "策珮"),
+    "general": ("戰劍", "戰甲", "戰印"),
+}
+
+
+def _seed_npc_officials():
+    """Idempotently seeds the 15-NPC roster above into users/characters, and
+    assigns each into its country's still-empty government seat. Must run
+    after init_db() (needs the is_npc columns), seed_defaults() (needs the
+    country rows, fortress map tiles, and the new regalia items to already
+    exist), and _backfill_level_bonus_columns() (ordering only -- no direct
+    dependency). Safe to call on every app startup: a username lookup guards
+    each NPC so a prior run's rows are never re-inserted or re-updated."""
+    conn = get_db()
+    country_ids_by_name = {
+        row["name"]: row["id"] for row in conn.execute("SELECT id, name FROM countries")
+    }
+
+    for country_name, root, role, name, level, job_class, job_tier in NPC_OFFICIAL_ROSTER:
+        country_id = country_ids_by_name[country_name]
+        username = f"npc_{role}_country{country_id}"
+
+        if conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone():
+            continue  # already seeded on a prior startup -- idempotent no-op
+
+        user_cur = conn.execute(
+            "INSERT INTO users (username, password_hash, is_npc) VALUES (?, ?, 1)",
+            (username, generate_password_hash(secrets.token_hex(32))),
+        )
+        user_id = user_cur.lastrowid
+
+        fortress = conn.execute(
+            "SELECT id FROM map_tiles WHERE country_id = ? AND tile_type = 'fortress'",
+            (country_id,),
+        ).fetchone()
+        current_tile_id = fortress["id"] if fortress else None
+
+        weapon_suffix, armor_suffix, accessory_suffix = _NPC_ROLE_EQUIP_SUFFIXES[role]
+        weapon_id = conn.execute(
+            "SELECT id FROM items WHERE name = ? AND country_id = ?",
+            (f"{root}{weapon_suffix}", country_id),
+        ).fetchone()["id"]
+        armor_id = conn.execute(
+            "SELECT id FROM items WHERE name = ? AND country_id = ?",
+            (f"{root}{armor_suffix}", country_id),
+        ).fetchone()["id"]
+        accessory_id = conn.execute(
+            "SELECT id FROM items WHERE name = ? AND country_id = ?",
+            (f"{root}{accessory_suffix}", country_id),
+        ).fetchone()["id"]
+
+        # This NPC never actually leveled up through play, so its
+        # level_bonus_* columns are seeded with the same flat-formula
+        # convention _backfill_level_bonus_columns() uses for pre-migration
+        # player characters, rather than the random per-level roll system.
+        level_bonus = level - 1
+        level_bonus_stats = {
+            key: LEVEL_STAT_GROWTH[key] * level_bonus for key in LEVEL_STAT_GROWTH
+        }
+
+        char_cur = conn.execute(
+            """INSERT INTO characters
+               (user_id, name, country_id, current_tile_id, currency, level, exp,
+                equipped_weapon_id, equipped_armor_id, equipped_accessory_id,
+                job_class, job_tier, rebirth_count, is_npc,
+                level_bonus_hp, level_bonus_mp, level_bonus_str,
+                level_bonus_def, level_bonus_agi, level_bonus_luk)
+               VALUES (?, ?, ?, ?, 0, ?, 0, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ?)""",
+            (
+                user_id, name, country_id, current_tile_id, level,
+                weapon_id, armor_id, accessory_id, job_class, job_tier,
+                level_bonus_stats["hp"], level_bonus_stats["mp"], level_bonus_stats["str"],
+                level_bonus_stats["def"], level_bonus_stats["agi"], level_bonus_stats["luk"],
+            ),
+        )
+        character_id = char_cur.lastrowid
+
+        # King gets the exclusive tier4-slot3 skill; Advisor/General get one
+        # of their tier3 job's 3 skill slots at random (spec: "一個三轉隨機
+        # 技能"; only runs once at first seed, so non-reproducibility across
+        # runs doesn't matter).
+        slot = 3 if role == "king" else random.choice([1, 2, 3])
+        skill_key = f"{job_class}_{slot}"
+        if skill_key not in SKILL_CATALOG:
+            raise RuntimeError(f"NPC seeding: skill key {skill_key!r} is not in SKILL_CATALOG")
+        conn.execute(
+            "INSERT INTO character_skills (character_id, skill_key) VALUES (?, ?)",
+            (character_id, skill_key),
+        )
+        conn.execute(
+            "UPDATE characters SET equipped_skill_1 = ? WHERE id = ?", (skill_key, character_id)
+        )
+
+        seat_column = _NPC_ROLE_COLUMN[role]
+        conn.execute(
+            f"UPDATE countries SET {seat_column} = ? WHERE id = ? AND {seat_column} IS NULL",
+            (character_id, country_id),
+        )
+
+    conn.commit()
+    conn.close()
+
+
 init_db()
 seed_defaults()
 _backfill_level_bonus_columns()
+_seed_npc_officials()
 
 
 def _parse_dt(value):
@@ -361,7 +503,7 @@ def login():
     db = get_db()
     user = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
 
-    if user is None or not check_password_hash(user["password_hash"], password):
+    if user is None or user["is_npc"] or not check_password_hash(user["password_hash"], password):
         log_activity(
             db, user["id"] if user else None, username, "login_failed",
             ip_address=request.remote_addr,
@@ -2910,7 +3052,7 @@ def character_debug_reset():
 def admin():
     db = get_db()
     countries = db.execute("SELECT * FROM countries ORDER BY id").fetchall()
-    characters = db.execute("SELECT id, name, country_id FROM characters ORDER BY name").fetchall()
+    characters = db.execute("SELECT id, name, country_id, is_npc FROM characters ORDER BY name").fetchall()
     total_views = db.execute("SELECT total_views FROM site_visits WHERE id = 1").fetchone()["total_views"]
     unique_visitors = db.execute("SELECT COUNT(*) AS c FROM site_visitors").fetchone()["c"]
     db.close()
@@ -2932,7 +3074,7 @@ def admin_sessions():
     db = get_db()
     users = db.execute(
         "SELECT username, is_admin, is_online, last_login_at, last_seen_at "
-        "FROM users ORDER BY last_seen_at IS NULL, last_seen_at DESC"
+        "FROM users WHERE is_npc = 0 ORDER BY last_seen_at IS NULL, last_seen_at DESC"
     ).fetchall()
     db.close()
 

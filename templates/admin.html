@@ -70,7 +70,7 @@
           <select name="{{ role.column }}">
             <option value="">（出缺）</option>
             {% for ch in characters_by_country.get(c.id, []) %}
-            <option value="{{ ch.id }}" {% if c[role.column] == ch.id %}selected{% endif %}>{{ ch.name }}</option>
+            <option value="{{ ch.id }}" {% if c[role.column] == ch.id %}selected{% endif %}>{{ ch.name }}{% if ch.is_npc %}（NPC）{% endif %}</option>
             {% endfor %}
           </select>
         </div>
