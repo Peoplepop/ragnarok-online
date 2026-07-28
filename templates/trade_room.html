@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}與 {{ opp_name }} 的交易 - 五行爭鋒{% endblock %}
+{% block extra_head %}
+{% if trade.trade_status in ('pending', 'active') %}
+<meta http-equiv="refresh" content="5">
+{% endif %}
+{% endblock %}
+
+{% block content %}
+  <div class="panel" style="margin-bottom:20px;">
+    <h2 style="margin:0 0 4px; color:var(--gold-bright);">與 {{ opp_name }} 的交易</h2>
+    <p class="hint" style="margin-top:0;">
+      {% if trade.trade_status == 'pending' %}
+        {% if is_initiator %}等待 {{ opp_name }} 接受交易邀請
+        {% else %}{{ opp_name }} 邀請你進行交易{% endif %}
+      {% elif trade.trade_status == 'active' %}
+        交易進行中，雙方都必須保持在線上，並在確認報價後才會完成交易
+      {% elif trade.trade_status == 'completed' %}
+        交易已完成
+      {% elif trade.trade_status == 'cancelled' %}
+        交易已取消
+      {% endif %}
+    </p>
+
+    {% if trade.trade_status == 'pending' %}
+      {% if is_initiator %}
+      <form method="post" action="{{ url_for('trade_cancel', trade_id=trade.trade_id) }}">
+        <button type="submit" style="background:linear-gradient(135deg, var(--danger), #7a2a2d);">取消邀請</button>
+      </form>
+      {% else %}
+      <div style="display:flex; gap:8px;">
+        <form method="post" action="{{ url_for('trade_accept', trade_id=trade.trade_id) }}">
+          <button type="submit">接受</button>
+        </form>
+        <form method="post" action="{{ url_for('trade_decline', trade_id=trade.trade_id) }}">
+          <button type="submit" style="background:linear-gradient(135deg, var(--danger), #7a2a2d);">拒絕</button>
+        </form>
+      </div>
+      {% endif %}
+    {% endif %}
+
+    {% if trade.trade_status == 'active' %}
+    <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:14px;">
+      <div style="flex:1; min-width:260px;">
+        <h3 style="margin:0 0 8px; color:var(--gold-bright); font-size:14px;">
+          我的報價{% if my_confirmed %}（已確認）{% endif %}
+        </h3>
+        <form method="post" action="{{ url_for('trade_offer', trade_id=trade.trade_id) }}">
+          <label>諸神幣（目前身上 {{ my_currency_available }}）</label>
+          <input type="text" inputmode="numeric" name="currency" value="{{ my_currency_offer }}">
+          {% for row in my_offer_rows %}
+          <label>{{ row.name }}（背包 {{ row.max_quantity }}）</label>
+          <input type="text" inputmode="numeric" name="item_qty_{{ row.item_id }}" value="{{ row.offered_quantity }}">
+          {% endfor %}
+          {% if not my_offer_rows %}
+          <p class="hint" style="margin:0 0 12px;">背包裡目前沒有可交易的裝備</p>
+          {% endif %}
+          <button type="submit">更新報價</button>
+        </form>
+      </div>
+
+      <div style="flex:1; min-width:260px;">
+        <h3 style="margin:0 0 8px; color:var(--gold-bright); font-size:14px;">
+          {{ opp_name }} 的報價{% if opp_confirmed %}（已確認）{% endif %}
+        </h3>
+        <p style="margin:0 0 8px; font-size:13px; color:var(--text-dim);">諸神幣：{{ opp_currency_offer }}</p>
+        {% if opp_items %}
+        <ul style="margin:0 0 8px; padding-left:18px; font-size:13px; color:var(--text-dim);">
+          {% for item in opp_items %}
+          <li>{{ item.item_name }} x{{ item.quantity }}</li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="hint" style="margin:0 0 8px;">對方目前沒有提供裝備</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div style="margin-top:18px; display:flex; gap:12px;">
+      <form method="post" action="{{ url_for('trade_confirm', trade_id=trade.trade_id) }}">
+        <button type="submit">確認交易</button>
+      </form>
+      <form method="post" action="{{ url_for('trade_cancel', trade_id=trade.trade_id) }}" onsubmit="return confirm('確定要取消這筆交易嗎？');">
+        <button type="submit" style="background:linear-gradient(135deg, var(--danger), #7a2a2d);">取消交易</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if trade.trade_status == 'completed' %}
+    <p class="hint" style="margin:0;">
+      你收到了 {{ opp_name }} 提供的 {{ opp_currency_offer }} 諸神幣
+      {%- if opp_items %}，以及 {{ opp_items|length }} 種裝備{% endif %}
+    </p>
+    {% endif %}
+  </div>
+
+  <p class="hint"><a href="{{ url_for('trade_home') }}">← 返回交易首頁</a></p>
+{% endblock %}

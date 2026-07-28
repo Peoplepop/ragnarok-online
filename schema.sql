@@ -216,3 +216,29 @@ CREATE TABLE IF NOT EXISTS monsters (
     element TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (hunting_ground_id) REFERENCES hunting_grounds(id)
 );
+
+CREATE TABLE IF NOT EXISTS trades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    initiator_character_id INTEGER NOT NULL,
+    target_character_id INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    initiator_currency INTEGER NOT NULL DEFAULT 0,
+    target_currency INTEGER NOT NULL DEFAULT 0,
+    initiator_confirmed INTEGER NOT NULL DEFAULT 0,
+    target_confirmed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (initiator_character_id) REFERENCES characters(id),
+    FOREIGN KEY (target_character_id) REFERENCES characters(id)
+);
+
+CREATE TABLE IF NOT EXISTS trade_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    trade_id INTEGER NOT NULL,
+    character_id INTEGER NOT NULL,
+    item_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    UNIQUE(trade_id, character_id, item_id),
+    FOREIGN KEY (trade_id) REFERENCES trades(id),
+    FOREIGN KEY (item_id) REFERENCES items(id)
+);

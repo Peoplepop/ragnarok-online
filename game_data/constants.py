@@ -32,6 +32,11 @@ ACTION_LABELS = {
     "learn_skill": "學習技能",
     "skill_book_drop": "掉落技能書",
     "debug_reset": "（除錯）重置角色",
+    "trade_invite": "發起交易邀請",
+    "trade_accept": "接受交易邀請",
+    "trade_decline": "拒絕交易邀請",
+    "trade_cancel": "取消交易",
+    "trade_complete": "完成交易",
 }
 
 SHOP_TYPE_LABELS = {

@@ -143,6 +143,7 @@
     .country h3 { margin: 6px 0; font-size: 16px; color: var(--text); }
     .country p { margin: 0; font-size: 13px; color: var(--text-dim); }
   </style>
+  {% block extra_head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
   <nav class="topbar">

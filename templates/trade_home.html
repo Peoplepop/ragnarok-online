@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}交易 - 五行爭鋒{% endblock %}
+
+{% block content %}
+  <div class="panel" style="margin-bottom:20px;">
+    <h2 style="margin:0 0 4px; color:var(--gold-bright);">角色交易</h2>
+    <p class="hint" style="margin-top:0;">
+      輸入對方角色名稱即可發送交易邀請，交易不限國家，任何國家的角色都能互相交易，
+      但雙方必須全程保持在線上，若有一方離線交易將自動取消。
+    </p>
+    <form method="post" action="{{ url_for('trade_invite') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:14px;">
+      <input type="text" name="target_name" placeholder="對方角色名稱" style="max-width:220px;">
+      <button type="submit">發送交易邀請</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">待處理的交易邀請</h3>
+    {% if invites %}
+    {% for invite in invites %}
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; background:var(--panel-2); border-radius:6px; margin-bottom:10px; flex-wrap:wrap;">
+      <span style="font-size:13px; color:var(--text);">{{ invite.initiator_name }} 邀請你進行交易</span>
+      <div style="display:flex; gap:8px;">
+        <form method="post" action="{{ url_for('trade_accept', trade_id=invite.trade_id) }}">
+          <button type="submit">接受</button>
+        </form>
+        <form method="post" action="{{ url_for('trade_decline', trade_id=invite.trade_id) }}">
+          <button type="submit" style="background:linear-gradient(135deg, var(--danger), #7a2a2d);">拒絕</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="hint" style="margin:0;">目前沒有待處理的交易邀請</p>
+    {% endif %}
+  </div>
+{% endblock %}

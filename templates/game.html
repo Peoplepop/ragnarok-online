@@ -22,8 +22,15 @@
       <span style="color:var(--gold); font-size:14px;">💰 {{ character.currency }} 諸神幣</span>
       <a href="{{ url_for('countries_page') }}" class="btn" style="padding:6px 14px; font-size:13px;">國家詳情</a>
       <a href="{{ url_for('character_page') }}" class="btn" style="padding:6px 14px; font-size:13px;">角色詳情</a>
+      <a href="{{ url_for('trade_home') }}" class="btn" style="padding:6px 14px; font-size:13px;">交易</a>
     </div>
   </div>
+
+  {% if pending_trade_invite_count %}
+  <div class="panel" style="margin-bottom:20px; border-color: rgba(212, 175, 55, 0.5);">
+    <a href="{{ url_for('trade_home') }}" style="color:var(--gold-bright); font-size:13px; text-decoration:none;">📨 你有 {{ pending_trade_invite_count }} 筆待處理的交易邀請 →</a>
+  </div>
+  {% endif %}
 
   {% if country_destroyed %}
   <div class="panel" style="margin-bottom:20px; border-color: var(--danger);">
