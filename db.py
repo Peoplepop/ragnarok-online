@@ -114,6 +114,95 @@ for _set_item in DEFAULT_SET_ITEMS:
     _set_item["stat_bonus"] = SET_ITEM_STAT_BONUS
 DEFAULT_ITEMS = DEFAULT_ITEMS + DEFAULT_SET_ITEMS
 
+# 官職套裝 (office-seat regalia): 3 more per-country tiers above the ordinary
+# DEFAULT_SET_ITEMS, seeded so every country's 國王/參謀/大將軍 seat starts
+# with a real NPC officeholder already dressed in the appropriate set (see
+# _seed_npc_officials in app.py) -- but these are ordinary purchasable shop
+# items like everything else above (same country-scoped fortress-shop
+# convention via items.country_id), anyone can buy and wear them, the NPCs
+# just happen to start wearing them. Because they carry the same country_id
+# as that country's own DEFAULT_SET_ITEMS, they count toward the exact same
+# _equipment_set_bonus tally (grouped by country element) as the ordinary
+# set -- there's no separate "regalia set" bonus mechanic.
+GENERAL_SET_ITEM_PRICE = 2200
+GENERAL_SET_ITEM_STAT_BONUS = 34
+ADVISOR_SET_ITEM_PRICE = 2200
+ADVISOR_SET_ITEM_STAT_BONUS = 34
+KING_SET_ITEM_PRICE = 3000
+KING_SET_ITEM_STAT_BONUS = 44
+
+# 大將軍套裝 (General): attack-focused, always buffs str regardless of country.
+DEFAULT_GENERAL_SET_ITEMS = [
+    {"shop_type": "weapon", "name": "流金戰劍", "stat": "str", "country_name": "百鍊流金國"},
+    {"shop_type": "armor", "name": "流金戰甲", "stat": "str", "country_name": "百鍊流金國"},
+    {"shop_type": "accessory", "name": "流金戰印", "stat": "str", "country_name": "百鍊流金國"},
+    {"shop_type": "weapon", "name": "靈木戰劍", "stat": "str", "country_name": "翡翠靈木國"},
+    {"shop_type": "armor", "name": "靈木戰甲", "stat": "str", "country_name": "翡翠靈木國"},
+    {"shop_type": "accessory", "name": "靈木戰印", "stat": "str", "country_name": "翡翠靈木國"},
+    {"shop_type": "weapon", "name": "千泉戰劍", "stat": "str", "country_name": "蔚藍千泉國"},
+    {"shop_type": "armor", "name": "千泉戰甲", "stat": "str", "country_name": "蔚藍千泉國"},
+    {"shop_type": "accessory", "name": "千泉戰印", "stat": "str", "country_name": "蔚藍千泉國"},
+    {"shop_type": "weapon", "name": "業火戰劍", "stat": "str", "country_name": "紅蓮業火國"},
+    {"shop_type": "armor", "name": "業火戰甲", "stat": "str", "country_name": "紅蓮業火國"},
+    {"shop_type": "accessory", "name": "業火戰印", "stat": "str", "country_name": "紅蓮業火國"},
+    {"shop_type": "weapon", "name": "母育戰劍", "stat": "str", "country_name": "萬物母育國"},
+    {"shop_type": "armor", "name": "母育戰甲", "stat": "str", "country_name": "萬物母育國"},
+    {"shop_type": "accessory", "name": "母育戰印", "stat": "str", "country_name": "萬物母育國"},
+]
+for _set_item in DEFAULT_GENERAL_SET_ITEMS:
+    _set_item["price"] = GENERAL_SET_ITEM_PRICE
+    _set_item["stat_bonus"] = GENERAL_SET_ITEM_STAT_BONUS
+DEFAULT_ITEMS = DEFAULT_ITEMS + DEFAULT_GENERAL_SET_ITEMS
+
+# 參謀套裝 (Advisor): defense-focused, always buffs def regardless of country.
+DEFAULT_ADVISOR_SET_ITEMS = [
+    {"shop_type": "weapon", "name": "流金策劍", "stat": "def", "country_name": "百鍊流金國"},
+    {"shop_type": "armor", "name": "流金策鎧", "stat": "def", "country_name": "百鍊流金國"},
+    {"shop_type": "accessory", "name": "流金策珮", "stat": "def", "country_name": "百鍊流金國"},
+    {"shop_type": "weapon", "name": "靈木策劍", "stat": "def", "country_name": "翡翠靈木國"},
+    {"shop_type": "armor", "name": "靈木策鎧", "stat": "def", "country_name": "翡翠靈木國"},
+    {"shop_type": "accessory", "name": "靈木策珮", "stat": "def", "country_name": "翡翠靈木國"},
+    {"shop_type": "weapon", "name": "千泉策劍", "stat": "def", "country_name": "蔚藍千泉國"},
+    {"shop_type": "armor", "name": "千泉策鎧", "stat": "def", "country_name": "蔚藍千泉國"},
+    {"shop_type": "accessory", "name": "千泉策珮", "stat": "def", "country_name": "蔚藍千泉國"},
+    {"shop_type": "weapon", "name": "業火策劍", "stat": "def", "country_name": "紅蓮業火國"},
+    {"shop_type": "armor", "name": "業火策鎧", "stat": "def", "country_name": "紅蓮業火國"},
+    {"shop_type": "accessory", "name": "業火策珮", "stat": "def", "country_name": "紅蓮業火國"},
+    {"shop_type": "weapon", "name": "母育策劍", "stat": "def", "country_name": "萬物母育國"},
+    {"shop_type": "armor", "name": "母育策鎧", "stat": "def", "country_name": "萬物母育國"},
+    {"shop_type": "accessory", "name": "母育策珮", "stat": "def", "country_name": "萬物母育國"},
+]
+for _set_item in DEFAULT_ADVISOR_SET_ITEMS:
+    _set_item["price"] = ADVISOR_SET_ITEM_PRICE
+    _set_item["stat_bonus"] = ADVISOR_SET_ITEM_STAT_BONUS
+DEFAULT_ITEMS = DEFAULT_ITEMS + DEFAULT_ADVISOR_SET_ITEMS
+
+# 國王套裝 (King): the best set, buffs the country's own signature stat (the
+# 4 elemental countries concentrate all 3 pieces on their one signature stat,
+# same as their ordinary DEFAULT_SET_ITEMS; 萬物母育國 spreads it exactly like
+# its existing 母育劍(str)/母育鎧(def)/母育墜飾(luk) set does).
+DEFAULT_KING_SET_ITEMS = [
+    {"shop_type": "weapon", "name": "流金御劍", "stat": "luk", "country_name": "百鍊流金國"},
+    {"shop_type": "armor", "name": "流金御鎧", "stat": "luk", "country_name": "百鍊流金國"},
+    {"shop_type": "accessory", "name": "流金御冠", "stat": "luk", "country_name": "百鍊流金國"},
+    {"shop_type": "weapon", "name": "靈木御劍", "stat": "def", "country_name": "翡翠靈木國"},
+    {"shop_type": "armor", "name": "靈木御鎧", "stat": "def", "country_name": "翡翠靈木國"},
+    {"shop_type": "accessory", "name": "靈木御冠", "stat": "def", "country_name": "翡翠靈木國"},
+    {"shop_type": "weapon", "name": "千泉御劍", "stat": "agi", "country_name": "蔚藍千泉國"},
+    {"shop_type": "armor", "name": "千泉御鎧", "stat": "agi", "country_name": "蔚藍千泉國"},
+    {"shop_type": "accessory", "name": "千泉御冠", "stat": "agi", "country_name": "蔚藍千泉國"},
+    {"shop_type": "weapon", "name": "業火御劍", "stat": "str", "country_name": "紅蓮業火國"},
+    {"shop_type": "armor", "name": "業火御鎧", "stat": "str", "country_name": "紅蓮業火國"},
+    {"shop_type": "accessory", "name": "業火御冠", "stat": "str", "country_name": "紅蓮業火國"},
+    {"shop_type": "weapon", "name": "母育御劍", "stat": "str", "country_name": "萬物母育國"},
+    {"shop_type": "armor", "name": "母育御鎧", "stat": "def", "country_name": "萬物母育國"},
+    {"shop_type": "accessory", "name": "母育御冠", "stat": "luk", "country_name": "萬物母育國"},
+]
+for _set_item in DEFAULT_KING_SET_ITEMS:
+    _set_item["price"] = KING_SET_ITEM_PRICE
+    _set_item["stat_bonus"] = KING_SET_ITEM_STAT_BONUS
+DEFAULT_ITEMS = DEFAULT_ITEMS + DEFAULT_KING_SET_ITEMS
+
 # Monster roster, generated rather than hand-typed: every 5-level bracket
 # within a hunting ground gets 2 regular monsters (two long-running species
 # per tier, escalating through an adjective ladder as the bracket climbs),
@@ -226,6 +315,8 @@ def _ensure_is_admin_column(conn):
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(users)")]
     if "is_admin" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+    if "is_npc" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN is_npc INTEGER NOT NULL DEFAULT 0")
 
 
 def _ensure_session_columns(conn):
@@ -290,6 +381,8 @@ def _ensure_character_columns(conn):
         conn.execute("ALTER TABLE characters ADD COLUMN equipped_skill_1 TEXT")
     if "equipped_skill_2" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN equipped_skill_2 TEXT")
+    if "is_npc" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN is_npc INTEGER NOT NULL DEFAULT 0")
     if "name" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN name TEXT")
         conn.execute(
@@ -557,8 +650,14 @@ def seed_defaults():
     else:
         _upgrade_hunting_ground_bounds(conn)
 
+    # is_npc = 0 guard: NPC officeholders (see _seed_npc_officials in app.py)
+    # deliberately seed the King seat above LEVEL_CAP (level 220, a legendary
+    # exception to the normal player cap) -- without this guard, this clamp
+    # would silently knock it back down to LEVEL_CAP on every subsequent app
+    # restart, since seed_defaults() runs on every startup and this query
+    # runs before _seed_npc_officials sees the row (which only inserts once).
     conn.execute(
-        "UPDATE characters SET level = ?, exp = 0 WHERE level > ?", (LEVEL_CAP, LEVEL_CAP)
+        "UPDATE characters SET level = ?, exp = 0 WHERE level > ? AND is_npc = 0", (LEVEL_CAP, LEVEL_CAP)
     )
 
     country_ids_by_name = {

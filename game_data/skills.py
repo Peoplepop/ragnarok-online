@@ -58,6 +58,22 @@ TIER4_SKILL_NAMES_SLOT2 = {
     "流金尊者": "流金逆天劫", "厚土真尊": "厚土封天",
 }
 
+# 四轉's 3rd skill slot: the King's exclusive skill, per the seat-seeding
+# feature (see _seed_npc_officials in app.py). It is NOT reachable through
+# either normal unlock path -- not the currency-learn ladder (_learnable_skills
+# is hardcoded to only ever offer tier4 slot 1) nor the skill-book path
+# (TIER4_SLOT2_SKILL_KEYS stays hardcoded to slot 2 only). Slot 3 only ever
+# exists because it's seeded directly onto an NPC king character's row. Its
+# tuning (TIER_SLOT_TUNING[(4, 3)]) is deliberately NOT part of the
+# monotonic slot-1/slot-2 learn ladder -- trigger_chance (45%) sits well
+# above the ladder's 25% floor, because per the user's explicit spec this is
+# a standalone "中機率、高傷害、中耗MP" (mid chance / high damage / mid MP
+# cost) skill, not another progression step.
+TIER4_SKILL_NAMES_SLOT3 = {
+    "業火尊者": "業火滅世", "青木道尊": "青木擎天", "流水劍尊": "流水裂天劍",
+    "流金尊者": "流金鎮魂劫", "厚土真尊": "厚土震世訣",
+}
+
 # (job_tier, slot) -> tuning. slot counts up within a tier (1 = first learned).
 TIER_SLOT_TUNING = {
     (0, 1): {"mp_cost": 15, "multiplier": 1.3, "trigger_chance": 65, "learn_level": 10, "learn_cost": 500},
@@ -77,6 +93,16 @@ TIER_SLOT_TUNING = {
     (4, 2): {
         "mp_cost": 65, "multiplier": 3.6, "trigger_chance": 25, "learn_level": 121,
         "learn_cost": None, "requires_skill_book": True,
+    },
+    # King-only exclusive skill (see TIER4_SKILL_NAMES_SLOT3 above) -- never
+    # reachable via the normal currency-learn path or the skill-book path,
+    # only ever granted by directly seeding it onto an NPC king character.
+    # "中機率、高傷害、中耗MP" per spec: trigger_chance intentionally sits
+    # above slot 1/2's 25% floor since it isn't a rung on that sequential
+    # ladder.
+    (4, 3): {
+        "mp_cost": 45, "multiplier": 3.8, "trigger_chance": 45, "learn_level": 121,
+        "learn_cost": None, "requires_skill_book": False,
     },
 }
 
@@ -123,6 +149,11 @@ def _build_skill_catalog():
             "key": _skill_key(job, 2), "name": TIER4_SKILL_NAMES_SLOT2[job], "stat": stat,
             "job_tier": 4, "slot": 2, "job_class": job,
             **TIER_SLOT_TUNING[(4, 2)],
+        }
+        catalog[_skill_key(job, 3)] = {
+            "key": _skill_key(job, 3), "name": TIER4_SKILL_NAMES_SLOT3[job], "stat": stat,
+            "job_tier": 4, "slot": 3, "job_class": job,
+            **TIER_SLOT_TUNING[(4, 3)],
         }
     return catalog
 
