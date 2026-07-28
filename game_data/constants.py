@@ -1,5 +1,6 @@
 MIN_USERNAME_LEN = 3
-MIN_PASSWORD_LEN = 6
+MIN_PASSWORD_LEN = 8
+MAX_PASSWORD_LEN = 12
 MIN_CHARACTER_NAME_LEN = 2
 MAX_CHARACTER_NAME_LEN = 20
 STAT_FIELDS = ["hp_bonus", "mp_bonus", "str_bonus", "def_bonus", "agi_bonus", "luk_bonus"]

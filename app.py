@@ -1,5 +1,6 @@
 import os
 import random
+import re
 import secrets
 import sqlite3
 import uuid
@@ -16,7 +17,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-only-secret-change-me")
 
 from game_data.constants import (
-    MIN_USERNAME_LEN, MIN_PASSWORD_LEN, MIN_CHARACTER_NAME_LEN, MAX_CHARACTER_NAME_LEN,
+    MIN_USERNAME_LEN, MIN_PASSWORD_LEN, MAX_PASSWORD_LEN, MIN_CHARACTER_NAME_LEN, MAX_CHARACTER_NAME_LEN,
     STAT_FIELDS, IDLE_THRESHOLD_MINUTES, ACTION_LABELS, SHOP_TYPE_LABELS, SLOT_LABELS,
     EQUIP_SLOT_COLUMNS, GOVERNMENT_ROLES, tile_display_name,
     HEX_SIZE, ELEMENT_COLORS, NEUTRAL_TILE_COLOR, MOUNTAIN_TILE_COLOR, BASE_STATS,
@@ -434,6 +435,17 @@ def index():
     return render_template("index.html", countries=countries)
 
 
+PASSWORD_COMPLEXITY_PATTERN = re.compile(r"^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z]).+$")
+
+
+def _validate_password(password):
+    if len(password) < MIN_PASSWORD_LEN or len(password) > MAX_PASSWORD_LEN:
+        return f"密碼需要 {MIN_PASSWORD_LEN}～{MAX_PASSWORD_LEN} 個字元"
+    if not PASSWORD_COMPLEXITY_PATTERN.match(password):
+        return "密碼需同時包含數字、大寫英文字母與小寫英文字母"
+    return None
+
+
 def _validate_character_name(db, name, username):
     if len(name) < MIN_CHARACTER_NAME_LEN or len(name) > MAX_CHARACTER_NAME_LEN:
         return f"角色名稱需要 {MIN_CHARACTER_NAME_LEN}～{MAX_CHARACTER_NAME_LEN} 個字元"
@@ -460,8 +472,9 @@ def register():
     if len(username) < MIN_USERNAME_LEN:
         flash(f"帳號至少需要 {MIN_USERNAME_LEN} 個字元")
         return render_template("register.html")
-    if len(password) < MIN_PASSWORD_LEN:
-        flash(f"密碼至少需要 {MIN_PASSWORD_LEN} 個字元")
+    password_error = _validate_password(password)
+    if password_error:
+        flash(password_error)
         return render_template("register.html")
     if password != confirm:
         flash("兩次輸入的密碼不一致")
