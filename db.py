@@ -71,15 +71,15 @@ DEFAULT_HUNTING_GROUNDS = [
 ]
 
 DEFAULT_ITEMS = [
-    {"shop_type": "weapon", "name": "木劍", "price": 50, "stat": "str", "stat_bonus": 2, "country_name": None},
-    {"shop_type": "weapon", "name": "鐵劍", "price": 200, "stat": "str", "stat_bonus": 8, "country_name": None},
-    {"shop_type": "weapon", "name": "秘銀劍", "price": 800, "stat": "str", "stat_bonus": 20, "country_name": None},
-    {"shop_type": "armor", "name": "布甲", "price": 50, "stat": "def", "stat_bonus": 2, "country_name": None},
-    {"shop_type": "armor", "name": "鐵甲", "price": 200, "stat": "def", "stat_bonus": 8, "country_name": None},
-    {"shop_type": "armor", "name": "龍鱗甲", "price": 800, "stat": "def", "stat_bonus": 20, "country_name": None},
-    {"shop_type": "accessory", "name": "銅戒指", "price": 50, "stat": "luk", "stat_bonus": 2, "country_name": None},
-    {"shop_type": "accessory", "name": "銀戒指", "price": 200, "stat": "luk", "stat_bonus": 8, "country_name": None},
-    {"shop_type": "accessory", "name": "金戒指", "price": 800, "stat": "luk", "stat_bonus": 20, "country_name": None},
+    {"shop_type": "weapon", "name": "木劍", "price": 20000, "stat": "str", "stat_bonus": 2, "country_name": None},
+    {"shop_type": "weapon", "name": "鐵劍", "price": 35000, "stat": "str", "stat_bonus": 8, "country_name": None},
+    {"shop_type": "weapon", "name": "秘銀劍", "price": 55000, "stat": "str", "stat_bonus": 20, "country_name": None},
+    {"shop_type": "armor", "name": "布甲", "price": 20000, "stat": "def", "stat_bonus": 2, "country_name": None},
+    {"shop_type": "armor", "name": "鐵甲", "price": 35000, "stat": "def", "stat_bonus": 8, "country_name": None},
+    {"shop_type": "armor", "name": "龍鱗甲", "price": 55000, "stat": "def", "stat_bonus": 20, "country_name": None},
+    {"shop_type": "accessory", "name": "銅戒指", "price": 20000, "stat": "luk", "stat_bonus": 2, "country_name": None},
+    {"shop_type": "accessory", "name": "銀戒指", "price": 35000, "stat": "luk", "stat_bonus": 8, "country_name": None},
+    {"shop_type": "accessory", "name": "金戒指", "price": 55000, "stat": "luk", "stat_bonus": 20, "country_name": None},
 ]
 
 # Country-themed equipment sets: only sold in that country's own fortress
@@ -90,7 +90,7 @@ DEFAULT_ITEMS = [
 # across str/def/luk like ordinary gear, matching its "六圍均衡" theme. Set
 # bonuses for wearing 2 or 3 pieces together are computed at combat-stat
 # time in app.py (SET_BONUS_TIERS / EARTH_SET_BONUS_TIERS), not stored here.
-SET_ITEM_PRICE = 1400
+SET_ITEM_PRICE = 70000
 SET_ITEM_STAT_BONUS = 26
 DEFAULT_SET_ITEMS = [
     {"shop_type": "weapon", "name": "流金劍", "stat": "luk", "country_name": "百鍊流金國"},
@@ -124,11 +124,11 @@ DEFAULT_ITEMS = DEFAULT_ITEMS + DEFAULT_SET_ITEMS
 # as that country's own DEFAULT_SET_ITEMS, they count toward the exact same
 # _equipment_set_bonus tally (grouped by country element) as the ordinary
 # set -- there's no separate "regalia set" bonus mechanic.
-GENERAL_SET_ITEM_PRICE = 2200
+GENERAL_SET_ITEM_PRICE = 85000
 GENERAL_SET_ITEM_STAT_BONUS = 34
-ADVISOR_SET_ITEM_PRICE = 2200
+ADVISOR_SET_ITEM_PRICE = 85000
 ADVISOR_SET_ITEM_STAT_BONUS = 34
-KING_SET_ITEM_PRICE = 3000
+KING_SET_ITEM_PRICE = 100000
 KING_SET_ITEM_STAT_BONUS = 44
 
 # 大將軍套裝 (General): attack-focused, always buffs str regardless of country.
@@ -396,6 +396,14 @@ def _ensure_character_columns(conn):
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_characters_name ON characters(name)")
         except sqlite3.IntegrityError:
             pass
+    if "contribution" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN contribution INTEGER NOT NULL DEFAULT 0")
+    if "donated_today" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN donated_today INTEGER NOT NULL DEFAULT 0")
+    if "donated_today_date" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN donated_today_date TEXT")
+    if "garrison_cooldown_until" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN garrison_cooldown_until TEXT")
 
 
 def _ensure_country_columns(conn):
@@ -579,7 +587,7 @@ def _ensure_game_settings_columns(conn):
     if "guardian_exp_multiplier" not in cols:
         conn.execute("ALTER TABLE game_settings ADD COLUMN guardian_exp_multiplier REAL NOT NULL DEFAULT 2")
     if "stat_reroll_cost" not in cols:
-        conn.execute("ALTER TABLE game_settings ADD COLUMN stat_reroll_cost INTEGER NOT NULL DEFAULT 10000")
+        conn.execute("ALTER TABLE game_settings ADD COLUMN stat_reroll_cost INTEGER NOT NULL DEFAULT 100000")
 
 
 def init_db():

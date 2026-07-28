@@ -659,7 +659,8 @@ def _render_game(**extra):
                   characters.stat_floor_str, characters.stat_floor_def, characters.stat_floor_agi,
                   characters.stat_floor_luk, characters.level_bonus_hp, characters.level_bonus_mp,
                   characters.level_bonus_str, characters.level_bonus_def, characters.level_bonus_agi,
-                  characters.level_bonus_luk, countries.*
+                  characters.level_bonus_luk, characters.contribution,
+                  characters.donated_today, characters.donated_today_date, countries.*
            FROM characters JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
         (session["user_id"],),
@@ -792,6 +793,24 @@ def _render_game(**extra):
     min_x, max_x = min(xs) - padding, max(xs) + padding
     min_y, max_y = min(ys) - padding, max(ys) + padding
 
+    # 貢獻值 donation cap display: NOTE this SELECT ends with a bare
+    # countries.*, so character["id"] resolves to the COUNTRY's id (last
+    # column wins in sqlite3.Row) -- the character's own id is
+    # character["character_id"]. Comparing against king/advisor/general
+    # character id MUST use character["character_id"], not character["id"].
+    if character["character_id"] == character["king_character_id"]:
+        donate_cap = DONATE_DAILY_CAP_KING
+    elif character["character_id"] in (
+        character["advisor_character_id"], character["general_character_id"],
+    ):
+        donate_cap = DONATE_DAILY_CAP_OFFICER
+    else:
+        donate_cap = DONATE_DAILY_CAP_DEFAULT
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    donated_today_display = (
+        character["donated_today"] if character["donated_today_date"] == today else 0
+    )
+
     context = dict(
         character=character,
         stats=stats,
@@ -817,6 +836,8 @@ def _render_game(**extra):
         garrison=garrison,
         garrison_tile=garrison_tile,
         can_station_here=can_station_here,
+        donate_cap=donate_cap,
+        donated_today_display=donated_today_display,
     )
     context.update(extra)
     return render_template("game.html", **context)
@@ -1506,30 +1527,66 @@ def game_conquer():
                 f"身上{currency_lost}諸神幣被{defending_country['name']}沒收"
             )
 
+        # 貢獻值: only national PvP conquest combat (this branch and the tower
+        # branch below) earns contribution -- timed_out is a true no-op, same
+        # as it already is for currency.
+        if result["won"]:
+            attacker_contribution_delta = CONTRIBUTION_ATTACK_WIN
+            defender_contribution_delta = CONTRIBUTION_DEFENSE_LOSS
+        elif result["timed_out"]:
+            attacker_contribution_delta = 0
+            defender_contribution_delta = 0
+        else:
+            attacker_contribution_delta = CONTRIBUTION_ATTACK_LOSS
+            defender_contribution_delta = CONTRIBUTION_DEFENSE_WIN
+
         db.execute(
             """UPDATE characters
                SET currency = ?, current_hp = ?, current_mp = ?, next_action_at = ?,
                    pvp_battles_count = pvp_battles_count + 1,
                    pvp_wins_count = pvp_wins_count + ?,
+                   contribution = contribution + ?,
                    pending_boss_monster_id = NULL
                WHERE id = ?""",
             (
                 new_currency, result["player_hp"], result["player_mp"],
                 _next_action_at(settings["turn_wait_seconds"]),
-                1 if result["won"] else 0, character["character_id"],
+                1 if result["won"] else 0, attacker_contribution_delta, character["character_id"],
             ),
         )
         # Defender's own current_hp/current_mp are NOT touched (point 6 --
         # always a fresh full-stats fight, no persisted damage carryover);
         # only their PvP counters change, and their garrison row is removed
-        # above if they lost.
-        db.execute(
-            """UPDATE characters
-               SET pvp_battles_count = pvp_battles_count + 1,
-                   pvp_wins_count = pvp_wins_count + ?
-               WHERE id = ?""",
-            (0 if result["won"] else 1, defender_row["defender_id"]),
-        )
+        # above if they lost. A defender loss (attacker won) also starts a
+        # 10-minute garrison_cooldown_until so they can't immediately
+        # re-station; a defender win sets no cooldown.
+        if result["won"]:
+            db.execute(
+                """UPDATE characters
+                   SET pvp_battles_count = pvp_battles_count + 1,
+                       pvp_wins_count = pvp_wins_count + 0,
+                       contribution = contribution + ?,
+                       garrison_cooldown_until = ?
+                   WHERE id = ?""",
+                (
+                    defender_contribution_delta,
+                    _next_action_at(GARRISON_DEFENSE_LOSS_COOLDOWN_SECONDS),
+                    defender_row["defender_id"],
+                ),
+            )
+        else:
+            db.execute(
+                """UPDATE characters
+                   SET pvp_battles_count = pvp_battles_count + 1,
+                       pvp_wins_count = pvp_wins_count + ?,
+                       contribution = contribution + ?
+                   WHERE id = ?""",
+                (
+                    1,
+                    defender_contribution_delta,
+                    defender_row["defender_id"],
+                ),
+            )
         log_activity(
             db, session["user_id"], session["username"],
             "conquer_win" if result["won"] else "conquer_loss",
@@ -1590,15 +1647,25 @@ def game_conquer():
             f"攻打{tile_name}失敗，身上{currency_lost}諸神幣被{defending_country['name']}沒收"
         )
 
+    # 貢獻值: NPC tower fight -- attacker-only, no defender to award (there is
+    # no defender_row in this branch). timed_out stays a no-op.
+    if result["won"]:
+        tower_attacker_contribution_delta = CONTRIBUTION_ATTACK_WIN
+    elif result["timed_out"]:
+        tower_attacker_contribution_delta = 0
+    else:
+        tower_attacker_contribution_delta = CONTRIBUTION_ATTACK_LOSS
+
     db.execute(
         """UPDATE characters
            SET currency = ?, current_hp = ?, current_mp = ?, next_action_at = ?,
                battles_count = battles_count + 1, wins_count = wins_count + ?,
+               contribution = contribution + ?,
                pending_boss_monster_id = NULL
            WHERE id = ?""",
         (
             new_currency, result["player_hp"], result["player_mp"], _next_action_at(settings["turn_wait_seconds"]),
-            1 if result["won"] else 0, character["character_id"],
+            1 if result["won"] else 0, tower_attacker_contribution_delta, character["character_id"],
         ),
     )
     log_activity(
@@ -1631,9 +1698,15 @@ def game_conquer():
 def game_garrison_station():
     db = get_db()
     character = db.execute(
-        "SELECT id, current_tile_id, country_id FROM characters WHERE user_id = ?",
+        "SELECT id, current_tile_id, country_id, garrison_cooldown_until FROM characters WHERE user_id = ?",
         (session["user_id"],),
     ).fetchone()
+
+    remaining_cooldown = _cooldown_remaining_seconds(character["garrison_cooldown_until"])
+    if remaining_cooldown > 0:
+        db.close()
+        flash(f"防守失敗後需要等待才能重新駐防，還需 {_format_duration(remaining_cooldown)}")
+        return redirect(url_for("game"))
 
     existing = db.execute(
         "SELECT id, tile_id FROM garrisons WHERE character_id = ?", (character["id"],)
@@ -1774,7 +1847,8 @@ def _character_for_shop(db):
         """SELECT characters.id, characters.currency, characters.bank_balance,
                   characters.next_action_at, characters.country_id, map_tiles.tile_type,
                   map_tiles.country_id AS tile_country_id,
-                  characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id
+                  characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id,
+                  characters.contribution, characters.donated_today, characters.donated_today_date
            FROM characters JOIN map_tiles ON map_tiles.id = characters.current_tile_id
            WHERE characters.user_id = ?""",
         (session["user_id"],),
@@ -1991,6 +2065,20 @@ def game_shop_sell():
 
 BANK_AMOUNT_UNIT = 1000
 
+# 貢獻值 (contribution) constants -- earned via national PvP conquest combat
+# (game_conquer, enemy-country tiles only) and via treasury donations
+# (game_treasury_donate). See CLAUDE.md-adjacent design notes in those
+# functions for the exact rules.
+CONTRIBUTION_ATTACK_WIN = 10
+CONTRIBUTION_ATTACK_LOSS = 5
+CONTRIBUTION_DEFENSE_WIN = 10
+CONTRIBUTION_DEFENSE_LOSS = 5
+GARRISON_DEFENSE_LOSS_COOLDOWN_SECONDS = 600
+CONTRIBUTION_PER_DONATION_UNIT = 1000
+DONATE_DAILY_CAP_DEFAULT = 10000
+DONATE_DAILY_CAP_KING = 20000
+DONATE_DAILY_CAP_OFFICER = 15000
+
 
 def _parse_bank_amount(raw):
     """Bank deposits/withdrawals and treasury donations must be a positive
@@ -2116,22 +2204,59 @@ def game_treasury_donate():
         flash("捐獻金額不可超過身上諸神幣數量")
         return redirect(url_for("game"))
 
+    # 貢獻值 daily donation cap: depends on the character's CURRENT government
+    # role in their own country (國王 > 參謀/大將軍 > 一般人), resets when the
+    # UTC calendar date changes.
+    country_roles = db.execute(
+        "SELECT king_character_id, advisor_character_id, general_character_id FROM countries WHERE id = ?",
+        (character["country_id"],),
+    ).fetchone()
+    if country_roles is not None and character["id"] == country_roles["king_character_id"]:
+        donate_cap = DONATE_DAILY_CAP_KING
+    elif country_roles is not None and character["id"] in (
+        country_roles["advisor_character_id"], country_roles["general_character_id"],
+    ):
+        donate_cap = DONATE_DAILY_CAP_OFFICER
+    else:
+        donate_cap = DONATE_DAILY_CAP_DEFAULT
+
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    donated_so_far = character["donated_today"] if character["donated_today_date"] == today else 0
+    if donated_so_far + amount > donate_cap:
+        db.close()
+        flash(
+            f"今日捐獻已達上限（{donate_cap} 諸神幣），"
+            f"今天還可以捐獻 {max(0, donate_cap - donated_so_far)} 諸神幣"
+        )
+        return redirect(url_for("game"))
+
+    contribution_gained = amount // CONTRIBUTION_PER_DONATION_UNIT
+    new_donated_today = donated_so_far + amount
+
     settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
     db.execute(
-        "UPDATE characters SET currency = currency - ?, next_action_at = ? WHERE id = ?",
-        (amount, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+        """UPDATE characters
+           SET currency = currency - ?, next_action_at = ?,
+               contribution = contribution + ?,
+               donated_today = ?, donated_today_date = ?
+           WHERE id = ?""",
+        (
+            amount, _next_action_at(settings["turn_wait_seconds"]),
+            contribution_gained, new_donated_today, today, character["id"],
+        ),
     )
     db.execute(
         "UPDATE countries SET treasury = treasury + ? WHERE id = ?", (amount, character["country_id"])
     )
     log_activity(
         db, session["user_id"], session["username"], "treasury_donate",
-        detail=f"捐獻 {amount} 諸神幣給國庫", ip_address=request.remote_addr,
+        detail=f"捐獻 {amount} 諸神幣給國庫，獲得 {contribution_gained} 貢獻值",
+        ip_address=request.remote_addr,
     )
     db.commit()
     db.close()
 
-    flash(f"已捐獻 {amount} 諸神幣給國庫")
+    flash(f"已捐獻 {amount} 諸神幣給國庫，獲得 {contribution_gained} 貢獻值")
     return redirect(url_for("game"))
 
 
@@ -2317,7 +2442,7 @@ def character_page():
                   characters.equipped_accessory_id, characters.battles_count,
                   characters.wins_count, characters.pvp_battles_count, characters.pvp_wins_count,
                   characters.equipped_skill_1, characters.equipped_skill_2,
-                  characters.rename_count,
+                  characters.rename_count, characters.contribution,
                   countries.*
            FROM characters JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
@@ -2559,7 +2684,7 @@ def character_rejoin_country():
 
     old_country_name = character["name"]
     db.execute(
-        "UPDATE characters SET country_id = ?, current_tile_id = ? WHERE id = ?",
+        "UPDATE characters SET country_id = ?, current_tile_id = ?, contribution = 0 WHERE id = ?",
         (new_country["id"], fortress["id"], character["character_id"]),
     )
     db.execute("DELETE FROM garrisons WHERE character_id = ?", (character["character_id"],))

@@ -53,6 +53,10 @@
       <span>勝率 {{ "%.1f"|format(pvp_win_rate) ~ "%" if pvp_win_rate is not none else "尚無紀錄" }}</span>
     </div>
 
+    <div style="display:flex; gap:14px; font-size:13px; color:var(--text-dim); margin-top:10px; flex-wrap:wrap;">
+      <span>貢獻值 {{ character.contribution }}</span>
+    </div>
+
     {% if active_sets %}
     <div style="margin-top:10px; font-size:13px; color:var(--gold-bright);">
       {% for s in active_sets %}

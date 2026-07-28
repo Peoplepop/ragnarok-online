@@ -77,6 +77,10 @@ CREATE TABLE IF NOT EXISTS characters (
     equipped_skill_2 TEXT,
     is_npc INTEGER NOT NULL DEFAULT 0,
     rename_count INTEGER NOT NULL DEFAULT 0,
+    contribution INTEGER NOT NULL DEFAULT 0,
+    donated_today INTEGER NOT NULL DEFAULT 0,
+    donated_today_date TEXT,
+    garrison_cooldown_until TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (country_id) REFERENCES countries(id),
@@ -115,7 +119,7 @@ CREATE TABLE IF NOT EXISTS game_settings (
     exp_growth_tier3_percent REAL NOT NULL DEFAULT 0.8,
     exp_growth_tier4_percent REAL NOT NULL DEFAULT 0.8,
     rebirth_stat_bonus_percent REAL NOT NULL DEFAULT 15,
-    stat_reroll_cost INTEGER NOT NULL DEFAULT 10000
+    stat_reroll_cost INTEGER NOT NULL DEFAULT 100000
 );
 
 CREATE TABLE IF NOT EXISTS site_visits (
