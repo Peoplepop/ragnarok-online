@@ -70,10 +70,19 @@
         {% if leveled_up %}，升到 Lv.{{ new_level }}！{% endif %}
         {% endif %}
       </p>
+    {% elif timed_out %}
+      <h3 style="margin:0 0 8px; color:var(--gold-bright);">⏳ 戰鬥回合已滿</h3>
+      <p style="margin:0; font-size:13px; color:var(--text-dim);">
+        {% if bandit_fight %}
+        山賊領主 HP 削減至 {{ bandit_hp_remaining }}/{{ bandit_hp_max }}，尚未擊敗，戰鬥回合已滿，雙方仍在交戰、未分勝負，沒有任何諸神幣損失
+        {% elif conquest %}
+        攻城戰鬥回合已滿，「{{ defending_country_name }}」與你仍在交戰、未分勝負，沒有任何諸神幣損失
+        {% else %}
+        與「{{ monster.name }}」戰鬥回合已滿，未分勝負，沒有任何諸神幣損失
+        {% endif %}
+      </p>
     {% else %}
-      <h3 style="margin:0 0 8px; color:{% if bandit_fight and not attacker_defeated %}var(--gold-bright){% else %}var(--danger){% endif %};">
-        {% if bandit_fight and not attacker_defeated %}⚔️ 交鋒告一段落{% else %}💀 戰鬥失敗{% endif %}
-      </h3>
+      <h3 style="margin:0 0 8px; color:var(--danger);">💀 戰鬥失敗</h3>
       <p style="margin:0; font-size:13px; color:var(--text-dim);">
         {% if bandit_fight %}
         山賊領主 HP 削減至 {{ bandit_hp_remaining }}/{{ bandit_hp_max }}，尚未擊敗

@@ -80,15 +80,23 @@ def defense_tower_stats(country, tile_type, settings):
 # several repeat attacks, not one lucky roll.
 #
 # BANDIT_HP_MULTIPLIER was picked by simulating a representative max-level
-# solo attacker (Lv200, 四轉 job, 轉生 x3, a country str bonus + a 3-piece
-# equipment set) against this profile with run_battle: at x70 raw HP, that
+# solo attacker (Lv200, 四轉業火尊者, 轉生 x3, a country str bonus + a 3-piece
+# equipment set) against this profile with run_battle: at x50 raw HP, that
 # attacker depleted it solo in ~9-12 repeated actions across 300 simulated
-# trials (average ~10.7) -- comfortably inside the "5-20 actions" target.
+# trials (average ~10.15) -- comfortably inside the "5-20 actions" target and
+# matching the original x70/60-round-cap tuning's ~9-12 actions (avg ~10.7)
+# almost exactly. Recomputed after the round-mechanics rework (15-round cap,
+# both sides' attack counts now scale off their OWN speed instead of only
+# the faster side getting extra attacks off the speed lead) -- that rework
+# drastically raised per-action damage output, so the old x70 value alone
+# would have let a strong attacker solo it in ~14 actions instead; x50 was
+# re-derived from scratch against the new run_battle to land back in the
+# original target band.
 _BANDIT_LORD_NAME = "山賊領主"
 _BANDIT_LORD_ZERO_BONUS = {
     "hp_bonus": 0, "mp_bonus": 0, "str_bonus": 0, "def_bonus": 0, "agi_bonus": 0, "luk_bonus": 0,
 }
-BANDIT_HP_MULTIPLIER = 70
+BANDIT_HP_MULTIPLIER = 50
 
 
 def _bandit_lord_stats(settings=None):

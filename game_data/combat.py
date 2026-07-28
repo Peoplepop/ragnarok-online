@@ -105,18 +105,27 @@ def _combat_hit(
     return damage, f"{attacker_name} {verb} {defender_name}，造成 {damage} 點傷害{suffix}"
 
 
-BATTLE_ROUND_CAP = 60
+BATTLE_ROUND_CAP = 15
 
 
 def run_battle(player_name, player_stats, player_element, player_hp, monster, player_mp=0, usable_skills=()):
-    """Resolves an entire fight in one shot. Turn order and extra attacks are
-    driven purely by attack speed (AGI*SPEED_PER_AGI): whoever is faster always
-    goes first each round, and gets +1 extra attack per EXTRA_ATTACK_SPEED_STEP
-    of speed lead. Monsters have no LUK column so they use 0 (baseline hit/dodge
-    only), but they do roll crits off their own AGI and carry their own
-    element for the Wu Xing damage multiplier. Each player attack independently
-    tries the character's known skills (strongest first) before falling back
-    to a plain hit."""
+    """Resolves an entire fight in one shot. Turn order is driven purely by
+    attack speed (AGI*SPEED_PER_AGI): whoever is faster always goes first each
+    round. Each side's own attack count per round is derived independently
+    from its OWN speed (not the speed lead over the opponent):
+    1 + own_speed // EXTRA_ATTACK_SPEED_STEP. The faster side fires its full
+    attack allotment first (checking for a death after every hit), then the
+    slower side fires its own full allotment -- only after BOTH sides have
+    completed their attacks does the round counter advance. Monsters have no
+    LUK column so they use 0 (baseline hit/dodge only), but they do roll
+    crits off their own AGI and carry their own element for the Wu Xing
+    damage multiplier. Each player attack independently tries the
+    character's known skills (strongest first) before falling back to a
+    plain hit.
+
+    If BATTLE_ROUND_CAP is reached with both sides still alive, the fight
+    ends in a timeout (`timed_out=True`) rather than a loss -- the attacker
+    was never actually defeated, the round limit just ran out."""
     log = []
     p_hp, m_hp, p_mp = player_hp, monster["hp"], player_mp
 
@@ -124,11 +133,11 @@ def run_battle(player_name, player_stats, player_element, player_hp, monster, pl
     monster_speed = monster["agi"] * SPEED_PER_AGI
     if player_speed >= monster_speed:
         faster, slower = "player", "monster"
-        speed_lead = player_speed - monster_speed
     else:
         faster, slower = "monster", "player"
-        speed_lead = monster_speed - player_speed
-    extra_attacks = speed_lead // EXTRA_ATTACK_SPEED_STEP
+    player_attacks_per_round = 1 + player_speed // EXTRA_ATTACK_SPEED_STEP
+    monster_attacks_per_round = 1 + monster_speed // EXTRA_ATTACK_SPEED_STEP
+    attacks_per_round = {"player": player_attacks_per_round, "monster": monster_attacks_per_round}
 
     def attack_once(attacker):
         nonlocal p_hp, m_hp, p_mp
@@ -157,15 +166,26 @@ def run_battle(player_name, player_stats, player_element, player_hp, monster, pl
             p_hp = max(0, p_hp - dmg)
             log.append(f"{line}（{player_name} 剩餘 HP {p_hp}）")
 
-    for _round in range(BATTLE_ROUND_CAP):
+    timed_out = False
+    for round_num in range(BATTLE_ROUND_CAP):
         if p_hp <= 0 or m_hp <= 0:
             break
-        for _ in range(1 + extra_attacks):
+        for _ in range(attacks_per_round[faster]):
             attack_once(faster)
             if p_hp <= 0 or m_hp <= 0:
                 break
         if p_hp <= 0 or m_hp <= 0:
             break
-        attack_once(slower)
+        for _ in range(attacks_per_round[slower]):
+            attack_once(slower)
+            if p_hp <= 0 or m_hp <= 0:
+                break
+        if p_hp <= 0 or m_hp <= 0:
+            break
+        if round_num == BATTLE_ROUND_CAP - 1:
+            timed_out = True
 
-    return {"log": log, "won": m_hp <= 0 and p_hp > 0, "player_hp": p_hp, "player_mp": p_mp, "monster_hp": m_hp}
+    return {
+        "log": log, "won": m_hp <= 0 and p_hp > 0, "timed_out": timed_out,
+        "player_hp": p_hp, "player_mp": p_mp, "monster_hp": m_hp,
+    }

@@ -1,6 +1,7 @@
 import os
 import random
 import sqlite3
+import uuid
 from datetime import datetime, timedelta
 from functools import wraps
 
@@ -225,6 +226,46 @@ def _session_activity():
     db.execute("UPDATE users SET last_seen_at = datetime('now') WHERE id = ?", (user_id,))
     db.commit()
     db.close()
+
+
+VISITOR_COOKIE_NAME = "visitor_id"
+VISITOR_COOKIE_MAX_AGE = 60 * 60 * 24 * 365 * 5  # 5 years
+
+
+@app.after_request
+def _track_site_visit(response):
+    """Simple admin-only site visit counter (site_visits.total_views) plus a
+    distinct-visitor count (site_visitors, keyed off a long-lived cookie) --
+    counts every non-static request regardless of login state. Runs as a
+    single after_request hook (rather than before_request) because it needs
+    to both read the visitor_id cookie AND set it on the response the first
+    time a visitor is seen; an upsert (INSERT ... ON CONFLICT DO UPDATE)
+    keeps a returning visitor whose cookie already exists from ever being
+    double-counted as a new unique visitor."""
+    if request.endpoint == "static":
+        return response
+
+    visitor_id = request.cookies.get(VISITOR_COOKIE_NAME)
+    is_new_cookie = visitor_id is None
+    if is_new_cookie:
+        visitor_id = uuid.uuid4().hex
+
+    db = get_db()
+    db.execute("UPDATE site_visits SET total_views = total_views + 1 WHERE id = 1")
+    db.execute(
+        """INSERT INTO site_visitors (visitor_id) VALUES (?)
+           ON CONFLICT(visitor_id) DO UPDATE SET last_seen_at = datetime('now')""",
+        (visitor_id,),
+    )
+    db.commit()
+    db.close()
+
+    if is_new_cookie:
+        response.set_cookie(
+            VISITOR_COOKIE_NAME, visitor_id, max_age=VISITOR_COOKIE_MAX_AGE,
+            httponly=True, samesite="Lax",
+        )
+    return response
 
 
 @app.context_processor
@@ -818,9 +859,11 @@ def game_hunt():
         if is_guardian_fight and boss is not None and result["player_hp"] > 0:
             boss_room_available = True
             pending_boss_id = boss["id"]
-    else:
+    elif not result["timed_out"]:
         currency_lost = character["currency"] // 2
         new_currency = character["currency"] - currency_lost
+    else:
+        new_currency = character["currency"]
 
     _process_job_progression(db, character, character["level"], new_level)
 
@@ -842,10 +885,12 @@ def game_hunt():
             character["character_id"],
         ),
     )
-    outcome_detail = (
-        f"擊敗{monster['name']}，+{exp_gain} EXP +{currency_gain} 諸神幣"
-        if result["won"] else f"敗給{monster['name']}，身上 {currency_lost} 諸神幣化為烏有"
-    )
+    if result["won"]:
+        outcome_detail = f"擊敗{monster['name']}，+{exp_gain} EXP +{currency_gain} 諸神幣"
+    elif result["timed_out"]:
+        outcome_detail = f"與{monster['name']}戰鬥回合已滿，未分勝負，沒有任何諸神幣損失"
+    else:
+        outcome_detail = f"敗給{monster['name']}，身上 {currency_lost} 諸神幣化為烏有"
     if is_guardian_fight:
         outcome_detail = f"[守衛怪] {outcome_detail}"
     log_activity(
@@ -873,6 +918,7 @@ def game_hunt():
         boss_room_available=boss_room_available,
         log=result["log"],
         won=result["won"],
+        timed_out=result["timed_out"],
         leveled_up=new_level > character["level"],
         new_level=new_level,
         exp_gain=exp_gain,
@@ -958,9 +1004,11 @@ def game_hunt_boss_room():
             job_class=character["job_class"], job_tier=character["job_tier"],
         )
         new_currency = character["currency"] + currency_gain
-    else:
+    elif not result["timed_out"]:
         currency_lost = character["currency"] // 2
         new_currency = character["currency"] - currency_lost
+    else:
+        new_currency = character["currency"]
 
     _process_job_progression(db, character, character["level"], new_level)
 
@@ -981,10 +1029,12 @@ def game_hunt_boss_room():
             character["character_id"],
         ),
     )
-    outcome_detail = (
-        f"擊敗{boss['name']}，+{exp_gain} EXP +{currency_gain} 諸神幣"
-        if result["won"] else f"敗給{boss['name']}，身上 {currency_lost} 諸神幣化為烏有"
-    )
+    if result["won"]:
+        outcome_detail = f"擊敗{boss['name']}，+{exp_gain} EXP +{currency_gain} 諸神幣"
+    elif result["timed_out"]:
+        outcome_detail = f"與{boss['name']}戰鬥回合已滿，未分勝負，沒有任何諸神幣損失"
+    else:
+        outcome_detail = f"敗給{boss['name']}，身上 {currency_lost} 諸神幣化為烏有"
     log_activity(
         db, session["user_id"], session["username"], "hunt",
         detail=f"[魔王房間] {ground['name']} {outcome_detail}", ip_address=request.remote_addr,
@@ -1009,6 +1059,7 @@ def game_hunt_boss_room():
         boss_room_challenge=True,
         log=result["log"],
         won=result["won"],
+        timed_out=result["timed_out"],
         leveled_up=new_level > character["level"],
         new_level=new_level,
         exp_gain=exp_gain,
@@ -1060,14 +1111,15 @@ def _resolve_bandit_conquest(db, character, settings, stats, current_hp, current
     # Modeled like a normal PvE loss (game_hunt), NOT the country-vs-country
     # conquer loss rule -- there's no owning country's treasury for a
     # neutral-tile fight to pay into, so a forfeited half-currency simply
-    # vanishes. This is keyed off the attacker's own ending HP rather than
-    # off a plain "not tile_captured", because bandit_hp is deliberately
-    # tuned to take several actions to deplete: BATTLE_ROUND_CAP is routinely
-    # hit with both sides still standing, and that "inconclusive" outcome is
-    # neither a capture nor a defeat -- it must not cost the attacker anything.
+    # vanishes. bandit_hp is deliberately tuned to take several actions to
+    # deplete, so BATTLE_ROUND_CAP is routinely hit with both sides still
+    # standing -- run_battle reports that inconclusive case as
+    # timed_out=True, which is neither a capture nor a defeat and must not
+    # cost the attacker anything; only an actual player death (not won, not
+    # timed_out) forfeits currency.
     currency_lost = 0
     new_currency = character["currency"]
-    if result["player_hp"] <= 0:
+    if not result["won"] and not result["timed_out"]:
         currency_lost = character["currency"] // 2
         new_currency = character["currency"] - currency_lost
 
@@ -1119,8 +1171,9 @@ def _resolve_bandit_conquest(db, character, settings, stats, current_hp, current
         monster=bandit_monster,
         log=result["log"],
         won=tile_captured,
+        timed_out=result["timed_out"],
         tile_captured=tile_captured,
-        attacker_defeated=result["player_hp"] <= 0,
+        attacker_defeated=not result["won"] and not result["timed_out"],
         currency_lost=currency_lost,
         player_hp=result["player_hp"],
         max_hp=stats["hp"],
@@ -1268,6 +1321,11 @@ def game_conquer():
         if result["won"]:
             db.execute("DELETE FROM garrisons WHERE id = ?", (defender_row["garrison_id"],))
             outcome_detail = f"擊敗了駐防於{tile_name}的{defender_row['defender_name']}"
+        elif result["timed_out"]:
+            outcome_detail = (
+                f"攻打{tile_name}時與駐防的{defender_row['defender_name']}戰鬥回合已滿，"
+                f"未分勝負，沒有任何諸神幣損失"
+            )
         else:
             currency_lost = character["currency"] // 2
             new_currency = character["currency"] - currency_lost
@@ -1320,6 +1378,7 @@ def game_conquer():
             monster=defender_monster,
             log=result["log"],
             won=result["won"],
+            timed_out=result["timed_out"],
             currency_lost=currency_lost,
             player_hp=result["player_hp"],
             max_hp=stats["hp"],
@@ -1349,6 +1408,9 @@ def game_conquer():
             ),
         )
         outcome_detail = f"攻下{tile_name}（原屬{defending_country['name']}）"
+    elif result["timed_out"]:
+        new_currency = character["currency"]
+        outcome_detail = f"攻打{tile_name}戰鬥回合已滿，未分勝負，沒有任何諸神幣損失"
     else:
         currency_lost = character["currency"] // 2
         new_currency = character["currency"] - currency_lost
@@ -1386,6 +1448,7 @@ def game_conquer():
         monster=tower,
         log=result["log"],
         won=result["won"],
+        timed_out=result["timed_out"],
         currency_lost=currency_lost,
         player_hp=result["player_hp"],
         max_hp=stats["hp"],
@@ -2672,6 +2735,8 @@ def admin():
     db = get_db()
     countries = db.execute("SELECT * FROM countries ORDER BY id").fetchall()
     characters = db.execute("SELECT id, name, country_id FROM characters ORDER BY name").fetchall()
+    total_views = db.execute("SELECT total_views FROM site_visits WHERE id = 1").fetchone()["total_views"]
+    unique_visitors = db.execute("SELECT COUNT(*) AS c FROM site_visitors").fetchone()["c"]
     db.close()
 
     characters_by_country = {}
@@ -2681,6 +2746,7 @@ def admin():
     return render_template(
         "admin.html", countries=countries, characters_by_country=characters_by_country,
         roles=GOVERNMENT_ROLES, active_tab="countries",
+        total_views=total_views, unique_visitors=unique_visitors,
     )
 
 

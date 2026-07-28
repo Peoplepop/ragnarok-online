@@ -3,6 +3,18 @@
 
 {% block content %}
   {% include "_admin_nav.html" %}
+
+  <div class="panel" style="margin-bottom: 18px; display:flex; gap:32px; flex-wrap:wrap; font-size:13px;">
+    <div>
+      <div style="color:var(--gold-bright); margin-bottom:4px;">📊 網站瀏覽次數</div>
+      <div style="color:var(--text-dim); font-size:18px;">{{ total_views }}</div>
+    </div>
+    <div>
+      <div style="color:var(--gold-bright); margin-bottom:4px;">👤 不重複訪客數</div>
+      <div style="color:var(--text-dim); font-size:18px;">{{ unique_visitors }}</div>
+    </div>
+  </div>
+
   <h2 style="color: var(--gold-bright); font-size: 18px; margin-top:0;">國家管理</h2>
   <p class="hint" style="margin-top:-8px; margin-bottom:20px;">調整各國名稱、屬性介紹與六圍數值加成</p>
 

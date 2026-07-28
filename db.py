@@ -540,6 +540,9 @@ def seed_defaults():
     if conn.execute("SELECT COUNT(*) AS c FROM game_settings").fetchone()["c"] == 0:
         conn.execute("INSERT INTO game_settings (id) VALUES (1)")
 
+    if conn.execute("SELECT COUNT(*) AS c FROM site_visits").fetchone()["c"] == 0:
+        conn.execute("INSERT INTO site_visits (id, total_views) VALUES (1, 0)")
+
     if conn.execute("SELECT COUNT(*) AS c FROM hunting_grounds").fetchone()["c"] == 0:
         for g in DEFAULT_HUNTING_GROUNDS:
             conn.execute(

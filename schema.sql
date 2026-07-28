@@ -112,6 +112,17 @@ CREATE TABLE IF NOT EXISTS game_settings (
     rebirth_stat_bonus_percent REAL NOT NULL DEFAULT 15
 );
 
+CREATE TABLE IF NOT EXISTS site_visits (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    total_views INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS site_visitors (
+    visitor_id TEXT PRIMARY KEY,
+    first_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_seen_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS job_masteries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     character_id INTEGER NOT NULL,
