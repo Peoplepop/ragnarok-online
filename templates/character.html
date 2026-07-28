@@ -6,6 +6,10 @@
     <h2 style="margin:0 0 4px; color:var(--gold-bright);">{{ character.character_name }}</h2>
     <div class="element" style="font-size:13px;">屬性：{{ character.element }}　|　所屬國家：{{ character.name }}　|　職業：{{ character.job_class }}（{{ job_tier_label }}）</div>
     <p style="margin:6px 0 0; color:var(--text-dim); font-size:13px;">{{ character.description }}</p>
+    <form method="post" action="{{ url_for('character_rename') }}" style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+      <input type="text" name="new_name" placeholder="新角色名稱" style="max-width:180px;">
+      <button type="submit">改名（{{ next_rename_cost }} 諸神幣）</button>
+    </form>
     {% if overcomes or overcome_by %}
     <p style="margin:6px 0 0; color:var(--text-dim); font-size:12px;">
       {% if overcomes %}剋 {{ overcomes }}（傷害 +{{ element_overcome_bonus }}%）{% endif %}
@@ -114,6 +118,10 @@
       {% if character.job_tier == 0 %}10 級可一轉{% elif character.job_tier == 1 %}30 級可二轉{% elif character.job_tier == 2 %}70 級可三轉{% elif character.job_tier == 3 %}120 級可轉生{% else %}已四轉，繼續練功邁向封頂{% endif %}
     </p>
     {% endif %}
+
+    <form method="post" action="{{ url_for('character_reroll_stats') }}" onsubmit="return confirm('花費 {{ stat_reroll_cost }} 諸神幣重洗目前累積的升級屬性點，結果是隨機的，可能比目前更差，確定要繼續嗎？');" style="margin-top:12px;">
+      <button type="submit" {% if character.level <= 1 or character.currency < stat_reroll_cost %}disabled{% endif %}>花費 {{ stat_reroll_cost }} 諸神幣重洗屬性點</button>
+    </form>
   </div>
 
   <div class="panel" style="margin-bottom:20px;">

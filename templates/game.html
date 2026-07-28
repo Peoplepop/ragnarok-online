@@ -25,6 +25,12 @@
     </div>
   </div>
 
+  {% if country_destroyed %}
+  <div class="panel" style="margin-bottom:20px; border-color: var(--danger);">
+    <a href="{{ url_for('character_rejoin_country') }}" style="color:var(--danger); font-size:13px; text-decoration:none;">⚠️ 你的國家已經滅亡，請選擇加入其他國家 →</a>
+  </div>
+  {% endif %}
+
   {% if job_action_available %}
   <div class="panel" style="margin-bottom:20px; border-color: rgba(212, 175, 55, 0.5);">
     <a href="{{ url_for('character_page') }}" style="color:var(--gold-bright); font-size:13px; text-decoration:none;">✨ 你已經可以在角色詳情頁進行升轉或轉生了 →</a>

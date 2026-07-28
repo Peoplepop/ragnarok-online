@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}加入新國家 - 五行爭鋒{% endblock %}
+
+{% block content %}
+  <h2 style="color: var(--gold-bright); font-size:20px; margin-top:0;">你的國家已經滅亡</h2>
+  <p class="hint" style="margin-top:-8px; margin-bottom:22px;">
+    請選擇加入以下其中一個還有據點的國家。等級、經驗、職業、轉生次數、諸神幣、裝備與背包均不受影響。
+  </p>
+
+  {% if countries %}
+  <div class="countries">
+    {% for c in countries %}
+    <form method="post" class="country" style="display:flex; flex-direction:column; gap:10px;">
+      <input type="hidden" name="country_id" value="{{ c.id }}">
+      <div class="element">屬性：{{ c.element }}</div>
+      <h3>{{ c.name }}</h3>
+      <p>{{ c.description }}</p>
+      <button type="submit">加入{{ c.name }}</button>
+    </form>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="hint">目前沒有其他還有據點的國家可以加入</p>
+  {% endif %}
+{% endblock %}
