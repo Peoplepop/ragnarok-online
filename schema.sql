@@ -72,6 +72,8 @@ CREATE TABLE IF NOT EXISTS characters (
     level_bonus_def INTEGER NOT NULL DEFAULT 0,
     level_bonus_agi INTEGER NOT NULL DEFAULT 0,
     level_bonus_luk INTEGER NOT NULL DEFAULT 0,
+    equipped_skill_1 TEXT,
+    equipped_skill_2 TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (country_id) REFERENCES countries(id),
@@ -137,6 +139,15 @@ CREATE TABLE IF NOT EXISTS character_skills (
     character_id INTEGER NOT NULL,
     skill_key TEXT NOT NULL,
     learned_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(character_id, skill_key),
+    FOREIGN KEY (character_id) REFERENCES characters(id)
+);
+
+CREATE TABLE IF NOT EXISTS character_skill_books (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL,
+    skill_key TEXT NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1,
     UNIQUE(character_id, skill_key),
     FOREIGN KEY (character_id) REFERENCES characters(id)
 );

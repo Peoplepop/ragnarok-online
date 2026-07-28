@@ -48,6 +48,16 @@ TIER4_SKILL_NAMES = {
     "流金尊者": "流金運轉劫", "厚土真尊": "厚土鎮世",
 }
 
+# 四轉's 2nd skill slot: NOT learnable with currency at all (see
+# TIER_SLOT_TUNING[(4, 2)]'s "requires_skill_book" marker and
+# _learnable_skills, which hardcodes tier4 to only ever offer slot 1). The
+# only way in is a monster-dropped skill book, redeemed via
+# /character/skill_book/use once the character is actually 四轉.
+TIER4_SKILL_NAMES_SLOT2 = {
+    "業火尊者": "業火燎原", "青木道尊": "青木蔽天", "流水劍尊": "流水穿石劍",
+    "流金尊者": "流金逆天劫", "厚土真尊": "厚土封天",
+}
+
 # (job_tier, slot) -> tuning. slot counts up within a tier (1 = first learned).
 TIER_SLOT_TUNING = {
     (0, 1): {"mp_cost": 15, "multiplier": 1.3, "trigger_chance": 65, "learn_level": 10, "learn_cost": 500},
@@ -56,9 +66,18 @@ TIER_SLOT_TUNING = {
     (3, 1): {"mp_cost": 35, "multiplier": 2.2, "trigger_chance": 40, "learn_level": 70, "learn_cost": 8000},
     (3, 2): {"mp_cost": 42, "multiplier": 2.5, "trigger_chance": 35, "learn_level": 90, "learn_cost": 14000},
     (3, 3): {"mp_cost": 50, "multiplier": 2.8, "trigger_chance": 30, "learn_level": 110, "learn_cost": 22000},
-    # 四轉 only gets its 1st slot learnable with currency for now; further 四轉
-    # skills are meant to come from monster-dropped skill books -- not built yet.
+    # 四轉's 1st slot is learnable with currency same as every other tier's
+    # skills. Its 2nd slot (added below) is deliberately NOT part of that
+    # currency ladder -- it only ever comes from a monster-dropped skill
+    # book (1/20000 per won hunt in the 究級打怪場). trigger_chance stays at
+    # the ladder's 25% floor (a 2nd 四轉 slot doesn't go lower), while
+    # mp_cost/multiplier still climb past slot 1's, keeping the whole ladder
+    # monotonic end to end.
     (4, 1): {"mp_cost": 55, "multiplier": 3.2, "trigger_chance": 25, "learn_level": 121, "learn_cost": 40000},
+    (4, 2): {
+        "mp_cost": 65, "multiplier": 3.6, "trigger_chance": 25, "learn_level": 121,
+        "learn_cost": None, "requires_skill_book": True,
+    },
 }
 
 
@@ -100,10 +119,19 @@ def _build_skill_catalog():
             "job_tier": 4, "slot": 1, "job_class": job,
             **TIER_SLOT_TUNING[(4, 1)],
         }
+        catalog[_skill_key(job, 2)] = {
+            "key": _skill_key(job, 2), "name": TIER4_SKILL_NAMES_SLOT2[job], "stat": stat,
+            "job_tier": 4, "slot": 2, "job_class": job,
+            **TIER_SLOT_TUNING[(4, 2)],
+        }
     return catalog
 
 
 SKILL_CATALOG = _build_skill_catalog()
+
+# The 5 monster-drop-only 四轉 slot-2 skill keys, used by the ultimate hunting
+# ground's skill-book drop roll to pick which book a won hunt hands out.
+TIER4_SLOT2_SKILL_KEYS = [_skill_key(job, 2) for job in TIER4_SKILL_NAMES_SLOT2]
 
 
 def _skill_damage_stat_value(stats, stat):
@@ -182,9 +210,34 @@ def _learned_skill_keys(db, character_id):
     }
 
 
+def _character_equipped_skill_keys(db, character_id):
+    row = db.execute(
+        "SELECT equipped_skill_1, equipped_skill_2 FROM characters WHERE id = ?", (character_id,)
+    ).fetchone()
+    return [row["equipped_skill_1"], row["equipped_skill_2"]]
+
+
+def _equipped_combat_skills(character, learned_keys, equipped_keys):
+    """A character can know far more skills than they can fight with -- only
+    the <=2 skills actually configured into characters.equipped_skill_1/2
+    ("已配置技能") are ever tried in combat; everything else learned just sits
+    in the "skill library" inert. Still runs the equipped keys back through
+    _usable_skill_keys defensively: an equipped skill that's since become
+    lineage-locked (there's no proactive clearing of stale equip slots on
+    promotion) must not fire."""
+    usable = _usable_skill_keys(character, learned_keys)
+    ordered_keys = [k for k in equipped_keys if k and k in usable]
+    return _ordered_usable_skills(ordered_keys)
+
+
 def _character_usable_skills(db, character):
+    """DB-fetching wrapper around _equipped_combat_skills -- every run_battle
+    call site in app.py goes through this one function, so combat everywhere
+    (hunts, boss room, conquest, garrison duels, bandit lord) only ever tries
+    the character's equipped loadout, never their full learned skill set."""
     learned_keys = _learned_skill_keys(db, character["character_id"])
-    return _ordered_usable_skills(_usable_skill_keys(character, learned_keys))
+    equipped_keys = _character_equipped_skill_keys(db, character["character_id"])
+    return _equipped_combat_skills(character, learned_keys, equipped_keys)
 
 
 def _roll_job_skill(ordered_skills, current_mp):

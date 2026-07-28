@@ -286,6 +286,10 @@ def _ensure_character_columns(conn):
                       "level_bonus_def", "level_bonus_agi", "level_bonus_luk"):
         if bonus_col not in cols:
             conn.execute(f"ALTER TABLE characters ADD COLUMN {bonus_col} INTEGER NOT NULL DEFAULT 0")
+    if "equipped_skill_1" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN equipped_skill_1 TEXT")
+    if "equipped_skill_2" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN equipped_skill_2 TEXT")
     if "name" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN name TEXT")
         conn.execute(

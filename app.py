@@ -29,6 +29,7 @@ from game_data.jobs import (
 from game_data.skills import (
     NOVICE_SKILL_STAT_BY_ELEMENT, NOVICE_SKILL_NAMES, TIER2_SKILL_NAMES, TIER2_SKILL_NAMES_SLOT2,
     TIER3_SKILL_NAMES, TIER3_SKILL_NAMES_SLOT2, TIER3_SKILL_NAMES_SLOT3, TIER4_SKILL_NAMES,
+    TIER4_SKILL_NAMES_SLOT2, TIER4_SLOT2_SKILL_KEYS,
     TIER_SLOT_TUNING, _skill_key, _novice_skill_key, _build_skill_catalog, SKILL_CATALOG,
     _skill_damage_stat_value, _current_lineage_job_classes, _learnable_skills, _usable_skill_keys,
     _ordered_usable_skills, _learned_skill_keys, _character_usable_skills, _roll_job_skill,
@@ -841,6 +842,7 @@ def game_hunt():
     stat_gain = {key: 0 for key in LEVEL_UP_POINT_VALUE}
     pending_boss_id = None
     boss_room_available = False
+    skill_book_dropped = None
     if result["won"]:
         if is_guardian_fight:
             exp_multiplier = settings["guardian_exp_multiplier"]
@@ -859,6 +861,24 @@ def game_hunt():
         if is_guardian_fight and boss is not None and result["player_hp"] > 0:
             boss_room_available = True
             pending_boss_id = boss["id"]
+        # Rare monster-drop skill book: only rolls in the top-tier ultimate
+        # hunting ground, independent of the hunter's own job (a "wrong
+        # job's" book still isn't wasted -- once actually learned at 四轉,
+        # every learned skill becomes usable regardless of lineage).
+        if ground["tier"] == "ultimate" and random.random() < 1 / 20000:
+            dropped_key = random.choice(TIER4_SLOT2_SKILL_KEYS)
+            dropped_skill = SKILL_CATALOG[dropped_key]
+            skill_book_dropped = dropped_skill["name"]
+            db.execute(
+                """INSERT INTO character_skill_books (character_id, skill_key, quantity)
+                   VALUES (?, ?, 1)
+                   ON CONFLICT(character_id, skill_key) DO UPDATE SET quantity = quantity + 1""",
+                (character["character_id"], dropped_key),
+            )
+            log_activity(
+                db, session["user_id"], session["username"], "skill_book_drop",
+                detail=dropped_skill["name"], ip_address=request.remote_addr,
+            )
     elif not result["timed_out"]:
         currency_lost = character["currency"] // 2
         new_currency = character["currency"] - currency_lost
@@ -916,6 +936,7 @@ def game_hunt():
         monster=monster,
         guardian_encounter=is_guardian_fight,
         boss_room_available=boss_room_available,
+        skill_book_dropped=skill_book_dropped,
         log=result["log"],
         won=result["won"],
         timed_out=result["timed_out"],
@@ -2148,6 +2169,7 @@ def character_page():
                   characters.equipped_weapon_id, characters.equipped_armor_id,
                   characters.equipped_accessory_id, characters.battles_count,
                   characters.wins_count, characters.pvp_battles_count, characters.pvp_wins_count,
+                  characters.equipped_skill_1, characters.equipped_skill_2,
                   countries.*
            FROM characters JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
@@ -2179,6 +2201,11 @@ def character_page():
     inventory_items = {shop_type: [] for shop_type in SHOP_TYPE_LABELS}
     for row in inventory_rows:
         inventory_items[row["shop_type"]].append(row)
+
+    skill_book_rows = db.execute(
+        "SELECT skill_key, quantity FROM character_skill_books WHERE character_id = ? AND quantity > 0",
+        (character["character_id"],),
+    ).fetchall()
 
     db.close()
 
@@ -2225,10 +2252,31 @@ def character_page():
     active_sets = _active_set_summaries(equipped_items)
     learnable_skills = _learnable_skills(character, learned_keys)
     usable_keys = _usable_skill_keys(character, learned_keys)
-    usable_skills = _ordered_usable_skills(usable_keys)
     learned_locked_skills = sorted(
         (SKILL_CATALOG[k] for k in learned_keys - usable_keys if k in SKILL_CATALOG),
         key=lambda s: (s["job_tier"], s["slot"]),
+    )
+
+    # 4 distinct skill groups shown on this page: (1) equipped (<=2, actually
+    # fires in combat -- see _equipped_combat_skills), (2) the "skill library"
+    # (learned + currently lineage-usable but not equipped), (3) learnable
+    # (existing currency path), (4) learned_locked_skills (existing, above).
+    equipped_key_slots = [("1", character["equipped_skill_1"]), ("2", character["equipped_skill_2"])]
+    equipped_skills = [
+        {"slot": slot, "skill": SKILL_CATALOG[key]}
+        for slot, key in equipped_key_slots
+        if key and key in SKILL_CATALOG
+    ]
+    equipped_keys = {key for _, key in equipped_key_slots if key}
+    skill_library = [
+        s for s in _ordered_usable_skills(usable_keys) if s["key"] not in equipped_keys
+    ]
+    held_skill_books = sorted(
+        (
+            {"skill": SKILL_CATALOG[row["skill_key"]], "quantity": row["quantity"]}
+            for row in skill_book_rows if row["skill_key"] in SKILL_CATALOG
+        ),
+        key=lambda entry: entry["skill"]["name"],
     )
 
     return render_template(
@@ -2265,7 +2313,9 @@ def character_page():
         tier3_choices=tier3_choices,
         tier3_job_info=TIER3_JOBS,
         learnable_skills=learnable_skills,
-        usable_skills=usable_skills,
+        equipped_skills=equipped_skills,
+        skill_library=skill_library,
+        held_skill_books=held_skill_books,
         learned_locked_skills=learned_locked_skills,
         stat_labels=STAT_LABELS,
     )
@@ -2616,6 +2666,132 @@ def character_learn_skill():
     db.close()
 
     flash(f"學會了「{skill['name']}」！")
+    return redirect(url_for("character_page"))
+
+
+@app.route("/character/skill_book/use", methods=["POST"])
+@character_required
+def character_skill_book_use():
+    db = get_db()
+    character = _character_for_promotion(db)
+
+    skill_key = request.form.get("skill_key", "")
+    skill = SKILL_CATALOG.get(skill_key)
+    book_row = db.execute(
+        "SELECT id, quantity FROM character_skill_books WHERE character_id = ? AND skill_key = ?",
+        (character["character_id"], skill_key),
+    ).fetchone()
+    learned_keys = _learned_skill_keys(db, character["character_id"])
+
+    if skill is None or book_row is None or book_row["quantity"] < 1:
+        db.close()
+        flash("你目前沒有這本技能書")
+        return redirect(url_for("character_page"))
+    if character["job_tier"] != 4:
+        db.close()
+        flash("必須先四轉才能使用這本技能書")
+        return redirect(url_for("character_page"))
+    if skill_key in learned_keys:
+        db.close()
+        flash("你已經學會這個技能了")
+        return redirect(url_for("character_page"))
+
+    if book_row["quantity"] > 1:
+        db.execute(
+            "UPDATE character_skill_books SET quantity = quantity - 1 WHERE id = ?", (book_row["id"],)
+        )
+    else:
+        db.execute("DELETE FROM character_skill_books WHERE id = ?", (book_row["id"],))
+    db.execute(
+        "INSERT INTO character_skills (character_id, skill_key) VALUES (?, ?)",
+        (character["character_id"], skill_key),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "learn_skill",
+        detail=skill["name"], ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    flash(f"使用技能書學會了「{skill['name']}」！")
+    return redirect(url_for("character_page"))
+
+
+@app.route("/character/equip_skill", methods=["POST"])
+@character_required
+def character_equip_skill():
+    db = get_db()
+    character = _character_for_promotion(db)
+
+    skill_key = request.form.get("skill_key", "")
+    slot = request.form.get("slot", "")
+    if slot not in ("1", "2"):
+        db.close()
+        flash("請選擇一個有效的技能欄位")
+        return redirect(url_for("character_page"))
+
+    learned_keys = _learned_skill_keys(db, character["character_id"])
+    usable_keys = _usable_skill_keys(character, learned_keys)
+    if skill_key not in usable_keys:
+        db.close()
+        flash("這個技能目前無法配置")
+        return redirect(url_for("character_page"))
+
+    current = db.execute(
+        "SELECT equipped_skill_1, equipped_skill_2 FROM characters WHERE id = ?",
+        (character["character_id"],),
+    ).fetchone()
+
+    # Never let both slots hold the same skill -- clear the other slot first
+    # if it already has this skill_key, then (over)write the target slot.
+    if slot == "1":
+        if current["equipped_skill_2"] == skill_key:
+            db.execute(
+                "UPDATE characters SET equipped_skill_2 = NULL WHERE id = ?", (character["character_id"],)
+            )
+        db.execute(
+            "UPDATE characters SET equipped_skill_1 = ? WHERE id = ?", (skill_key, character["character_id"])
+        )
+    else:
+        if current["equipped_skill_1"] == skill_key:
+            db.execute(
+                "UPDATE characters SET equipped_skill_1 = NULL WHERE id = ?", (character["character_id"],)
+            )
+        db.execute(
+            "UPDATE characters SET equipped_skill_2 = ? WHERE id = ?", (skill_key, character["character_id"])
+        )
+    db.commit()
+    db.close()
+
+    skill = SKILL_CATALOG.get(skill_key)
+    flash(f"已將「{skill['name'] if skill else skill_key}」配置為技能{slot}")
+    return redirect(url_for("character_page"))
+
+
+@app.route("/character/unequip_skill", methods=["POST"])
+@character_required
+def character_unequip_skill():
+    db = get_db()
+    character = _character_for_promotion(db)
+
+    slot = request.form.get("slot", "")
+    if slot not in ("1", "2"):
+        db.close()
+        flash("請選擇一個有效的技能欄位")
+        return redirect(url_for("character_page"))
+
+    if slot == "1":
+        db.execute(
+            "UPDATE characters SET equipped_skill_1 = NULL WHERE id = ?", (character["character_id"],)
+        )
+    else:
+        db.execute(
+            "UPDATE characters SET equipped_skill_2 = NULL WHERE id = ?", (character["character_id"],)
+        )
+    db.commit()
+    db.close()
+
+    flash("已卸下技能")
     return redirect(url_for("character_page"))
 
 

@@ -29,6 +29,7 @@ ACTION_LABELS = {
     "promote_tier4": "四轉",
     "rebirth": "轉生",
     "learn_skill": "學習技能",
+    "skill_book_drop": "掉落技能書",
     "debug_reset": "（除錯）重置角色",
 }
 

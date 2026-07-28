@@ -65,33 +65,6 @@
       <span>已精通職業 {{ mastery_names|length }}/3{% if mastery_names %}（{{ mastery_names|join('、') }}）{% endif %}</span>
     </div>
 
-    {% if usable_skills %}
-    <div style="font-size:13px; color:var(--text-dim); margin-bottom:14px; padding:10px 12px; background:var(--panel-2); border-radius:6px;">
-      <div style="color:var(--gold-bright); margin-bottom:6px;">目前可用技能（戰鬥時依威力由高到低依序嘗試觸發，MP不足或未觸發則改用下一個或普通攻擊）</div>
-      {% for skill in usable_skills %}
-      <div>{{ skill.name }}　消耗 MP {{ skill.mp_cost }}　觸發機率 {{ skill.trigger_chance }}%　傷害倍率 {{ skill.multiplier }}x（以{{ stat_labels[skill.stat] }}計算）</div>
-      {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if learnable_skills %}
-    <div style="margin-bottom:14px;">
-      <div style="color:var(--gold-bright); font-size:13px; margin-bottom:6px;">可學習技能</div>
-      {% for skill in learnable_skills %}
-      <form method="post" action="{{ url_for('character_learn_skill') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--text-dim); margin-bottom:6px;">
-        <input type="hidden" name="skill_key" value="{{ skill.key }}">
-        <span>{{ skill.name }}（MP{{ skill.mp_cost }}／{{ skill.trigger_chance }}%／{{ skill.multiplier }}x／以{{ stat_labels[skill.stat] }}計算）</span>
-        <span>費用 {{ skill.learn_cost }} 諸神幣</span>
-        <button type="submit" {% if character.currency < skill.learn_cost %}disabled{% endif %}>學習</button>
-      </form>
-      {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if learned_locked_skills %}
-    <p class="hint" style="margin:0 0 14px;">已學會但目前無法使用（跨職業樹，唯有四轉可解鎖全部已學技能）：{{ learned_locked_skills|map(attribute='name')|join('、') }}</p>
-    {% endif %}
-
     {% if can_promote_tier1 %}
     <form method="post" action="{{ url_for('character_promote_tier1') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
       <select name="job_name">
@@ -135,6 +108,84 @@
     <p class="hint" style="margin:0;">
       {% if character.job_tier == 0 %}10 級可一轉{% elif character.job_tier == 1 %}30 級可二轉{% elif character.job_tier == 2 %}70 級可三轉{% elif character.job_tier == 3 %}120 級可轉生{% else %}已四轉，繼續練功邁向封頂{% endif %}
     </p>
+    {% endif %}
+  </div>
+
+  <div class="panel" style="margin-bottom:20px;">
+    <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">技能</h3>
+
+    <div style="font-size:13px; color:var(--text-dim); margin-bottom:14px; padding:10px 12px; background:var(--panel-2); border-radius:6px;">
+      <div style="color:var(--gold-bright); margin-bottom:6px;">已配置技能（戰鬥中會使用，最多 2 個）</div>
+      {% if equipped_skills %}
+      {% for entry in equipped_skills %}
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:6px;">
+        <span>技能{{ entry.slot }}：{{ entry.skill.name }}（MP{{ entry.skill.mp_cost }}／{{ entry.skill.trigger_chance }}%／{{ entry.skill.multiplier }}x／以{{ stat_labels[entry.skill.stat] }}計算）</span>
+        <form method="post" action="{{ url_for('character_unequip_skill') }}">
+          <input type="hidden" name="slot" value="{{ entry.slot }}">
+          <button type="submit" style="padding:4px 12px; font-size:12px;">卸下</button>
+        </form>
+      </div>
+      {% endfor %}
+      {% else %}
+      <span>尚未配置任何技能</span>
+      {% endif %}
+    </div>
+
+    {% if skill_library %}
+    <div style="margin-bottom:14px;">
+      <div style="color:var(--gold-bright); font-size:13px; margin-bottom:6px;">技能庫（已學會、可配置但尚未配置）</div>
+      {% for skill in skill_library %}
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--text-dim); margin-bottom:6px;">
+        <span>{{ skill.name }}（MP{{ skill.mp_cost }}／{{ skill.trigger_chance }}%／{{ skill.multiplier }}x／以{{ stat_labels[skill.stat] }}計算）</span>
+        <form method="post" action="{{ url_for('character_equip_skill') }}">
+          <input type="hidden" name="skill_key" value="{{ skill.key }}">
+          <input type="hidden" name="slot" value="1">
+          <button type="submit" style="padding:4px 12px; font-size:12px;">配置為技能1</button>
+        </form>
+        <form method="post" action="{{ url_for('character_equip_skill') }}">
+          <input type="hidden" name="skill_key" value="{{ skill.key }}">
+          <input type="hidden" name="slot" value="2">
+          <button type="submit" style="padding:4px 12px; font-size:12px;">配置為技能2</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if learnable_skills %}
+    <div style="margin-bottom:14px;">
+      <div style="color:var(--gold-bright); font-size:13px; margin-bottom:6px;">可學習技能</div>
+      {% for skill in learnable_skills %}
+      <form method="post" action="{{ url_for('character_learn_skill') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--text-dim); margin-bottom:6px;">
+        <input type="hidden" name="skill_key" value="{{ skill.key }}">
+        <span>{{ skill.name }}（MP{{ skill.mp_cost }}／{{ skill.trigger_chance }}%／{{ skill.multiplier }}x／以{{ stat_labels[skill.stat] }}計算）</span>
+        <span>費用 {{ skill.learn_cost }} 諸神幣</span>
+        <button type="submit" {% if character.currency < skill.learn_cost %}disabled{% endif %}>學習</button>
+      </form>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if held_skill_books %}
+    <div style="margin-bottom:14px;">
+      <div style="color:var(--gold-bright); font-size:13px; margin-bottom:6px;">持有技能書</div>
+      {% for entry in held_skill_books %}
+      <form method="post" action="{{ url_for('character_skill_book_use') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--text-dim); margin-bottom:6px;">
+        <input type="hidden" name="skill_key" value="{{ entry.skill.key }}">
+        <span>📖 {{ entry.skill.name }}（持有 {{ entry.quantity }} 本，MP{{ entry.skill.mp_cost }}／{{ entry.skill.trigger_chance }}%／{{ entry.skill.multiplier }}x）</span>
+        {% if character.job_tier == 4 %}
+        <button type="submit">使用技能書學習</button>
+        {% else %}
+        <span class="hint" style="margin:0;">需先四轉才能使用</span>
+        <button type="submit" disabled>使用技能書學習</button>
+        {% endif %}
+      </form>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if learned_locked_skills %}
+    <p class="hint" style="margin:0;">已學會但目前無法使用（跨職業樹，唯有四轉可解鎖全部已學技能）：{{ learned_locked_skills|map(attribute='name')|join('、') }}</p>
     {% endif %}
   </div>
 
