@@ -12,6 +12,16 @@ SET_SIGNATURE_STAT = {"金": "luk", "木": "def", "水": "agi", "火": "str"}
 SET_BONUS_TIERS = {2: 15, 3: 40}
 EARTH_SET_BONUS_TIERS = {2: 8, 3: 20}
 
+# Separate, smaller bonus for equipment whose origin country matches the
+# *wearer's own* country -- unlike the set bonus above (which only cares
+# whether equipped pieces match each other), this one triggers off a single
+# piece and stacks on top of the set bonus when both conditions are met (a
+# player wearing 2-3 pieces of their own country's set gets both). Each tier
+# is kept below its same-count SET_BONUS_TIERS/EARTH_SET_BONUS_TIERS value
+# per the "不會比套裝加成多" requirement.
+OWN_ELEMENT_BONUS_TIERS = {1: 6, 2: 12, 3: 30}
+EARTH_OWN_ELEMENT_BONUS_TIERS = {1: 3, 2: 6, 3: 15}
+
 
 def _equipment_set_bonus(equipped_items):
     counts = {}
@@ -31,6 +41,24 @@ def _equipment_set_bonus(equipped_items):
             stat = SET_SIGNATURE_STAT.get(element)
             if stat:
                 bonus[stat] = bonus.get(stat, 0) + SET_BONUS_TIERS[tier]
+    return bonus
+
+
+def _own_element_bonus(equipped_items, own_element):
+    if not own_element:
+        return {}
+    count = sum(1 for item in equipped_items if item is not None and item["set_element"] == own_element)
+    if count < 1:
+        return {}
+    tier = min(count, 3)
+    bonus = {}
+    if own_element == "土":
+        for stat in ("str", "def", "agi", "luk"):
+            bonus[stat] = bonus.get(stat, 0) + EARTH_OWN_ELEMENT_BONUS_TIERS[tier]
+    else:
+        stat = SET_SIGNATURE_STAT.get(own_element)
+        if stat:
+            bonus[stat] = bonus.get(stat, 0) + OWN_ELEMENT_BONUS_TIERS[tier]
     return bonus
 
 
@@ -57,6 +85,23 @@ def _active_set_summaries(equipped_items):
             bonus_text = f"{STAT_LABELS[stat]} +{SET_BONUS_TIERS[tier]}" if stat else ""
         summaries.append({"country_name": names[element], "count": count, "bonus_text": bonus_text})
     return summaries
+
+
+def _own_element_bonus_summary(equipped_items, own_element):
+    """Human-readable version of _own_element_bonus for the character sheet,
+    mirroring _active_set_summaries. Returns None when nothing applies."""
+    if not own_element:
+        return None
+    count = sum(1 for item in equipped_items if item is not None and item["set_element"] == own_element)
+    if count < 1:
+        return None
+    tier = min(count, 3)
+    if own_element == "土":
+        bonus_text = "、".join(f"{STAT_LABELS[s]} +{EARTH_OWN_ELEMENT_BONUS_TIERS[tier]}" for s in ("str", "def", "agi", "luk"))
+    else:
+        stat = SET_SIGNATURE_STAT.get(own_element)
+        bonus_text = f"{STAT_LABELS[stat]} +{OWN_ELEMENT_BONUS_TIERS[tier]}" if stat else ""
+    return {"count": count, "bonus_text": bonus_text}
 
 
 def _fetch_equipped_items(db, character):

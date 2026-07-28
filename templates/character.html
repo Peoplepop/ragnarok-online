@@ -56,6 +56,11 @@
       {% endfor %}
     </div>
     {% endif %}
+    {% if own_element_bonus %}
+    <div style="margin-top:10px; font-size:13px; color:var(--gold-bright);">
+      <div>同屬性加成：身上 {{ own_element_bonus.count }} 件{{ character.name }}（{{ character.element }}屬性）裝備 → {{ own_element_bonus.bonus_text }}</div>
+    </div>
+    {% endif %}
   </div>
 
   <div class="panel" style="margin-bottom:20px;">

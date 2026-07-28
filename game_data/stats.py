@@ -1,24 +1,31 @@
 from db import LEVEL_CAP
 from game_data.constants import BASE_STATS, LEVEL_STAT_GROWTH
-from game_data.equipment import _equipment_set_bonus
+from game_data.equipment import _equipment_set_bonus, _own_element_bonus
 from game_data.jobs import job_stat_bonus_pct
 
 
 def compute_final_stats(
     country, equipped_items=(), level=1, job_bonus=None, rebirth_bonus_percent=0, level_bonus_stats=None,
+    own_element=None,
 ):
     """level_bonus_stats is the per-character accumulated total from the
     random job-weighted level-up rolls (see _roll_level_up_stat_points) --
     always supplied for real player characters via character_final_stats.
     Left as None here only for NPC-only callers (defense_tower_stats), which
     still fall back to the old flat LEVEL_STAT_GROWTH formula since NPCs are
-    computed fresh at a fixed level, not leveled up one roll at a time."""
+    computed fresh at a fixed level, not leveled up one roll at a time.
+
+    own_element is the wearer's own country's element (None for callers that
+    don't care, e.g. NPC-only callers with no gear). It stacks on top of
+    _equipment_set_bonus rather than replacing it -- see _own_element_bonus."""
     job_bonus = job_bonus or {}
     equip_bonus = {}
     for item in equipped_items:
         if item:
             equip_bonus[item["stat"]] = equip_bonus.get(item["stat"], 0) + item["stat_bonus"]
     for stat, amount in _equipment_set_bonus(equipped_items).items():
+        equip_bonus[stat] = equip_bonus.get(stat, 0) + amount
+    for stat, amount in _own_element_bonus(equipped_items, own_element).items():
         equip_bonus[stat] = equip_bonus.get(stat, 0) + amount
     if level_bonus_stats is None:
         level_bonus = max(0, level - 1)
@@ -47,6 +54,7 @@ def character_final_stats(character, equipped_items, settings):
     level_bonus_stats = {key: character[f"level_bonus_{key}"] for key in BASE_STATS}
     stats = compute_final_stats(
         character, equipped_items, character["level"], job_bonus, rebirth_bonus, level_bonus_stats,
+        own_element=character["element"],
     )
     for key, col in STAT_FLOOR_COLUMNS.items():
         floor = character[col]

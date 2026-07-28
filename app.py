@@ -37,7 +37,7 @@ from game_data.skills import (
 )
 from game_data.equipment import (
     SET_SIGNATURE_STAT, SET_BONUS_TIERS, EARTH_SET_BONUS_TIERS, _equipment_set_bonus,
-    _active_set_summaries, _fetch_equipped_items,
+    _active_set_summaries, _own_element_bonus_summary, _fetch_equipped_items,
 )
 from game_data.stats import (
     compute_final_stats, STAT_FLOOR_COLUMNS, character_final_stats, defense_tower_stats,
@@ -2392,6 +2392,7 @@ def character_page():
         (k for k, v in ELEMENT_OVERCOMES.items() if v == character["element"]), None
     )
     active_sets = _active_set_summaries(equipped_items)
+    own_element_bonus = _own_element_bonus_summary(equipped_items, character["element"])
     learnable_skills = _learnable_skills(character, learned_keys)
     usable_keys = _usable_skill_keys(character, learned_keys)
     learned_locked_skills = sorted(
@@ -2439,6 +2440,7 @@ def character_page():
         equipped_items=equipped_items,
         equipped_slots=equipped_slots,
         active_sets=active_sets,
+        own_element_bonus=own_element_bonus,
         inventory_items=inventory_items,
         shop_type_labels=SHOP_TYPE_LABELS,
         cooldown_seconds=_cooldown_remaining_seconds(character["next_action_at"]),
