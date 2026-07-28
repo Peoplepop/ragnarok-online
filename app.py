@@ -714,6 +714,10 @@ def _render_game(**extra):
         current_tile["tile_type"] in ("fortress", "town")
         and current_tile["country_id"] == character["id"]
     )
+    own_tile_count = db.execute(
+        "SELECT COUNT(*) AS c FROM map_tiles WHERE country_id = ?", (character["id"],)
+    ).fetchone()["c"]
+    country_destroyed = own_tile_count == 0
     db.close()
 
     stats = character_final_stats(character, equipped_items, settings)
@@ -806,6 +810,7 @@ def _render_game(**extra):
         bandit_hp=bandit_hp,
         bandit_hp_max=bandit_hp_max,
         job_action_available=job_action_available,
+        country_destroyed=country_destroyed,
         own_treasury=character["treasury"],
         hexes=hexes,
         view_box=f"{min_x:.1f} {min_y:.1f} {max_x - min_x:.1f} {max_y - min_y:.1f}",
@@ -2312,6 +2317,7 @@ def character_page():
                   characters.equipped_accessory_id, characters.battles_count,
                   characters.wins_count, characters.pvp_battles_count, characters.pvp_wins_count,
                   characters.equipped_skill_1, characters.equipped_skill_2,
+                  characters.rename_count,
                   countries.*
            FROM characters JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
@@ -2462,6 +2468,8 @@ def character_page():
         held_skill_books=held_skill_books,
         learned_locked_skills=learned_locked_skills,
         stat_labels=STAT_LABELS,
+        stat_reroll_cost=settings["stat_reroll_cost"],
+        next_rename_cost=(character["rename_count"] + 1) * 1000,
     )
 
 
@@ -2482,6 +2490,8 @@ def _character_for_promotion(db):
                   characters.stat_floor_def, characters.stat_floor_agi, characters.stat_floor_luk,
                   characters.level_bonus_hp, characters.level_bonus_mp, characters.level_bonus_str,
                   characters.level_bonus_def, characters.level_bonus_agi, characters.level_bonus_luk,
+                  characters.country_id AS char_country_id, characters.name AS character_name,
+                  characters.rename_count,
                   countries.*
            FROM characters JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
@@ -2495,6 +2505,186 @@ def _snapshot_stat_floor(character, equipped_items, settings):
     can never make any stat go down, chained across multiple promotions."""
     stats = character_final_stats(character, equipped_items, settings)
     return {STAT_FLOOR_COLUMNS[key]: value for key, value in stats.items()}
+
+
+def _tile_counts(db):
+    return {
+        row["country_id"]: row["c"]
+        for row in db.execute(
+            "SELECT country_id, COUNT(*) AS c FROM map_tiles WHERE country_id IS NOT NULL GROUP BY country_id"
+        ).fetchall()
+    }
+
+
+@app.route("/character/rejoin_country", methods=["GET", "POST"])
+@character_required
+def character_rejoin_country():
+    db = get_db()
+    character = _character_for_promotion(db)
+    tile_counts = _tile_counts(db)
+
+    if tile_counts.get(character["char_country_id"], 0) >= 1:
+        db.close()
+        flash("你的國家還沒有滅國，無法加入其他國家")
+        return redirect(url_for("character_page"))
+
+    if request.method == "GET":
+        countries = db.execute(
+            "SELECT * FROM countries WHERE id != ? ORDER BY id", (character["char_country_id"],)
+        ).fetchall()
+        db.close()
+        surviving_countries = [c for c in countries if tile_counts.get(c["id"], 0) >= 1]
+        return render_template("rejoin_country.html", countries=surviving_countries)
+
+    new_country = db.execute(
+        "SELECT * FROM countries WHERE id = ?", (request.form.get("country_id", ""),)
+    ).fetchone()
+    if (
+        new_country is None
+        or new_country["id"] == character["char_country_id"]
+        or tile_counts.get(new_country["id"], 0) < 1
+    ):
+        db.close()
+        flash("請選擇一個有效的國家")
+        return redirect(url_for("character_page"))
+
+    fortress = db.execute(
+        "SELECT id FROM map_tiles WHERE country_id = ? AND tile_type = 'fortress'",
+        (new_country["id"],),
+    ).fetchone()
+    if fortress is None:
+        fortress = db.execute(
+            "SELECT id FROM map_tiles WHERE country_id = ? LIMIT 1", (new_country["id"],)
+        ).fetchone()
+
+    old_country_name = character["name"]
+    db.execute(
+        "UPDATE characters SET country_id = ?, current_tile_id = ? WHERE id = ?",
+        (new_country["id"], fortress["id"], character["character_id"]),
+    )
+    db.execute("DELETE FROM garrisons WHERE character_id = ?", (character["character_id"],))
+    log_activity(
+        db, session["user_id"], session["username"], "rejoin_country",
+        detail=f"{old_country_name} → {new_country['name']}", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    flash(f"你的國家已滅亡，成功加入「{new_country['name']}」！")
+    return redirect(url_for("game"))
+
+
+@app.route("/character/reroll_stats", methods=["POST"])
+@character_required
+def character_reroll_stats():
+    db = get_db()
+    character = _character_for_promotion(db)
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+
+    if character["level"] <= 1:
+        db.close()
+        flash("尚未升過級，沒有可重洗的屬性點")
+        return redirect(url_for("character_page"))
+
+    cost = settings["stat_reroll_cost"]
+    if character["currency"] < cost:
+        db.close()
+        flash(f"諸神幣不足，重洗屬性需要 {cost} 諸神幣")
+        return redirect(url_for("character_page"))
+
+    equipped_items = _fetch_equipped_items(db, character)
+    stats_before = character_final_stats(character, equipped_items, settings)
+
+    new_gain = {key: 0 for key in LEVEL_UP_POINT_VALUE}
+    for _ in range(character["level"] - 1):
+        for stat, points in _roll_level_up_stat_points(character["job_class"], character["job_tier"]).items():
+            new_gain[stat] += points * LEVEL_UP_POINT_VALUE[stat]
+
+    db.execute(
+        """UPDATE characters SET currency = currency - ?,
+               level_bonus_hp = ?, level_bonus_mp = ?, level_bonus_str = ?,
+               level_bonus_def = ?, level_bonus_agi = ?, level_bonus_luk = ?
+           WHERE id = ?""",
+        (
+            cost, new_gain["hp"], new_gain["mp"], new_gain["str"],
+            new_gain["def"], new_gain["agi"], new_gain["luk"],
+            character["character_id"],
+        ),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "reroll_stats",
+        detail=f"花費{cost}諸神幣重洗屬性點", ip_address=request.remote_addr,
+    )
+    db.commit()
+
+    updated = dict(character)
+    updated["currency"] -= cost
+    updated["level_bonus_hp"] = new_gain["hp"]
+    updated["level_bonus_mp"] = new_gain["mp"]
+    updated["level_bonus_str"] = new_gain["str"]
+    updated["level_bonus_def"] = new_gain["def"]
+    updated["level_bonus_agi"] = new_gain["agi"]
+    updated["level_bonus_luk"] = new_gain["luk"]
+    stats_after = character_final_stats(updated, equipped_items, settings)
+
+    db.close()
+    return render_template(
+        "job_change_result.html",
+        title="屬性重洗完成！",
+        stats_before=stats_before,
+        stats_after=stats_after,
+        stat_labels=STAT_LABELS,
+    )
+
+
+@app.route("/character/rename", methods=["POST"])
+@character_required
+def character_rename():
+    db = get_db()
+    character = _character_for_promotion(db)
+
+    new_name = request.form.get("new_name", "").strip()
+    old_name = character["character_name"]
+
+    if new_name.lower() == old_name.lower():
+        db.close()
+        flash("名稱沒有變更")
+        return redirect(url_for("character_page"))
+
+    name_error = _validate_character_name(db, new_name, session["username"])
+    if name_error:
+        db.close()
+        flash(name_error)
+        return redirect(url_for("character_page"))
+
+    cost = (character["rename_count"] + 1) * 1000
+    if character["currency"] < cost:
+        db.close()
+        flash(f"諸神幣不足，改名需要 {cost} 諸神幣")
+        return redirect(url_for("character_page"))
+
+    try:
+        db.execute(
+            "UPDATE characters SET name = ?, currency = currency - ?, rename_count = rename_count + 1 WHERE id = ?",
+            (new_name, cost, character["character_id"]),
+        )
+        db.commit()
+    except sqlite3.IntegrityError:
+        db.rollback()
+        db.close()
+        flash("這個名稱剛好被用掉了，請重新整理再試一次")
+        return redirect(url_for("character_page"))
+
+    log_activity(
+        db, session["user_id"], session["username"], "rename_character",
+        detail=f"{old_name} → {new_name}", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+
+    session["character_name"] = new_name
+    flash(f"角色名稱已改為「{new_name}」")
+    return redirect(url_for("character_page"))
 
 
 @app.route("/character/promote/tier1", methods=["POST"])
@@ -3246,6 +3436,7 @@ def admin_update_game_settings():
         heal_cost_per_point = float(request.form.get("heal_cost_per_point", ""))
         town_defense_level = int(request.form.get("town_defense_level", ""))
         fortress_defense_level = int(request.form.get("fortress_defense_level", ""))
+        stat_reroll_cost = int(request.form.get("stat_reroll_cost", ""))
     except ValueError:
         flash("設定值格式不正確")
         return redirect(url_for("admin_settings"))
@@ -3282,6 +3473,10 @@ def admin_update_game_settings():
         flash("城鎮防衛等級須大於等於 1，且要塞防衛等級須大於等於城鎮防衛等級")
         return redirect(url_for("admin_settings"))
 
+    if stat_reroll_cost < 0:
+        flash("屬性重洗費用不可為負數")
+        return redirect(url_for("admin_settings"))
+
     db = get_db()
     db.execute(
         """UPDATE game_settings
@@ -3290,7 +3485,8 @@ def admin_update_game_settings():
                rebirth_stat_bonus_percent = ?, sell_back_percent = ?,
                guardian_encounter_percent = ?, guardian_exp_multiplier = ?,
                boss_exp_multiplier = ?, shop_tax_percent = ?,
-               heal_cost_per_point = ?, town_defense_level = ?, fortress_defense_level = ?
+               heal_cost_per_point = ?, town_defense_level = ?, fortress_defense_level = ?,
+               stat_reroll_cost = ?
            WHERE id = 1""",
         (
             turn_wait_seconds, exp_base, exp_growth_novice_percent,
@@ -3299,6 +3495,7 @@ def admin_update_game_settings():
             guardian_encounter_percent, guardian_exp_multiplier,
             boss_exp_multiplier, shop_tax_percent,
             heal_cost_per_point, town_defense_level, fortress_defense_level,
+            stat_reroll_cost,
         ),
     )
     db.commit()
