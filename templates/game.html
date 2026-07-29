@@ -43,39 +43,56 @@
   </div>
   {% endif %}
 
-  <div class="panel" style="padding:0; overflow:auto;">
-    <svg viewBox="{{ view_box }}" style="width:100%; height:auto; display:block;">
-      {% for h in hexes %}
-      <g>
-        <polygon
-          points="{{ h.points }}"
-          fill="{{ h.color }}"
-          fill-opacity="{{ '0.55' if h.tile_type == 'town' else ('0.30' if h.tile_type == 'neutral' else ('1' if h.tile_type == 'mountain' else '0.85')) }}"
-          stroke="rgba(232,226,208,0.35)"
-          stroke-width="1.2"
-        />
-        <text
-          x="{{ h.cx }}" y="{{ h.cy }}"
-          text-anchor="middle" dominant-baseline="middle"
-          font-size="{{ '13' if h.tile_type == 'fortress' else '11' }}"
-          font-weight="{{ '700' if h.tile_type == 'fortress' else '400' }}"
-          fill="{{ 'var(--text-dim)' if h.tile_type == 'neutral' else ('var(--text)' if h.tile_type == 'mountain' else '#1a1408') }}"
-        >{% if h.tile_type == 'fortress' %}<tspan x="{{ h.cx }}" dy="-0.55em">{{ h.name }}</tspan><tspan x="{{ h.cx }}" dy="1.15em">要塞</tspan>{% else %}{{ h.name }}{% endif %}</text>
-        {% if h.is_player_here %}
-        <circle cx="{{ h.cx }}" cy="{{ h.cy - 18 }}" r="9" fill="none" stroke="#ffffff" stroke-width="2.5">
-          <animate attributeName="r" values="8;16;8" dur="1.6s" repeatCount="indefinite" />
-          <animate attributeName="opacity" values="0.9;0;0.9" dur="1.6s" repeatCount="indefinite" />
-        </circle>
-        <circle cx="{{ h.cx }}" cy="{{ h.cy - 18 }}" r="5" fill="#ffffff" stroke="#1a1408" stroke-width="1.5" />
-        {% endif %}
-      </g>
-      {% endfor %}
-    </svg>
-  </div>
+  <div style="display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap;">
+    <div class="panel" style="padding:0; overflow:hidden; position:relative; flex:1 1 560px; max-width:560px;">
+      <svg viewBox="{{ view_box }}" style="width:100%; height:auto; display:block;">
+        {% for h in hexes %}
+        <g>
+          <polygon
+            points="{{ h.points }}"
+            fill="{{ h.color }}"
+            fill-opacity="{{ '0.55' if h.tile_type == 'town' else ('0.30' if h.tile_type == 'neutral' else ('1' if h.tile_type == 'mountain' else '0.85')) }}"
+            stroke="rgba(232,226,208,0.35)"
+            stroke-width="1.2"
+          />
+          <text
+            x="{{ h.cx }}" y="{{ h.cy }}"
+            text-anchor="middle" dominant-baseline="middle"
+            font-size="{{ '13' if h.tile_type == 'fortress' else '11' }}"
+            font-weight="{{ '700' if h.tile_type == 'fortress' else '400' }}"
+            fill="{{ 'var(--text-dim)' if h.tile_type == 'neutral' else ('var(--text)' if h.tile_type == 'mountain' else '#1a1408') }}"
+          >{% if h.tile_type == 'fortress' %}<tspan x="{{ h.cx }}" dy="-0.55em">{{ h.name }}</tspan><tspan x="{{ h.cx }}" dy="1.15em">要塞</tspan>{% else %}{{ h.name }}{% endif %}</text>
+          {% if h.is_player_here %}
+          <circle cx="{{ h.cx }}" cy="{{ h.cy - 18 }}" r="9" fill="none" stroke="#ffffff" stroke-width="2.5">
+            <animate attributeName="r" values="8;16;8" dur="1.6s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.9;0;0.9" dur="1.6s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="{{ h.cx }}" cy="{{ h.cy - 18 }}" r="5" fill="#ffffff" stroke="#1a1408" stroke-width="1.5" />
+          {% endif %}
+        </g>
+        {% endfor %}
+      </svg>
+      <div style="position:absolute; left:8px; bottom:8px; right:8px; display:flex; flex-direction:column; gap:2px; font-size:11px; line-height:1.5; color:var(--text-dim); background:rgba(11,10,20,0.75); border:1px solid var(--border); border-radius:6px; padding:6px 10px; pointer-events:none;">
+        <span>⛰️ 深色實心 = 山嶺（無法通行、無法佔領）</span>
+        <span>⚪ 閃爍白點 = 你目前所在位置</span>
+      </div>
+    </div>
 
-  <div style="display:flex; gap:18px; margin-top:14px; font-size:12px; color:var(--text-dim); flex-wrap:wrap;">
-    <span>⛰️ 深色實心 = 山嶺（無法通行、無法佔領）</span>
-    <span>⚪ 閃爍白點 = 你目前所在位置</span>
+    <div class="panel" style="flex:1 1 260px; min-width:240px;">
+      <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">📜 重大事件</h3>
+      {% if major_events %}
+      <div style="display:flex; flex-direction:column; gap:10px; max-height:480px; overflow-y:auto;">
+        {% for e in major_events %}
+        <div style="font-size:12px; line-height:1.6;">
+          <span style="color:var(--text-dim);">{{ e.time_label }}</span>
+          <span style="margin-left:6px;">{{ e.message }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="hint" style="margin:0;">目前還沒有重大事件</p>
+      {% endif %}
+    </div>
   </div>
 
   <div class="panel" style="margin-top:20px;">

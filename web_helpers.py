@@ -147,6 +147,42 @@ def _taipei_time_label(stored_at):
     return f"{dt.strftime('%Y-%m-%d %H:%M')}（{ISO_WEEKDAY_LABELS.get(dt.isoweekday(), '?')}）"
 
 
+def _activity_log_time_label(created_at):
+    """Human-readable Taipei-time rendering of an activity_log.created_at
+    value -- SQLite's own `datetime('now')` default (UTC, no microseconds),
+    a different shape than ACTION_DT_FORMAT, so this is deliberately its own
+    helper rather than reusing _taipei_time_label."""
+    dt = datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone(TAIPEI_TZ)
+    return dt.strftime("%m/%d %H:%M")
+
+
+# 重大事件 (major events) sidebar on game.html: a curated subset of
+# activity_log, one message-builder per action key. Anything not listed here
+# is simply not a "major" event and never shows up, regardless of how much
+# activity_log otherwise fills up with routine hunt/move/shop rows.
+_MAJOR_EVENT_MESSAGE_BUILDERS = {
+    "character_create": lambda username, detail: f"🆕 {detail} 加入了遊戲",
+    "hidden_loot_drop": lambda username, detail: f"✨ {username} 在秘境獲得寶物：{detail}",
+    "tournament_champion": lambda username, detail: f"🏆 {detail} 奪得本屆天下武道大會冠軍！",
+}
+
+
+def _major_event_feed(rows):
+    """rows: activity_log rows (need action/detail/username/created_at) ->
+    [{message, time_label}], oldest-filtered-out, newest first (assumes the
+    caller already queried ORDER BY created_at DESC)."""
+    events = []
+    for row in rows:
+        builder = _MAJOR_EVENT_MESSAGE_BUILDERS.get(row["action"])
+        if builder is None:
+            continue
+        events.append({
+            "message": builder(row["username"], row["detail"]),
+            "time_label": _activity_log_time_label(row["created_at"]),
+        })
+    return events
+
+
 def _tournament_registration_open(tournament):
     """True if this 天下武道大會 cycle row is still accepting registrations --
     shared by the tournament blueprint (authoritative check on POST) and by

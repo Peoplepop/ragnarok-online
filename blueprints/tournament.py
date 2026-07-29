@@ -285,6 +285,14 @@ def _settle_tournament(db, tournament):
             prize_pool, treasury_cut, tournament_id,
         ),
     )
+    # System-triggered (settlement runs off the next incoming request's
+    # before_request hook, not a specific player's action), so user_id is
+    # NULL and username is a fixed system label -- this is what feeds the
+    # 重大事件 panel on game.html (see _major_event_feed in web_helpers.py).
+    log_activity(
+        db, None, "系統", "tournament_champion",
+        detail=f"{champion['character_name']}（{champion['country_name']}）",
+    )
 
 
 # ---------------------------------------------------------------------------

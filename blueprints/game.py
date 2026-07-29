@@ -11,7 +11,7 @@ from web_helpers import (
     _war_window_label, _war_window_kind_for_tile_type, _format_duration, _add_to_inventory,
     _remove_from_inventory, _in_any_war_window, _taipei_now, _parse_dt,
     _current_war_window_end, _morale_buff_active, _tournament_registration_open,
-    _taipei_time_label, ACTION_DT_FORMAT,
+    _taipei_time_label, ACTION_DT_FORMAT, _major_event_feed,
 )
 from game_data.constants import (
     SHOP_TYPE_LABELS, SLOT_LABELS, EQUIP_SLOT_COLUMNS, GOVERNMENT_ROLES, tile_display_name,
@@ -241,6 +241,17 @@ def _render_game(**extra):
     tournament_deadline_label = (
         _taipei_time_label(open_tournament["registration_deadline_at"]) if open_tournament else "-"
     )
+
+    # 重大事件 sidebar: a curated subset of activity_log (see
+    # _major_event_feed) -- new players joining a country, 秘境 loot drops,
+    # and 天下武道大會 champions. Global across every player, not scoped to
+    # this character, so it's read here rather than filtered by user_id.
+    major_event_rows = db.execute(
+        """SELECT action, detail, username, created_at FROM activity_log
+           WHERE action IN ('character_create', 'hidden_loot_drop', 'tournament_champion')
+           ORDER BY created_at DESC LIMIT 20"""
+    ).fetchall()
+    major_events = _major_event_feed(major_event_rows)
     db.close()
 
     # King war-defense bonus: character["character_id"] is the character's
@@ -384,6 +395,7 @@ def _render_game(**extra):
         tournament_already_registered=tournament_already_registered,
         tournament_fee=settings["tournament_registration_fee"],
         tournament_deadline_label=tournament_deadline_label,
+        major_events=major_events,
     )
     context.update(extra)
     return render_template("game.html", **context)

@@ -32,6 +32,7 @@ ACTION_LABELS = {
     "learn_skill": "學習技能",
     "skill_book_drop": "掉落技能書",
     "hidden_loot_drop": "秘境掉寶",
+    "tournament_champion": "天下武道大會優勝",
     "debug_reset": "（除錯）重置角色",
     "trade_invite": "發起交易邀請",
     "trade_accept": "接受交易邀請",
