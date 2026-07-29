@@ -22,8 +22,6 @@
       <span style="color:var(--gold); font-size:14px;">💰 {{ character.currency }} 諸神幣</span>
       <a href="{{ url_for('game.countries_page') }}" class="btn" style="padding:6px 14px; font-size:13px;">國家詳情</a>
       <a href="{{ url_for('character.character_page') }}" class="btn" style="padding:6px 14px; font-size:13px;">角色詳情</a>
-      <a href="{{ url_for('trade.trade_home') }}" class="btn" style="padding:6px 14px; font-size:13px;">交易</a>
-      <a href="{{ url_for('tournament.tournament_page') }}" class="btn" style="padding:6px 14px; font-size:13px;">武道大會</a>
     </div>
   </div>
 
@@ -197,6 +195,7 @@
     {% if current_tile.tile_type == 'fortress' %}
     <div style="margin-top:24px; border-top:1px solid var(--border); padding-top:18px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
       <a href="{{ url_for('game.game_shop') }}" class="btn" style="padding:8px 18px; font-size:13px;">🏪 前往要塞商店</a>
+      <a href="{{ url_for('trade.trade_home') }}" class="btn" style="padding:8px 18px; font-size:13px;">🤝 交易</a>
       {% if current_hp < stats.hp or current_mp < stats.mp %}
       <form method="post" action="{{ url_for('game.game_recover') }}" style="display:flex; align-items:center; gap:8px;">
         <button type="submit" class="turn-action-control" style="padding:8px 18px; font-size:13px;">✨ 回復 HP／MP（{{ recover_cost }} 諸神幣）</button>
