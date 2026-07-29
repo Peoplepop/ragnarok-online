@@ -42,6 +42,9 @@ ACTION_LABELS = {
     "revoke_challenge": "收回官職挑戰授權",
     "challenge_official": "應戰官職挑戰",
     "claim_income": "領取國庫分潤",
+    "cast_morale_buff": "施放士氣激勵",
+    "siege_attack": "發動攻城武器",
+    "repair_defense": "修補防禦",
 }
 
 SHOP_TYPE_LABELS = {

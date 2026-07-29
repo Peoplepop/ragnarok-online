@@ -91,6 +91,39 @@ def _war_window_kind_for_tile_type(tile_type):
     return "fortress" if tile_type == "fortress" else "town"
 
 
+def _current_war_window_end(settings, now=None):
+    """If a war window (town or fortress) is currently active, return its
+    window_end as a Taipei-aware datetime -- town checked first, then
+    fortress -- built the exact same way _in_war_window already constructs
+    its own window_end internally. Returns None if neither window is active.
+
+    Used by country_cast_morale_buff to identify "this specific war window
+    instance": the caller converts the returned datetime to a UTC-naive
+    ACTION_DT_FORMAT string and compares it against
+    countries.morale_buff_expires_at to detect a buff already cast for the
+    same window occurrence."""
+    now = now if now is not None else _taipei_now()
+    if _in_war_window(
+        settings["war_town_weekday"], settings["war_town_start_time"], settings["war_town_end_time"], now,
+    ):
+        end_h, end_m = (int(x) for x in settings["war_town_end_time"].split(":"))
+        return now.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
+    if _in_war_window(
+        settings["war_fortress_weekday"], settings["war_fortress_start_time"], settings["war_fortress_end_time"], now,
+    ):
+        end_h, end_m = (int(x) for x in settings["war_fortress_end_time"].split(":"))
+        return now.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
+    return None
+
+
+def _morale_buff_active(country):
+    """True if country["morale_buff_expires_at"] (or a character row carrying
+    the bare countries.* join, per this codebase's usual aliasing) has an
+    unexpired 士氣激勵 (Advisor's morale buff) still in effect."""
+    expires_at = country["morale_buff_expires_at"]
+    return expires_at is not None and datetime.utcnow() < datetime.strptime(expires_at, ACTION_DT_FORMAT)
+
+
 def _format_duration(seconds):
     if seconds is None:
         return "-"

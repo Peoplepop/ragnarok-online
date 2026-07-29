@@ -219,6 +219,13 @@ def admin_update_game_settings():
         official_weekly_income_percent = int(request.form.get("official_weekly_income_percent", ""))
         king_war_defense_bonus_percent = int(request.form.get("king_war_defense_bonus_percent", ""))
         office_challenge_aura_bonus_percent = int(request.form.get("office_challenge_aura_bonus_percent", ""))
+        morale_buff_cost = int(request.form.get("morale_buff_cost", ""))
+        morale_buff_bonus_percent = int(request.form.get("morale_buff_bonus_percent", ""))
+        siege_attack_cost = int(request.form.get("siege_attack_cost", ""))
+        siege_attack_reduction_percent = int(request.form.get("siege_attack_reduction_percent", ""))
+        siege_attack_reduction_floor_percent = int(request.form.get("siege_attack_reduction_floor_percent", ""))
+        siege_attack_cooldown_seconds = int(request.form.get("siege_attack_cooldown_seconds", ""))
+        defense_repair_cost_per_percent = int(request.form.get("defense_repair_cost_per_percent", ""))
     except ValueError:
         flash("設定值格式不正確")
         return redirect(url_for("admin.admin_settings"))
@@ -285,6 +292,14 @@ def admin_update_game_settings():
         flash("國王／官職相關的分潤與加成數值不可為負數")
         return redirect(url_for("admin.admin_settings"))
 
+    if min(
+        morale_buff_cost, morale_buff_bonus_percent, siege_attack_cost,
+        siege_attack_reduction_percent, siege_attack_reduction_floor_percent,
+        siege_attack_cooldown_seconds, defense_repair_cost_per_percent,
+    ) < 0:
+        flash("國庫花費相關的費用與加成數值不可為負數")
+        return redirect(url_for("admin.admin_settings"))
+
     db = get_db()
     db.execute(
         """UPDATE game_settings
@@ -298,7 +313,11 @@ def admin_update_game_settings():
                war_town_weekday = ?, war_town_start_time = ?, war_town_end_time = ?,
                war_fortress_weekday = ?, war_fortress_start_time = ?, war_fortress_end_time = ?,
                king_weekly_income_percent = ?, official_weekly_income_percent = ?,
-               king_war_defense_bonus_percent = ?, office_challenge_aura_bonus_percent = ?
+               king_war_defense_bonus_percent = ?, office_challenge_aura_bonus_percent = ?,
+               morale_buff_cost = ?, morale_buff_bonus_percent = ?,
+               siege_attack_cost = ?, siege_attack_reduction_percent = ?,
+               siege_attack_reduction_floor_percent = ?, siege_attack_cooldown_seconds = ?,
+               defense_repair_cost_per_percent = ?
            WHERE id = 1""",
         (
             turn_wait_seconds, exp_base, exp_growth_novice_percent,
@@ -312,6 +331,10 @@ def admin_update_game_settings():
             war_fortress_weekday, war_fortress_start_time, war_fortress_end_time,
             king_weekly_income_percent, official_weekly_income_percent,
             king_war_defense_bonus_percent, office_challenge_aura_bonus_percent,
+            morale_buff_cost, morale_buff_bonus_percent,
+            siege_attack_cost, siege_attack_reduction_percent,
+            siege_attack_reduction_floor_percent, siege_attack_cooldown_seconds,
+            defense_repair_cost_per_percent,
         ),
     )
     db.commit()

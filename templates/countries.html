@@ -125,5 +125,71 @@
   </div>
   {% endif %}
 
+  {% if is_own_advisor %}
+  <div class="panel" style="margin-bottom:18px;">
+    <h3 style="margin:0 0 8px; color:var(--gold-bright); font-size:15px;">🎺 士氣激勵</h3>
+    <p style="margin:0 0 8px; font-size:13px; color:var(--text-dim);">
+      花費國庫 {{ morale_buff_cost }} 諸神幣，為本國全體角色在本次國戰時段內提升六圍屬性
+    </p>
+    {% if morale_buff_currently_active %}
+    <p class="hint" style="margin:0 0 8px; color:var(--gold-bright);">目前士氣激勵生效中</p>
+    {% endif %}
+    {% if not in_any_war_window %}
+    <p class="hint" style="margin:0;">只有在國戰時段才能施放士氣激勵</p>
+    {% elif morale_buff_already_used_this_window %}
+    <p class="hint" style="margin:0;">本次國戰時段已經施放過士氣激勵，需等下次國戰時段才能再次施放</p>
+    {% else %}
+    <form method="post" action="{{ url_for('game.country_cast_morale_buff') }}">
+      <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">施放士氣激勵</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if is_own_general %}
+  <div class="panel" style="margin-bottom:18px;">
+    <h3 style="margin:0 0 8px; color:var(--gold-bright); font-size:15px;">🏹 攻城武器</h3>
+    <p style="margin:0 0 8px; font-size:13px; color:var(--text-dim);">
+      花費國庫 {{ siege_attack_cost }} 諸神幣，削弱敵方一個要塞／城鎮的防禦力
+    </p>
+    {% if siege_attack_cooldown_label %}
+    <p class="hint" style="margin:0;">還在攻城武器冷卻中，還要等 {{ siege_attack_cooldown_label }}</p>
+    {% elif not enemy_target_tiles %}
+    <p class="hint" style="margin:0;">目前沒有可以攻打的敵方據點</p>
+    {% else %}
+    <form method="post" action="{{ url_for('game.country_siege_attack') }}" style="display:flex; gap:8px; flex-wrap:wrap; align-items:end;">
+      <div>
+        <label style="font-size:12px;">目標據點</label>
+        <select name="target_tile_id">
+          {% for t in enemy_target_tiles %}
+          <option value="{{ t.id }}">{{ t.country_name }} - {{ t.name }}（防禦已削弱 {{ t.defense_reduction_percent }}%）</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">發動攻擊</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if is_officer %}
+  <div class="panel" style="margin-bottom:18px;">
+    <h3 style="margin:0 0 8px; color:var(--gold-bright); font-size:15px;">🛠️ 修補防禦</h3>
+    {% if not damaged_own_tiles %}
+    <p class="hint" style="margin:0;">目前沒有需要修補的據點</p>
+    {% else %}
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      {% for t in damaged_own_tiles %}
+      <form method="post" action="{{ url_for('game.country_repair_defense') }}" style="display:flex; gap:10px; align-items:center; font-size:13px;">
+        <input type="hidden" name="target_tile_id" value="{{ t.id }}">
+        <span>{{ t.name }}（防禦已削弱 {{ t.defense_reduction_percent }}%，修補費用 {{ t.repair_cost }} 諸神幣）</span>
+        <button type="submit" class="turn-action-control" style="padding:4px 10px; font-size:12px;">修補</button>
+      </form>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <p style="margin-top:20px;"><a href="{{ url_for('game.game') }}" class="btn">← 返回主畫面</a></p>
 {% endblock %}

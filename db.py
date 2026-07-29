@@ -406,6 +406,8 @@ def _ensure_character_columns(conn):
         conn.execute("ALTER TABLE characters ADD COLUMN garrison_cooldown_until TEXT")
     if "income_claimed_at" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN income_claimed_at TEXT")
+    if "siege_attack_next_at" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN siege_attack_next_at TEXT")
 
 
 def _ensure_country_columns(conn):
@@ -424,6 +426,8 @@ def _ensure_country_columns(conn):
         conn.execute("ALTER TABLE countries ADD COLUMN pending_challenge_character_id INTEGER")
     if "pending_challenge_authorized_at" not in cols:
         conn.execute("ALTER TABLE countries ADD COLUMN pending_challenge_authorized_at TEXT")
+    if "morale_buff_expires_at" not in cols:
+        conn.execute("ALTER TABLE countries ADD COLUMN morale_buff_expires_at TEXT")
 
 
 def _ensure_monster_columns(conn):
@@ -456,6 +460,10 @@ def _ensure_map_tile_columns(conn):
         # tile (see _bandit_lord_stats/game_conquer), rather than eagerly
         # seeded for every neutral tile at map-generation time.
         conn.execute("ALTER TABLE map_tiles ADD COLUMN bandit_hp INTEGER")
+    if "defense_reduction_percent" not in cols:
+        conn.execute(
+            "ALTER TABLE map_tiles ADD COLUMN defense_reduction_percent INTEGER NOT NULL DEFAULT 0"
+        )
 
 
 def _upgrade_country_bonuses(conn):
@@ -617,6 +625,32 @@ def _ensure_game_settings_columns(conn):
     if "office_challenge_aura_bonus_percent" not in cols:
         conn.execute(
             "ALTER TABLE game_settings ADD COLUMN office_challenge_aura_bonus_percent INTEGER NOT NULL DEFAULT 20"
+        )
+    if "morale_buff_cost" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN morale_buff_cost INTEGER NOT NULL DEFAULT 30000")
+    if "morale_buff_bonus_percent" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN morale_buff_bonus_percent INTEGER NOT NULL DEFAULT 5"
+        )
+    if "siege_attack_cost" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN siege_attack_cost INTEGER NOT NULL DEFAULT 30000")
+    if "siege_attack_reduction_percent" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN siege_attack_reduction_percent INTEGER NOT NULL DEFAULT 15"
+        )
+    if "siege_attack_reduction_floor_percent" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN siege_attack_reduction_floor_percent "
+            "INTEGER NOT NULL DEFAULT 70"
+        )
+    if "siege_attack_cooldown_seconds" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN siege_attack_cooldown_seconds INTEGER NOT NULL DEFAULT 900"
+        )
+    if "defense_repair_cost_per_percent" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN defense_repair_cost_per_percent "
+            "INTEGER NOT NULL DEFAULT 5000"
         )
 
 

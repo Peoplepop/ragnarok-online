@@ -147,6 +147,43 @@
         國王在國戰或城鎮戰時段內，防禦力額外獲得「國戰防禦加成%」；
         受國王授權應戰參謀／大將軍之位的挑戰者，在該場戰鬥中六圍全部獲得「氣勢加成%」的臨時加成
       </p>
+
+      <h3 style="color: var(--gold-bright); font-size: 15px; margin-bottom:8px;">國庫花費（士氣激勵／攻城武器／修補防禦）設定</h3>
+      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom:16px;">
+        <div>
+          <label>士氣激勵費用 (諸神幣)</label>
+          <input type="text" inputmode="numeric" name="morale_buff_cost" value="{{ settings.morale_buff_cost }}">
+        </div>
+        <div>
+          <label>士氣激勵加成 (%)</label>
+          <input type="text" inputmode="numeric" name="morale_buff_bonus_percent" value="{{ settings.morale_buff_bonus_percent }}">
+        </div>
+        <div>
+          <label>攻城武器費用 (諸神幣)</label>
+          <input type="text" inputmode="numeric" name="siege_attack_cost" value="{{ settings.siege_attack_cost }}">
+        </div>
+        <div>
+          <label>攻城武器削弱幅度 (%)</label>
+          <input type="text" inputmode="numeric" name="siege_attack_reduction_percent" value="{{ settings.siege_attack_reduction_percent }}">
+        </div>
+        <div>
+          <label>攻城武器削弱上限 (%)</label>
+          <input type="text" inputmode="numeric" name="siege_attack_reduction_floor_percent" value="{{ settings.siege_attack_reduction_floor_percent }}">
+        </div>
+        <div>
+          <label>攻城武器冷卻秒數</label>
+          <input type="text" inputmode="numeric" name="siege_attack_cooldown_seconds" value="{{ settings.siege_attack_cooldown_seconds }}">
+        </div>
+        <div>
+          <label>修補防禦每點費用 (諸神幣/%)</label>
+          <input type="text" inputmode="numeric" name="defense_repair_cost_per_percent" value="{{ settings.defense_repair_cost_per_percent }}">
+        </div>
+      </div>
+      <p class="hint" style="margin-bottom:16px;">
+        參謀可在國戰時段內花費「士氣激勵費用」讓本國全體角色六圍獲得「士氣激勵加成%」，同一次國戰時段只能施放一次；
+        大將軍可花費「攻城武器費用」削弱敵方一個要塞／城鎮的防禦力「削弱幅度%」，最多削弱至「削弱上限%」，發動後進入「冷卻秒數」的專屬冷卻，且需在對應的國戰時段內才能發動；
+        國王／參謀／大將軍可花費「已削弱% × 每點費用」一次性將自己國家據點的防禦力完全修補回原始值
+      </p>
       <button type="submit">儲存設定</button>
     </form>
   </div>

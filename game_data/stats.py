@@ -44,7 +44,9 @@ STAT_FLOOR_COLUMNS = {
 }
 
 
-def character_final_stats(character, equipped_items, settings, king_war_defense_bonus=False):
+def character_final_stats(
+    character, equipped_items, settings, king_war_defense_bonus=False, morale_buff_active=False,
+):
     """Like compute_final_stats, but layers in the character's job-tier bonus
     and stacking rebirth bonus, then clamps every stat to its stat-floor
     snapshot (if any) so a promotion can never make a stat go down. Rebirth
@@ -57,11 +59,24 @@ def character_final_stats(character, equipped_items, settings, king_war_defense_
     office-challenge/usurpation feature. When True, it folds
     game_settings.king_war_defense_bonus_percent into the same additive
     percentage-bonus term job/country/rebirth bonuses already share, applied
-    only to def, rather than bolting on a separate multiply pass."""
+    only to def, rather than bolting on a separate multiply pass.
+
+    morale_buff_active similarly defaults to False; callers pass True only
+    once they've established the character's own country currently has an
+    active 士氣激勵 (Advisor's morale buff) -- see _morale_buff_active in
+    web_helpers.py and country_cast_morale_buff. When True, it folds
+    game_settings.morale_buff_bonus_percent into every one of the six stats'
+    job_bonus terms (composable with king_war_defense_bonus -- both can be
+    true at once, e.g. a reigning king whose country also has an active
+    morale buff)."""
     job_bonus = job_stat_bonus_pct(character["job_class"], character["job_tier"])
-    if king_war_defense_bonus:
+    if king_war_defense_bonus or morale_buff_active:
         job_bonus = dict(job_bonus)
+    if king_war_defense_bonus:
         job_bonus["def"] = job_bonus.get("def", 0) + settings["king_war_defense_bonus_percent"]
+    if morale_buff_active:
+        for key in BASE_STATS:
+            job_bonus[key] = job_bonus.get(key, 0) + settings["morale_buff_bonus_percent"]
     rebirth_bonus = character["rebirth_count"] * settings["rebirth_stat_bonus_percent"]
     level_bonus_stats = {key: character[f"level_bonus_{key}"] for key in BASE_STATS}
     stats = compute_final_stats(
@@ -75,12 +90,20 @@ def character_final_stats(character, equipped_items, settings, king_war_defense_
     return stats
 
 
-def defense_tower_stats(country, tile_type, settings):
+def defense_tower_stats(country, tile_type, settings, defense_reduction_percent=0):
     """Builds a monster-shaped dict for a town/fortress's defenders, reusing
     compute_final_stats at a fixed high level (no gear) so territory combat
-    goes through the exact same run_battle/_combat_hit path as hunting."""
+    goes through the exact same run_battle/_combat_hit path as hunting.
+
+    defense_reduction_percent defaults to 0 so the pre-existing caller is
+    unaffected; a General's 攻城武器 (siege attack) raises a specific tile's
+    map_tiles.defense_reduction_percent, which the caller passes through
+    here to knock the effective NPC defense level down proportionally
+    (clamped elsewhere to game_settings.siege_attack_reduction_floor_percent
+    so it can never reach 0)."""
     level = settings["fortress_defense_level"] if tile_type == "fortress" else settings["town_defense_level"]
-    s = compute_final_stats(country, [], level)
+    effective_level = round(level * (1 - defense_reduction_percent / 100))
+    s = compute_final_stats(country, [], effective_level)
     return {
         "name": f"{country['name']}守軍",
         "hp": s["hp"], "atk": s["str"], "def": s["def"], "agi": s["agi"],

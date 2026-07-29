@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS countries (
     pending_challenge_seat TEXT,
     pending_challenge_character_id INTEGER,
     pending_challenge_authorized_at TEXT,
+    morale_buff_expires_at TEXT,
     FOREIGN KEY (king_character_id) REFERENCES characters(id),
     FOREIGN KEY (advisor_character_id) REFERENCES characters(id),
     FOREIGN KEY (general_character_id) REFERENCES characters(id),
@@ -86,6 +87,7 @@ CREATE TABLE IF NOT EXISTS characters (
     donated_today_date TEXT,
     garrison_cooldown_until TEXT,
     income_claimed_at TEXT,
+    siege_attack_next_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (country_id) REFERENCES countries(id),
@@ -105,6 +107,7 @@ CREATE TABLE IF NOT EXISTS map_tiles (
     country_id INTEGER,
     mayor_character_id INTEGER,
     bandit_hp INTEGER,
+    defense_reduction_percent INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (country_id) REFERENCES countries(id),
     FOREIGN KEY (mayor_character_id) REFERENCES characters(id)
 );
@@ -134,7 +137,14 @@ CREATE TABLE IF NOT EXISTS game_settings (
     king_weekly_income_percent INTEGER NOT NULL DEFAULT 5,
     official_weekly_income_percent INTEGER NOT NULL DEFAULT 3,
     king_war_defense_bonus_percent INTEGER NOT NULL DEFAULT 5,
-    office_challenge_aura_bonus_percent INTEGER NOT NULL DEFAULT 20
+    office_challenge_aura_bonus_percent INTEGER NOT NULL DEFAULT 20,
+    morale_buff_cost INTEGER NOT NULL DEFAULT 30000,
+    morale_buff_bonus_percent INTEGER NOT NULL DEFAULT 5,
+    siege_attack_cost INTEGER NOT NULL DEFAULT 30000,
+    siege_attack_reduction_percent INTEGER NOT NULL DEFAULT 15,
+    siege_attack_reduction_floor_percent INTEGER NOT NULL DEFAULT 70,
+    siege_attack_cooldown_seconds INTEGER NOT NULL DEFAULT 900,
+    defense_repair_cost_per_percent INTEGER NOT NULL DEFAULT 5000
 );
 
 CREATE TABLE IF NOT EXISTS site_visits (

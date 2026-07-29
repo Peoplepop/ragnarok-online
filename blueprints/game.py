@@ -1,6 +1,6 @@
 """The main game loop: map movement, hunting, conquest, shop, bank and equipment."""
 import random
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 
@@ -10,6 +10,7 @@ from web_helpers import (
     character_required, _next_action_at, _cooldown_remaining_seconds, _in_war_window,
     _war_window_label, _war_window_kind_for_tile_type, _format_duration, _add_to_inventory,
     _remove_from_inventory, _in_any_war_window, _taipei_now, _parse_dt,
+    _current_war_window_end, _morale_buff_active, ACTION_DT_FORMAT,
 )
 from game_data.constants import (
     SHOP_TYPE_LABELS, SLOT_LABELS, EQUIP_SLOT_COLUMNS, GOVERNMENT_ROLES, tile_display_name,
@@ -137,7 +138,8 @@ def _render_game(**extra):
     # countries.* join above -- see the 貢獻值 donate_cap note further down).
     is_reigning_king = character["character_id"] == character["king_character_id"]
     king_war_defense_bonus = is_reigning_king and _in_any_war_window(settings)
-    stats = character_final_stats(character, equipped_items, settings, king_war_defense_bonus)
+    morale_buff_active = _morale_buff_active(character)
+    stats = character_final_stats(character, equipped_items, settings, king_war_defense_bonus, morale_buff_active)
     current_hp, current_mp = _current_hp_mp(character, stats)
 
     exp_needed = (
@@ -750,7 +752,8 @@ def _resolve_bandit_conquest(db, character, settings, stats, current_hp, current
     if tile_captured:
         db.execute(
             """UPDATE map_tiles
-               SET country_id = ?, tile_type = 'town', mayor_character_id = ?, bandit_hp = NULL
+               SET country_id = ?, tile_type = 'town', mayor_character_id = ?, bandit_hp = NULL,
+                   defense_reduction_percent = 0
                WHERE id = ?""",
             (character["id"], character["character_id"], character["current_tile_id"]),
         )
@@ -824,6 +827,7 @@ def game_conquer():
                   characters.level_bonus_hp, characters.level_bonus_mp, characters.level_bonus_str,
                   characters.level_bonus_def, characters.level_bonus_agi, characters.level_bonus_luk,
                   map_tiles.tile_type, map_tiles.country_id AS tile_country_id, map_tiles.name AS tile_name,
+                  map_tiles.defense_reduction_percent,
                   countries.*
            FROM characters
            JOIN map_tiles ON map_tiles.id = characters.current_tile_id
@@ -852,7 +856,7 @@ def game_conquer():
         """SELECT turn_wait_seconds, town_defense_level, fortress_defense_level, rebirth_stat_bonus_percent,
                   war_town_weekday, war_town_start_time, war_town_end_time,
                   war_fortress_weekday, war_fortress_start_time, war_fortress_end_time,
-                  king_war_defense_bonus_percent
+                  king_war_defense_bonus_percent, morale_buff_bonus_percent
            FROM game_settings WHERE id = 1"""
     ).fetchone()
 
@@ -897,7 +901,10 @@ def game_conquer():
     # guarantees we're inside the window matching this tile's kind, so "is
     # the reigning king" is the only remaining condition to check here.
     attacker_is_reigning_king = character["character_id"] == character["king_character_id"]
-    stats = character_final_stats(character, equipped_items, settings, attacker_is_reigning_king)
+    attacker_morale_buff_active = _morale_buff_active(character)
+    stats = character_final_stats(
+        character, equipped_items, settings, attacker_is_reigning_king, attacker_morale_buff_active,
+    )
     current_hp, current_mp = _current_hp_mp(character, stats)
 
     if current_hp <= 0:
@@ -959,8 +966,10 @@ def game_conquer():
         # defender_row["defender_id"] is the defender's own id (its "id" is
         # shadowed to the country's id by the bare countries.* join above).
         defender_is_reigning_king = defender_row["defender_id"] == defender_row["king_character_id"]
+        defender_morale_buff_active = _morale_buff_active(defender_row)
         defender_stats = character_final_stats(
             defender_row, defender_equipped_items, settings, defender_is_reigning_king,
+            defender_morale_buff_active,
         )
         defender_monster = {
             "name": defender_row["defender_name"],
@@ -1088,7 +1097,9 @@ def game_conquer():
 
     # No PvP defender remains at this tile -- proceed exactly as the
     # existing tower-fight logic, plus mayor assignment on a town capture.
-    tower = defense_tower_stats(defending_country, character["tile_type"], settings)
+    tower = defense_tower_stats(
+        defending_country, character["tile_type"], settings, character["defense_reduction_percent"],
+    )
 
     result = run_battle(
         character["character_name"], stats, character["element"], current_hp, tower,
@@ -1099,7 +1110,8 @@ def game_conquer():
     if result["won"]:
         new_currency = character["currency"]
         db.execute(
-            "UPDATE map_tiles SET country_id = ?, mayor_character_id = ? WHERE id = ?",
+            "UPDATE map_tiles SET country_id = ?, mayor_character_id = ?, defense_reduction_percent = 0 "
+            "WHERE id = ?",
             (
                 character["id"],
                 character["character_id"] if character["tile_type"] == "town" else None,
@@ -1852,14 +1864,15 @@ def countries_page():
     # the viewing character's OWN country, and only when that character
     # holds one of its government seats -- never exposed for other countries.
     own_character = db.execute(
-        "SELECT id, country_id, income_claimed_at FROM characters WHERE user_id = ?", (session["user_id"],)
+        "SELECT id, country_id, income_claimed_at, siege_attack_next_at FROM characters WHERE user_id = ?",
+        (session["user_id"],),
     ).fetchone()
     own_character_id = own_character["id"]
     own_country = next((c for c in countries if c["id"] == own_character["country_id"]), None)
     is_own_king = own_country is not None and own_character_id == own_country["king_character_id"]
-    is_own_official = own_country is not None and own_character_id in (
-        own_country["advisor_character_id"], own_country["general_character_id"],
-    )
+    is_own_advisor = own_country is not None and own_character_id == own_country["advisor_character_id"]
+    is_own_general = own_country is not None and own_character_id == own_country["general_character_id"]
+    is_own_official = is_own_advisor or is_own_general
     is_officer = is_own_king or is_own_official
     garrison_tiles_by_country_id = {}
     if is_officer:
@@ -1889,6 +1902,73 @@ def countries_page():
     if own_character["income_claimed_at"]:
         claimed_dt = _parse_dt(own_character["income_claimed_at"])
         already_claimed_today = claimed_dt is not None and claimed_dt.date() == now_taipei.date()
+
+    # 士氣激勵 (Advisor's morale buff): "already used this window" is detected
+    # by comparing the country's persisted morale_buff_expires_at against the
+    # CURRENT window's end (recomputed fresh every request) -- see
+    # _current_war_window_end/country_cast_morale_buff for why this single
+    # column serves double duty as both "currently active" and "already
+    # consumed for this window occurrence".
+    morale_buff_cost = settings["morale_buff_cost"]
+    morale_buff_currently_active = own_country is not None and _morale_buff_active(own_country)
+    morale_buff_already_used_this_window = False
+    current_window_end = _current_war_window_end(settings, now_taipei)
+    if own_country is not None and current_window_end is not None:
+        window_end_str = (
+            current_window_end.astimezone(timezone.utc)
+        ).replace(tzinfo=None).strftime(ACTION_DT_FORMAT)
+        morale_buff_already_used_this_window = own_country["morale_buff_expires_at"] == window_end_str
+
+    # 攻城武器 (General's siege attack): target list is every OTHER country's
+    # fortress/town tile (never neutral, never the viewer's own country).
+    siege_attack_cost = settings["siege_attack_cost"]
+    siege_attack_cooldown_seconds = (
+        _cooldown_remaining_seconds(own_character["siege_attack_next_at"]) if is_own_general else 0
+    )
+    siege_attack_cooldown_label = (
+        _format_duration(siege_attack_cooldown_seconds) if siege_attack_cooldown_seconds > 0 else None
+    )
+    enemy_target_tiles = []
+    if is_own_general and own_country is not None:
+        tile_rows = db.execute(
+            """SELECT map_tiles.id AS tile_id, map_tiles.name, map_tiles.tile_type,
+                      map_tiles.defense_reduction_percent, countries.name AS country_name
+               FROM map_tiles JOIN countries ON countries.id = map_tiles.country_id
+               WHERE map_tiles.tile_type IN ('fortress', 'town') AND map_tiles.country_id != ?
+               ORDER BY countries.name, map_tiles.tile_type DESC, map_tiles.name""",
+            (own_country["id"],),
+        ).fetchall()
+        enemy_target_tiles = [
+            {
+                "id": r["tile_id"],
+                "name": tile_display_name(r["name"], r["tile_type"]),
+                "country_name": r["country_name"],
+                "defense_reduction_percent": r["defense_reduction_percent"],
+            }
+            for r in tile_rows
+        ]
+
+    # 修補防禦 (King/Advisor/General repair): only the viewer's own country's
+    # currently-damaged fortress/town tiles.
+    defense_repair_cost_per_percent = settings["defense_repair_cost_per_percent"]
+    damaged_own_tiles = []
+    if is_officer and own_country is not None:
+        tile_rows = db.execute(
+            """SELECT id, name, tile_type, defense_reduction_percent
+               FROM map_tiles
+               WHERE country_id = ? AND tile_type IN ('fortress', 'town') AND defense_reduction_percent > 0
+               ORDER BY tile_type DESC, name""",
+            (own_country["id"],),
+        ).fetchall()
+        damaged_own_tiles = [
+            {
+                "id": r["id"],
+                "name": tile_display_name(r["name"], r["tile_type"]),
+                "defense_reduction_percent": r["defense_reduction_percent"],
+                "repair_cost": r["defense_reduction_percent"] * defense_repair_cost_per_percent,
+            }
+            for r in tile_rows
+        ]
 
     # Authorized-challenger banner: search across ALL countries (not just the
     # viewer's own) for a pending_challenge_character_id matching the viewer
@@ -1936,11 +2016,21 @@ def countries_page():
         "countries.html", countries=rows, roles=GOVERNMENT_ROLES,
         is_own_king=is_own_king,
         is_own_official=is_own_official,
+        is_own_advisor=is_own_advisor,
+        is_own_general=is_own_general,
         is_officer=is_officer,
         in_any_war_window=in_any_war_window,
         is_friday=is_friday,
         already_claimed_today=already_claimed_today,
         authorized_challenge=authorized_challenge,
+        morale_buff_cost=morale_buff_cost,
+        morale_buff_currently_active=morale_buff_currently_active,
+        morale_buff_already_used_this_window=morale_buff_already_used_this_window,
+        siege_attack_cost=siege_attack_cost,
+        siege_attack_cooldown_seconds=siege_attack_cooldown_seconds,
+        siege_attack_cooldown_label=siege_attack_cooldown_label,
+        enemy_target_tiles=enemy_target_tiles,
+        damaged_own_tiles=damaged_own_tiles,
     )
 
 
@@ -2418,4 +2508,209 @@ def country_claim_income():
     db.commit()
     db.close()
     flash(f"已領取本週國庫分潤 {amount} 諸神幣")
+    return redirect(url_for("game.countries_page"))
+
+
+# ---------------------------------------------------------------------------
+# 國庫花費三大官職行動: 士氣激勵 (Advisor's morale buff), 攻城武器 (General's
+# siege attack) and 修補防禦 (King/Advisor/General repair). All three spend
+# the ACTING officer's own country's treasury, none involve run_battle, and
+# none touch the shared per-character next_action_at cooldown (siege_attack
+# instead uses its own dedicated characters.siege_attack_next_at column).
+# ---------------------------------------------------------------------------
+
+@game_bp.route("/country/cast_morale_buff", methods=["POST"])
+@character_required
+def country_cast_morale_buff():
+    db = get_db()
+    character = db.execute(
+        "SELECT id, country_id FROM characters WHERE user_id = ?", (session["user_id"],)
+    ).fetchone()
+    country = db.execute("SELECT * FROM countries WHERE id = ?", (character["country_id"],)).fetchone()
+
+    if country is None or country["advisor_character_id"] != character["id"]:
+        db.close()
+        flash("只有參謀可以施放士氣激勵")
+        return redirect(url_for("game.countries_page"))
+
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+
+    window_end = _current_war_window_end(settings)
+    if window_end is None:
+        db.close()
+        flash("只有在國戰時段才能施放士氣激勵")
+        return redirect(url_for("game.countries_page"))
+
+    window_end_str = (window_end.astimezone(timezone.utc)).replace(tzinfo=None).strftime(ACTION_DT_FORMAT)
+    if country["morale_buff_expires_at"] == window_end_str:
+        db.close()
+        flash("本次國戰時段已經施放過士氣激勵，需等下次國戰時段才能再次施放")
+        return redirect(url_for("game.countries_page"))
+
+    cost = settings["morale_buff_cost"]
+    if country["treasury"] < cost:
+        db.close()
+        flash(f"國庫諸神幣不足，施放士氣激勵需要 {cost} 諸神幣")
+        return redirect(url_for("game.countries_page"))
+
+    db.execute(
+        "UPDATE countries SET treasury = treasury - ?, morale_buff_expires_at = ? WHERE id = ?",
+        (cost, window_end_str, country["id"]),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "cast_morale_buff",
+        detail=f"花費 {cost} 諸神幣施放士氣激勵", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+    flash("士氣激勵已施放，本次國戰時段內全國六圍屬性提升")
+    return redirect(url_for("game.countries_page"))
+
+
+@game_bp.route("/country/siege_attack", methods=["POST"])
+@character_required
+def country_siege_attack():
+    db = get_db()
+    character = db.execute(
+        "SELECT id, country_id, siege_attack_next_at FROM characters WHERE user_id = ?",
+        (session["user_id"],),
+    ).fetchone()
+    country = db.execute("SELECT * FROM countries WHERE id = ?", (character["country_id"],)).fetchone()
+
+    if country is None or country["general_character_id"] != character["id"]:
+        db.close()
+        flash("只有大將軍可以發動攻城武器")
+        return redirect(url_for("game.countries_page"))
+
+    remaining_cooldown = _cooldown_remaining_seconds(character["siege_attack_next_at"])
+    if remaining_cooldown > 0:
+        db.close()
+        flash(f"還在攻城武器冷卻中，還要等 {_format_duration(remaining_cooldown)}")
+        return redirect(url_for("game.countries_page"))
+
+    target_tile = db.execute(
+        "SELECT id, tile_type, country_id, name, defense_reduction_percent FROM map_tiles WHERE id = ?",
+        (request.form.get("target_tile_id", ""),),
+    ).fetchone()
+
+    valid_target = (
+        target_tile is not None
+        and target_tile["tile_type"] in ("fortress", "town")
+        and target_tile["country_id"] is not None
+        and target_tile["country_id"] != country["id"]
+    )
+    if not valid_target:
+        db.close()
+        flash("請選擇一個有效的敵方要塞或城鎮")
+        return redirect(url_for("game.countries_page"))
+
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+
+    window_kind = _war_window_kind_for_tile_type(target_tile["tile_type"])
+    if window_kind == "fortress":
+        war_weekday, war_start_time, war_end_time = (
+            settings["war_fortress_weekday"], settings["war_fortress_start_time"], settings["war_fortress_end_time"]
+        )
+    else:
+        war_weekday, war_start_time, war_end_time = (
+            settings["war_town_weekday"], settings["war_town_start_time"], settings["war_town_end_time"]
+        )
+    if not _in_war_window(war_weekday, war_start_time, war_end_time):
+        db.close()
+        kind_label = "要塞" if window_kind == "fortress" else "城鎮／荒地"
+        flash(
+            f"現在不是國戰時段，無法對{kind_label}發動攻城武器。"
+            f"開放時段：{_war_window_label(war_weekday, war_start_time, war_end_time)}（台灣時間）"
+        )
+        return redirect(url_for("game.countries_page"))
+
+    cost = settings["siege_attack_cost"]
+    if country["treasury"] < cost:
+        db.close()
+        flash(f"國庫諸神幣不足，發動攻城武器需要 {cost} 諸神幣")
+        return redirect(url_for("game.countries_page"))
+
+    floor_percent = settings["siege_attack_reduction_floor_percent"]
+    new_reduction = min(
+        floor_percent,
+        target_tile["defense_reduction_percent"] + settings["siege_attack_reduction_percent"],
+    )
+
+    db.execute(
+        "UPDATE map_tiles SET defense_reduction_percent = ? WHERE id = ?",
+        (new_reduction, target_tile["id"]),
+    )
+    db.execute("UPDATE countries SET treasury = treasury - ? WHERE id = ?", (cost, country["id"]))
+    db.execute(
+        "UPDATE characters SET siege_attack_next_at = ? WHERE id = ?",
+        (_next_action_at(settings["siege_attack_cooldown_seconds"]), character["id"]),
+    )
+    tile_name = tile_display_name(target_tile["name"], target_tile["tile_type"])
+    log_activity(
+        db, session["user_id"], session["username"], "siege_attack",
+        detail=f"對{tile_name}發動攻城武器，防禦力削弱至剩餘 {100 - new_reduction}%（花費 {cost} 諸神幣）",
+        ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+    flash(f"攻城武器發動成功，「{tile_name}」的防禦力已被削弱")
+    return redirect(url_for("game.countries_page"))
+
+
+@game_bp.route("/country/repair_defense", methods=["POST"])
+@character_required
+def country_repair_defense():
+    db = get_db()
+    character = db.execute(
+        "SELECT id, country_id FROM characters WHERE user_id = ?", (session["user_id"],)
+    ).fetchone()
+    country = db.execute("SELECT * FROM countries WHERE id = ?", (character["country_id"],)).fetchone()
+
+    is_officer = country is not None and character["id"] in (
+        country["king_character_id"], country["advisor_character_id"], country["general_character_id"],
+    )
+    if not is_officer:
+        db.close()
+        flash("只有國王／參謀／大將軍可以修補防禦")
+        return redirect(url_for("game.countries_page"))
+
+    target_tile = db.execute(
+        "SELECT id, tile_type, country_id, name, defense_reduction_percent FROM map_tiles WHERE id = ?",
+        (request.form.get("target_tile_id", ""),),
+    ).fetchone()
+
+    valid_target = (
+        target_tile is not None
+        and target_tile["tile_type"] in ("fortress", "town")
+        and target_tile["country_id"] == country["id"]
+    )
+    if not valid_target:
+        db.close()
+        flash("請選擇一個屬於自己國家的要塞或城鎮")
+        return redirect(url_for("game.countries_page"))
+
+    if target_tile["defense_reduction_percent"] <= 0:
+        db.close()
+        flash("這個據點目前沒有需要修補的防禦損傷")
+        return redirect(url_for("game.countries_page"))
+
+    settings = db.execute(
+        "SELECT defense_repair_cost_per_percent FROM game_settings WHERE id = 1"
+    ).fetchone()
+    cost = target_tile["defense_reduction_percent"] * settings["defense_repair_cost_per_percent"]
+    if country["treasury"] < cost:
+        db.close()
+        flash(f"國庫諸神幣不足，修補防禦需要 {cost} 諸神幣")
+        return redirect(url_for("game.countries_page"))
+
+    db.execute("UPDATE map_tiles SET defense_reduction_percent = 0 WHERE id = ?", (target_tile["id"],))
+    db.execute("UPDATE countries SET treasury = treasury - ? WHERE id = ?", (cost, country["id"]))
+    tile_name = tile_display_name(target_tile["name"], target_tile["tile_type"])
+    log_activity(
+        db, session["user_id"], session["username"], "repair_defense",
+        detail=f"修補{tile_name}的防禦損傷（花費 {cost} 諸神幣）", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+    flash(f"「{tile_name}」的防禦已修補完成")
     return redirect(url_for("game.countries_page"))
