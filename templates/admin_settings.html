@@ -184,6 +184,49 @@
         大將軍可花費「攻城武器費用」削弱敵方一個要塞／城鎮的防禦力「削弱幅度%」，最多削弱至「削弱上限%」，發動後進入「冷卻秒數」的專屬冷卻，且需在對應的國戰時段內才能發動；
         國王／參謀／大將軍可花費「已削弱% × 每點費用」一次性將自己國家據點的防禦力完全修補回原始值
       </p>
+      <h3 style="color: var(--gold-bright); font-size: 15px; margin-bottom:8px;">天下武道大會設定（台灣時間）</h3>
+      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom:16px;">
+        <div>
+          <label>報名費 (諸神幣)</label>
+          <input type="text" inputmode="numeric" name="tournament_registration_fee" value="{{ settings.tournament_registration_fee }}">
+        </div>
+        <div>
+          <label>冠軍獎金國庫抽成 (%)</label>
+          <input type="text" inputmode="numeric" name="tournament_treasury_cut_percent" value="{{ settings.tournament_treasury_cut_percent }}">
+        </div>
+        <div></div>
+        <div>
+          <label>報名截止星期</label>
+          <select name="tournament_registration_deadline_weekday">
+            {% for wd, label in [(1,'週一'),(2,'週二'),(3,'週三'),(4,'週四'),(5,'週五'),(6,'週六'),(7,'週日')] %}
+            <option value="{{ wd }}" {% if settings.tournament_registration_deadline_weekday == wd %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>報名截止時間</label>
+          <input type="text" name="tournament_registration_deadline_time" value="{{ settings.tournament_registration_deadline_time }}" placeholder="20:00">
+        </div>
+        <div></div>
+        <div>
+          <label>開賽星期</label>
+          <select name="tournament_start_weekday">
+            {% for wd, label in [(1,'週一'),(2,'週二'),(3,'週三'),(4,'週四'),(5,'週五'),(6,'週六'),(7,'週日')] %}
+            <option value="{{ wd }}" {% if settings.tournament_start_weekday == wd %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>開賽時間</label>
+          <input type="text" name="tournament_start_time" value="{{ settings.tournament_start_time }}" placeholder="14:00">
+        </div>
+      </div>
+      <p class="hint" style="margin-bottom:16px;">
+        天下武道大會每週一屆，玩家在報名截止前可於任何國家的要塞內繳交「報名費」報名，報名當下會凍結六圍與技能配置；
+        開賽時間一到，之後的第一個連線請求會自動結算整個單淘汰賽程（決賽三戰兩勝），並立即開放下一屆報名。
+        冠軍可獲得「報名費總和 × (100 - 國庫抽成%)」，其餘進入冠軍所屬國家的國庫；報名人數不足 2 人時本屆流局並全額退費。
+        時間格式須為 HH:MM（24 小時制），並請將開賽時間設定在報名截止之後
+      </p>
       <button type="submit">儲存設定</button>
     </form>
   </div>

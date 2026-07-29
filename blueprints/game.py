@@ -10,7 +10,8 @@ from web_helpers import (
     character_required, _next_action_at, _cooldown_remaining_seconds, _in_war_window,
     _war_window_label, _war_window_kind_for_tile_type, _format_duration, _add_to_inventory,
     _remove_from_inventory, _in_any_war_window, _taipei_now, _parse_dt,
-    _current_war_window_end, _morale_buff_active, ACTION_DT_FORMAT,
+    _current_war_window_end, _morale_buff_active, _tournament_registration_open,
+    _taipei_time_label, ACTION_DT_FORMAT,
 )
 from game_data.constants import (
     SHOP_TYPE_LABELS, SLOT_LABELS, EQUIP_SLOT_COLUMNS, GOVERNMENT_ROLES, tile_display_name,
@@ -131,6 +132,20 @@ def _render_game(**extra):
         "SELECT COUNT(*) AS c FROM trades WHERE target_character_id = ? AND status = 'pending'",
         (character["character_id"],),
     ).fetchone()["c"]
+
+    # 天下武道大會 signup panel: only shown standing on a fortress tile (any
+    # country's -- see tournament_register), while the open cycle is still
+    # accepting entries, and only if this character hasn't already entered.
+    # The route re-validates all of this; this is purely what to render.
+    open_tournament = db.execute("SELECT * FROM tournaments ORDER BY id DESC LIMIT 1").fetchone()
+    tournament_registration_open = _tournament_registration_open(open_tournament)
+    tournament_already_registered = open_tournament is not None and db.execute(
+        "SELECT id FROM tournament_registrations WHERE tournament_id = ? AND character_id = ?",
+        (open_tournament["id"], character["character_id"]),
+    ).fetchone() is not None
+    tournament_deadline_label = (
+        _taipei_time_label(open_tournament["registration_deadline_at"]) if open_tournament else "-"
+    )
     db.close()
 
     # King war-defense bonus: character["character_id"] is the character's
@@ -270,6 +285,10 @@ def _render_game(**extra):
         donate_cap=donate_cap,
         donated_today_display=donated_today_display,
         pending_trade_invite_count=pending_trade_invite_count,
+        tournament_registration_open=tournament_registration_open,
+        tournament_already_registered=tournament_already_registered,
+        tournament_fee=settings["tournament_registration_fee"],
+        tournament_deadline_label=tournament_deadline_label,
     )
     context.update(extra)
     return render_template("game.html", **context)

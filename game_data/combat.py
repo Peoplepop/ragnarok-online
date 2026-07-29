@@ -189,3 +189,102 @@ def run_battle(player_name, player_stats, player_element, player_hp, monster, pl
         "log": log, "won": m_hp <= 0 and p_hp > 0, "timed_out": timed_out,
         "player_hp": p_hp, "player_mp": p_mp, "monster_hp": m_hp,
     }
+
+
+def run_pvp_duel(a_name, a_stats, a_element, a_skills, b_name, b_stats, b_element, b_skills):
+    """Symmetric two-player duel for 天下武道大會 -- unlike run_battle (player
+    vs monster-shaped opponent, where only the "player" side gets luk-based
+    hit/dodge or skills), both sides here are full player-shaped combatants:
+    each rolls its own equipped skills off its own MP pool, and each passes
+    its own real LUK to _combat_hit on BOTH the attacker and the defender
+    side. That asymmetry is an accepted simplification for PvE and for
+    conquest garrison duels (see game_conquer), but it would be a genuine
+    fairness bug in a head-to-head tournament where both combatants are real
+    players. The per-hit primitive _combat_hit was already fully symmetric --
+    only run_battle's orchestration loop hardcoded the asymmetry -- so this
+    mirrors that loop's round-cap / speed / attacks-per-round structure
+    exactly and changes nothing else.
+
+    Always starts both sides at their full snapshotted hp/mp -- tournament
+    games never carry damage across separate games (including between the
+    individual games of a best-of-3 final).
+
+    "winner" is None exactly when neither side was knocked out, i.e. when
+    timed_out is True; the caller applies the tournament's remaining-HP%
+    tiebreak in that case."""
+    log = []
+    a_hp, b_hp = a_stats["hp"], b_stats["hp"]
+    a_mp, b_mp = a_stats["mp"], b_stats["mp"]
+
+    a_speed = a_stats["agi"] * SPEED_PER_AGI
+    b_speed = b_stats["agi"] * SPEED_PER_AGI
+    if a_speed >= b_speed:
+        faster, slower = "a", "b"
+    else:
+        faster, slower = "b", "a"
+    attacks_per_round = {
+        "a": 1 + a_speed // EXTRA_ATTACK_SPEED_STEP,
+        "b": 1 + b_speed // EXTRA_ATTACK_SPEED_STEP,
+    }
+
+    def attack_once(attacker):
+        nonlocal a_hp, b_hp, a_mp, b_mp
+        if attacker == "a":
+            skill = _roll_job_skill(a_skills, a_mp)
+            if skill:
+                a_mp -= skill["mp_cost"]
+                atk_value = _skill_damage_stat_value(a_stats, skill["stat"])
+                dmg, line = _combat_hit(
+                    a_name, atk_value, a_stats["agi"], a_stats["luk"], a_element,
+                    b_name, b_stats["def"], b_stats["luk"], b_element,
+                    damage_multiplier=skill["multiplier"], skill_name=skill["name"],
+                )
+            else:
+                dmg, line = _combat_hit(
+                    a_name, a_stats["str"], a_stats["agi"], a_stats["luk"], a_element,
+                    b_name, b_stats["def"], b_stats["luk"], b_element,
+                )
+            b_hp = max(0, b_hp - dmg)
+            log.append(f"{line}（{b_name} 剩餘 HP {b_hp}）")
+        else:
+            skill = _roll_job_skill(b_skills, b_mp)
+            if skill:
+                b_mp -= skill["mp_cost"]
+                atk_value = _skill_damage_stat_value(b_stats, skill["stat"])
+                dmg, line = _combat_hit(
+                    b_name, atk_value, b_stats["agi"], b_stats["luk"], b_element,
+                    a_name, a_stats["def"], a_stats["luk"], a_element,
+                    damage_multiplier=skill["multiplier"], skill_name=skill["name"],
+                )
+            else:
+                dmg, line = _combat_hit(
+                    b_name, b_stats["str"], b_stats["agi"], b_stats["luk"], b_element,
+                    a_name, a_stats["def"], a_stats["luk"], a_element,
+                )
+            a_hp = max(0, a_hp - dmg)
+            log.append(f"{line}（{a_name} 剩餘 HP {a_hp}）")
+
+    timed_out = False
+    for round_num in range(BATTLE_ROUND_CAP):
+        if a_hp <= 0 or b_hp <= 0:
+            break
+        for _ in range(attacks_per_round[faster]):
+            attack_once(faster)
+            if a_hp <= 0 or b_hp <= 0:
+                break
+        if a_hp <= 0 or b_hp <= 0:
+            break
+        for _ in range(attacks_per_round[slower]):
+            attack_once(slower)
+            if a_hp <= 0 or b_hp <= 0:
+                break
+        if a_hp <= 0 or b_hp <= 0:
+            break
+        if round_num == BATTLE_ROUND_CAP - 1:
+            timed_out = True
+
+    return {
+        "log": log, "a_hp": a_hp, "b_hp": b_hp, "a_mp": a_mp, "b_mp": b_mp,
+        "timed_out": timed_out,
+        "winner": "a" if b_hp <= 0 and a_hp > 0 else ("b" if a_hp <= 0 and b_hp > 0 else None),
+    }

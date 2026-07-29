@@ -23,6 +23,7 @@
       <a href="{{ url_for('game.countries_page') }}" class="btn" style="padding:6px 14px; font-size:13px;">國家詳情</a>
       <a href="{{ url_for('character.character_page') }}" class="btn" style="padding:6px 14px; font-size:13px;">角色詳情</a>
       <a href="{{ url_for('trade.trade_home') }}" class="btn" style="padding:6px 14px; font-size:13px;">交易</a>
+      <a href="{{ url_for('tournament.tournament_page') }}" class="btn" style="padding:6px 14px; font-size:13px;">武道大會</a>
     </div>
   </div>
 
@@ -201,6 +202,22 @@
         <button type="submit" class="turn-action-control" style="padding:8px 18px; font-size:13px;">✨ 回復 HP／MP（{{ recover_cost }} 諸神幣）</button>
         <span class="hint" style="margin:0;">費用將計入「{{ current_tile.country_name }}」國庫</span>
       </form>
+      {% endif %}
+    </div>
+
+    <div style="margin-top:18px; border-top:1px solid var(--border); padding-top:18px;">
+      <div style="font-size:13px; color:var(--gold-bright); margin-bottom:8px;">🏆 天下武道大會</div>
+      {% if tournament_already_registered %}
+      <p class="hint" style="margin:0;">你已經報名本屆天下武道大會，請於開賽後至 <a href="{{ url_for('tournament.tournament_page') }}">武道大會</a> 查看賽果</p>
+      {% elif tournament_registration_open %}
+      <p class="hint" style="margin:0 0 8px;">
+        報名費 {{ tournament_fee }} 諸神幣，報名截止：{{ tournament_deadline_label }}（台灣時間）
+      </p>
+      <form method="post" action="{{ url_for('tournament.tournament_register') }}">
+        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">🏆 報名天下武道大會</button>
+      </form>
+      {% else %}
+      <p class="hint" style="margin:0;">目前不是報名時間，請至 <a href="{{ url_for('tournament.tournament_page') }}">武道大會</a> 查看賽程與歷代優勝者</p>
       {% endif %}
     </div>
 

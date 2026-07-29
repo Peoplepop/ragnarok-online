@@ -116,6 +116,49 @@ def _current_war_window_end(settings, now=None):
     return None
 
 
+def _next_weekly_instant_at(weekday, time_str, now=None):
+    """The next upcoming occurrence of a weekday+time pair (Taipei time),
+    returned as a UTC-naive ACTION_DT_FORMAT string ready to store in a
+    "when does X happen" column -- the same conversion
+    country_cast_morale_buff already does on _current_war_window_end's
+    return value. weekday is an ISO weekday (1=Mon..7=Sun), matching the
+    war_town_weekday/war_fortress_weekday convention.
+
+    Always strictly in the future: an instant that is exactly now (or
+    earlier today) rolls forward a full week. Used by 天下武道大會 to freeze
+    a cycle's registration deadline and start time at the moment the cycle
+    row is created."""
+    now = now if now is not None else _taipei_now()
+    hour, minute = (int(x) for x in time_str.split(":"))
+    candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    candidate += timedelta(days=(weekday - now.isoweekday()) % 7)
+    if candidate <= now:
+        candidate += timedelta(days=7)
+    return candidate.astimezone(timezone.utc).replace(tzinfo=None).strftime(ACTION_DT_FORMAT)
+
+
+def _taipei_time_label(stored_at):
+    """Human-readable Taipei-time rendering of a stored UTC-naive
+    ACTION_DT_FORMAT instant (the inverse of _next_weekly_instant_at), for
+    displaying tournament deadlines/start times on the page."""
+    if not stored_at:
+        return "-"
+    dt = datetime.strptime(stored_at, ACTION_DT_FORMAT).replace(tzinfo=timezone.utc).astimezone(TAIPEI_TZ)
+    return f"{dt.strftime('%Y-%m-%d %H:%M')}（{ISO_WEEKDAY_LABELS.get(dt.isoweekday(), '?')}）"
+
+
+def _tournament_registration_open(tournament):
+    """True if this 天下武道大會 cycle row is still accepting registrations --
+    shared by the tournament blueprint (authoritative check on POST) and by
+    game.py's _render_game (deciding whether to show the fortress signup
+    panel), same shape as _morale_buff_active."""
+    return (
+        tournament is not None
+        and tournament["status"] == "registration"
+        and datetime.utcnow() < datetime.strptime(tournament["registration_deadline_at"], ACTION_DT_FORMAT)
+    )
+
+
 def _morale_buff_active(country):
     """True if country["morale_buff_expires_at"] (or a character row carrying
     the bare countries.* join, per this codebase's usual aliasing) has an

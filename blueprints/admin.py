@@ -226,6 +226,16 @@ def admin_update_game_settings():
         siege_attack_reduction_floor_percent = int(request.form.get("siege_attack_reduction_floor_percent", ""))
         siege_attack_cooldown_seconds = int(request.form.get("siege_attack_cooldown_seconds", ""))
         defense_repair_cost_per_percent = int(request.form.get("defense_repair_cost_per_percent", ""))
+        tournament_registration_fee = int(request.form.get("tournament_registration_fee", ""))
+        tournament_treasury_cut_percent = int(request.form.get("tournament_treasury_cut_percent", ""))
+        tournament_registration_deadline_weekday = int(
+            request.form.get("tournament_registration_deadline_weekday", "")
+        )
+        tournament_registration_deadline_time = request.form.get(
+            "tournament_registration_deadline_time", ""
+        ).strip()
+        tournament_start_weekday = int(request.form.get("tournament_start_weekday", ""))
+        tournament_start_time = request.form.get("tournament_start_time", "").strip()
     except ValueError:
         flash("設定值格式不正確")
         return redirect(url_for("admin.admin_settings"))
@@ -300,6 +310,26 @@ def admin_update_game_settings():
         flash("國庫花費相關的費用與加成數值不可為負數")
         return redirect(url_for("admin.admin_settings"))
 
+    if tournament_registration_fee < 0 or tournament_treasury_cut_percent < 0:
+        flash("天下武道大會的報名費與國庫抽成不可為負數")
+        return redirect(url_for("admin.admin_settings"))
+
+    if tournament_treasury_cut_percent > 100:
+        flash("天下武道大會的國庫抽成必須介於 0 到 100 之間")
+        return redirect(url_for("admin.admin_settings"))
+
+    if not (
+        1 <= tournament_registration_deadline_weekday <= 7 and 1 <= tournament_start_weekday <= 7
+    ):
+        flash("天下武道大會的星期必須介於 1（週一）到 7（週日）之間")
+        return redirect(url_for("admin.admin_settings"))
+
+    if not (
+        _valid_war_time(tournament_registration_deadline_time) and _valid_war_time(tournament_start_time)
+    ):
+        flash("天下武道大會的時間格式須為 HH:MM（24 小時制）")
+        return redirect(url_for("admin.admin_settings"))
+
     db = get_db()
     db.execute(
         """UPDATE game_settings
@@ -317,7 +347,10 @@ def admin_update_game_settings():
                morale_buff_cost = ?, morale_buff_bonus_percent = ?,
                siege_attack_cost = ?, siege_attack_reduction_percent = ?,
                siege_attack_reduction_floor_percent = ?, siege_attack_cooldown_seconds = ?,
-               defense_repair_cost_per_percent = ?
+               defense_repair_cost_per_percent = ?,
+               tournament_registration_fee = ?, tournament_treasury_cut_percent = ?,
+               tournament_registration_deadline_weekday = ?, tournament_registration_deadline_time = ?,
+               tournament_start_weekday = ?, tournament_start_time = ?
            WHERE id = 1""",
         (
             turn_wait_seconds, exp_base, exp_growth_novice_percent,
@@ -335,6 +368,9 @@ def admin_update_game_settings():
             siege_attack_cost, siege_attack_reduction_percent,
             siege_attack_reduction_floor_percent, siege_attack_cooldown_seconds,
             defense_repair_cost_per_percent,
+            tournament_registration_fee, tournament_treasury_cut_percent,
+            tournament_registration_deadline_weekday, tournament_registration_deadline_time,
+            tournament_start_weekday, tournament_start_time,
         ),
     )
     db.commit()

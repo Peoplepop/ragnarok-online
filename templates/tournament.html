@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}天下武道大會 - 五行爭鋒{% endblock %}
+
+{% block content %}
+  <h2 style="color: var(--gold-bright); font-size: 18px; margin-top:0;">天下武道大會</h2>
+  <p class="hint" style="margin-top:-8px; margin-bottom:20px;">
+    每週一屆的單淘汰制 PvP 賽事。報名時會凍結你當下的六圍與技能配置，之後的裝備、等級、改名或轉換國籍都不會影響已報名的戰力；
+    決賽採三戰兩勝，其餘場次皆為一戰定勝負，回合上限內未分勝負者由剩餘 HP 百分比較高者晉級。
+    冠軍可獲得獎金池的 {{ 100 - treasury_cut_percent }}%，其餘 {{ treasury_cut_percent }}% 歸入冠軍所屬國家的國庫。
+  </p>
+
+  {% if tournament and tournament.status == 'registration' %}
+  <div class="panel" style="margin-bottom:18px;">
+    <h3 style="margin:0 0 10px; color:var(--gold-bright); font-size:15px;">🏆 本屆報名中</h3>
+    <div style="display:flex; gap:20px; flex-wrap:wrap; font-size:13px; color:var(--text-dim); margin-bottom:10px;">
+      <span>報名費：{{ fee }} 諸神幣</span>
+      <span>報名截止：{{ registration_deadline_label }}</span>
+      <span>開賽時間：{{ start_label }}</span>
+      <span>目前報名人數：{{ registrants|length }} 人</span>
+    </div>
+
+    {% if registrants %}
+    <div style="display:flex; gap:10px; flex-wrap:wrap; font-size:13px; margin-bottom:12px;">
+      {% for r in registrants %}
+      <span style="border:1px solid var(--border); border-radius:6px; padding:2px 10px;">
+        {{ r.character_name }}<span style="color:var(--text-dim);">（{{ r.country_name }}）</span>
+      </span>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="hint" style="margin:0 0 12px;">目前還沒有人報名</p>
+    {% endif %}
+
+    {% if already_registered %}
+    <p class="hint" style="margin:0; color:var(--gold-bright);">你已經報名本屆天下武道大會</p>
+    {% elif not registration_open %}
+    <p class="hint" style="margin:0;">本屆報名已截止，請等待開賽</p>
+    {% elif not at_fortress %}
+    <p class="hint" style="margin:0;">報名只能在要塞內進行（任何國家的要塞都可以）</p>
+    {% else %}
+    <form method="post" action="{{ url_for('tournament.tournament_register') }}">
+      <button type="submit" style="padding:8px 18px; font-size:13px;">🏆 報名（{{ fee }} 諸神幣）</button>
+    </form>
+    {% endif %}
+  </div>
+  {% elif tournament and tournament.status == 'cancelled' %}
+  <div class="panel" style="margin-bottom:18px;">
+    <p class="hint" style="margin:0;">上一屆天下武道大會因「{{ tournament.cancelled_reason }}」流局，報名費已全額退還</p>
+  </div>
+  {% endif %}
+
+  {% if last_completed %}
+  <div class="panel" style="margin-bottom:18px; border:1px solid var(--gold-bright);">
+    <h3 style="margin:0 0 8px; color:var(--gold-bright); font-size:16px;">
+      👑 第 {{ last_completed.id }} 屆冠軍：{{ last_completed.champion_name }}
+    </h3>
+    <div style="display:flex; gap:20px; flex-wrap:wrap; font-size:13px; color:var(--text-dim);">
+      <span>所屬國家：{{ last_completed.champion_country_name }}</span>
+      <span>獎金池：{{ last_completed.prize_pool }} 諸神幣</span>
+      <span>冠軍獎金：{{ last_completed.prize_pool - last_completed.treasury_cut }} 諸神幣</span>
+      <span>國庫抽成：{{ last_completed.treasury_cut }} 諸神幣</span>
+      <span>結算時間：{{ last_completed.completed_at }}</span>
+    </div>
+  </div>
+
+  {% for r in rounds %}
+  <div class="panel" style="margin-bottom:18px;">
+    <h3 style="margin:0 0 10px; color:var(--gold-bright); font-size:15px;">{{ r.label }}</h3>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      {% for m in r.matches %}
+      <div style="border:1px solid var(--border); border-radius:6px; padding:10px 12px; font-size:13px;">
+        {% if m.is_bye %}
+        <div>
+          {{ m.a_name }}<span style="color:var(--text-dim);">（{{ m.a_country }}）</span>
+          <span style="color:var(--text-dim);">輪空晉級</span>
+        </div>
+        {% else %}
+        <div>
+          {{ m.a_name }}<span style="color:var(--text-dim);">（{{ m.a_country }}）</span>
+          <span style="color:var(--text-dim);"> vs </span>
+          {{ m.b_name }}<span style="color:var(--text-dim);">（{{ m.b_country }}）</span>
+          　→　<span style="color:var(--gold-bright);">{{ m.winner_name }} 勝</span>
+          {% if m.any_timed_out %}
+          <span style="color:var(--text-dim);">（回合上限，依剩餘 HP 判定）</span>
+          {% endif %}
+        </div>
+        {% if m.games|length > 1 %}
+        <div style="margin-top:6px; color:var(--text-dim); font-size:12px;">
+          {% for g in m.games %}
+          <span style="margin-right:12px;">第 {{ g.game_number }} 戰：{{ g.winner_name }} 勝{% if g.timed_out %}（回合上限）{% endif %}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% for g in m.games %}
+        {% if g.battle_log %}
+        <details style="margin-top:6px;">
+          <summary style="cursor:pointer; color:var(--text-dim); font-size:12px;">
+            戰鬥紀錄{% if m.games|length > 1 %}（第 {{ g.game_number }} 戰）{% endif %}
+          </summary>
+          <div style="margin-top:6px; max-height:240px; overflow-y:auto; display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--text-dim);">
+            {% for line in g.battle_log.split("\n") %}
+            <div>{{ line }}</div>
+            {% endfor %}
+          </div>
+        </details>
+        {% endif %}
+        {% endfor %}
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <div class="panel" style="margin-bottom:18px;">
+    <h3 style="margin:0 0 10px; color:var(--gold-bright); font-size:15px;">🏅 歷代優勝者</h3>
+    {% if hall_of_fame %}
+    <div style="display:flex; flex-direction:column; gap:6px; font-size:13px;">
+      {% for t in hall_of_fame %}
+      <div style="display:flex; gap:16px; flex-wrap:wrap;">
+        <span style="color:var(--text-dim); min-width:64px;">第 {{ t.id }} 屆</span>
+        <span style="color:var(--gold-bright);">{{ t.champion_name }}</span>
+        <span style="color:var(--text-dim);">{{ t.champion_country_name }}</span>
+        <span style="color:var(--text-dim);">獎金 {{ t.prize_pool - t.treasury_cut }} 諸神幣</span>
+        <span style="color:var(--text-dim);">{{ t.completed_at }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="hint" style="margin:0;">還沒有任何一屆天下武道大會完賽</p>
+    {% endif %}
+  </div>
+
+  <p style="margin-top:20px;"><a href="{{ url_for('game.game') }}" class="btn">← 返回主畫面</a></p>
+{% endblock %}

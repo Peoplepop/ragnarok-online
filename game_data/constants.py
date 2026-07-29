@@ -45,6 +45,7 @@ ACTION_LABELS = {
     "cast_morale_buff": "施放士氣激勵",
     "siege_attack": "發動攻城武器",
     "repair_defense": "修補防禦",
+    "tournament_register": "報名天下武道大會",
 }
 
 SHOP_TYPE_LABELS = {

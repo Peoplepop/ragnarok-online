@@ -144,7 +144,13 @@ CREATE TABLE IF NOT EXISTS game_settings (
     siege_attack_reduction_percent INTEGER NOT NULL DEFAULT 15,
     siege_attack_reduction_floor_percent INTEGER NOT NULL DEFAULT 70,
     siege_attack_cooldown_seconds INTEGER NOT NULL DEFAULT 900,
-    defense_repair_cost_per_percent INTEGER NOT NULL DEFAULT 5000
+    defense_repair_cost_per_percent INTEGER NOT NULL DEFAULT 5000,
+    tournament_registration_fee INTEGER NOT NULL DEFAULT 5000,
+    tournament_treasury_cut_percent INTEGER NOT NULL DEFAULT 10,
+    tournament_registration_deadline_weekday INTEGER NOT NULL DEFAULT 6,
+    tournament_registration_deadline_time TEXT NOT NULL DEFAULT '20:00',
+    tournament_start_weekday INTEGER NOT NULL DEFAULT 7,
+    tournament_start_time TEXT NOT NULL DEFAULT '14:00'
 );
 
 CREATE TABLE IF NOT EXISTS site_visits (
@@ -255,6 +261,75 @@ CREATE TABLE IF NOT EXISTS trades (
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (initiator_character_id) REFERENCES characters(id),
     FOREIGN KEY (target_character_id) REFERENCES characters(id)
+);
+
+-- 天下武道大會 (World Martial Arts Tournament): one weekly single-elimination
+-- PvP bracket. There is no background scheduler in this app (same constraint
+-- that made the officers' weekly treasury income a manual claim button), so
+-- the whole cycle is driven lazily off an @app.before_request hook -- see
+-- blueprints/tournament.py. registration_deadline_at/start_at are absolute
+-- UTC-naive ACTION_DT_FORMAT instants computed ONCE when the row is created,
+-- from the game_settings tournament_* weekday/time pairs.
+CREATE TABLE IF NOT EXISTS tournaments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    status TEXT NOT NULL DEFAULT 'registration',   -- 'registration' | 'completed' | 'cancelled'
+    registration_deadline_at TEXT NOT NULL,
+    start_at TEXT NOT NULL,
+    champion_character_id INTEGER,
+    champion_name TEXT,
+    champion_country_name TEXT,
+    prize_pool INTEGER NOT NULL DEFAULT 0,
+    treasury_cut INTEGER NOT NULL DEFAULT 0,
+    cancelled_reason TEXT,
+    completed_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (champion_character_id) REFERENCES characters(id)
+);
+
+-- Every snap_* column freezes the registrant exactly as they were at signup
+-- time, so the bracket that runs days later is completely independent of
+-- anything the character does in the meantime (gear swaps, level ups,
+-- renames, changing country, re-equipping skills).
+CREATE TABLE IF NOT EXISTS tournament_registrations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tournament_id INTEGER NOT NULL,
+    character_id INTEGER NOT NULL,
+    character_name TEXT NOT NULL,
+    country_id INTEGER NOT NULL,
+    country_name TEXT NOT NULL,
+    fee_paid INTEGER NOT NULL,
+    snap_hp INTEGER NOT NULL, snap_mp INTEGER NOT NULL, snap_str INTEGER NOT NULL,
+    snap_def INTEGER NOT NULL, snap_agi INTEGER NOT NULL, snap_luk INTEGER NOT NULL,
+    snap_element TEXT NOT NULL,
+    snap_job_class TEXT NOT NULL, snap_job_tier INTEGER NOT NULL,
+    snap_equipped_skill_1 TEXT, snap_equipped_skill_2 TEXT,
+    snap_learned_skill_keys TEXT,
+    registered_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (tournament_id) REFERENCES tournaments(id),
+    FOREIGN KEY (character_id) REFERENCES characters(id),
+    UNIQUE (tournament_id, character_id)
+);
+
+-- One row per GAME actually played (not per pairing): an ordinary match is a
+-- single game_number=1 row, the best-of-3 final is 2 or 3 rows sharing the
+-- same round_number/match_index, and a bye is a game_number=1 row with a NULL
+-- registration_b_id and is_bye=1.
+CREATE TABLE IF NOT EXISTS tournament_matches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tournament_id INTEGER NOT NULL,
+    round_number INTEGER NOT NULL,
+    match_index INTEGER NOT NULL,
+    game_number INTEGER NOT NULL DEFAULT 1,
+    registration_a_id INTEGER NOT NULL,
+    registration_b_id INTEGER,               -- NULL means a bye
+    winner_registration_id INTEGER NOT NULL,
+    is_bye INTEGER NOT NULL DEFAULT 0,
+    timed_out INTEGER NOT NULL DEFAULT 0,
+    battle_log TEXT,
+    FOREIGN KEY (tournament_id) REFERENCES tournaments(id),
+    FOREIGN KEY (registration_a_id) REFERENCES tournament_registrations(id),
+    FOREIGN KEY (registration_b_id) REFERENCES tournament_registrations(id),
+    FOREIGN KEY (winner_registration_id) REFERENCES tournament_registrations(id)
 );
 
 CREATE TABLE IF NOT EXISTS trade_items (

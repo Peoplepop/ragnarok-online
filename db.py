@@ -652,6 +652,37 @@ def _ensure_game_settings_columns(conn):
             "ALTER TABLE game_settings ADD COLUMN defense_repair_cost_per_percent "
             "INTEGER NOT NULL DEFAULT 5000"
         )
+    # 天下武道大會 (weekly PvP tournament). The three tournament_* TABLES need
+    # no migration function of their own -- init_db() re-runs the whole of
+    # schema.sql, whose CREATE TABLE IF NOT EXISTS statements add them to an
+    # existing DB (same as how garrisons/trades were introduced). Only these
+    # game_settings COLUMNS need explicit ALTERs.
+    if "tournament_registration_fee" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN tournament_registration_fee INTEGER NOT NULL DEFAULT 5000"
+        )
+    if "tournament_treasury_cut_percent" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN tournament_treasury_cut_percent INTEGER NOT NULL DEFAULT 10"
+        )
+    if "tournament_registration_deadline_weekday" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN tournament_registration_deadline_weekday "
+            "INTEGER NOT NULL DEFAULT 6"
+        )
+    if "tournament_registration_deadline_time" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN tournament_registration_deadline_time "
+            "TEXT NOT NULL DEFAULT '20:00'"
+        )
+    if "tournament_start_weekday" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN tournament_start_weekday INTEGER NOT NULL DEFAULT 7"
+        )
+    if "tournament_start_time" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN tournament_start_time TEXT NOT NULL DEFAULT '14:00'"
+        )
 
 
 def init_db():

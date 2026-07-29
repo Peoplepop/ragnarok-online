@@ -17,6 +17,7 @@ from blueprints.character import character_bp
 from blueprints.game import game_bp
 from blueprints.trade import trade_bp
 from blueprints.admin import admin_bp
+from blueprints.tournament import tournament_bp, _settle_due_cycle
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-only-secret-change-me")
@@ -229,6 +230,19 @@ def _session_activity():
     db.close()
 
 
+@app.before_request
+def _tournament_cycle():
+    """天下武道大會's stand-in for a scheduler (this app deliberately has no
+    background worker -- see blueprints/tournament.py). Every request does one
+    cheap single-row SELECT; only when the open cycle's start_at has actually
+    passed does that request also resolve the entire weekly bracket inline and
+    open the next cycle. The settling user sees nothing special -- they just
+    happened to be the first request after Sunday's start time."""
+    if request.endpoint == "static":
+        return
+    _settle_due_cycle()
+
+
 VISITOR_COOKIE_NAME = "visitor_id"
 VISITOR_COOKIE_MAX_AGE = 60 * 60 * 24 * 365 * 5  # 5 years
 
@@ -279,6 +293,7 @@ app.register_blueprint(character_bp)
 app.register_blueprint(game_bp)
 app.register_blueprint(trade_bp)
 app.register_blueprint(admin_bp)
+app.register_blueprint(tournament_bp)
 
 
 if __name__ == "__main__":
