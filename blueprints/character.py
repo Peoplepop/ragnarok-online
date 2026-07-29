@@ -21,6 +21,7 @@ from game_data.skills import (
 )
 from game_data.equipment import (
     _active_set_summaries, _own_element_bonus_summary, _fetch_equipped_items,
+    _hidden_set_summaries,
 )
 from game_data.stats import STAT_FLOOR_COLUMNS, character_final_stats, _current_hp_mp
 from game_data.progression import (
@@ -211,6 +212,7 @@ def character_page():
     )
     active_sets = _active_set_summaries(equipped_items)
     own_element_bonus = _own_element_bonus_summary(equipped_items, character["element"])
+    hidden_sets = _hidden_set_summaries(equipped_items)
     learnable_skills = _learnable_skills(character, learned_keys)
     usable_keys = _usable_skill_keys(character, learned_keys)
     learned_locked_skills = sorted(
@@ -259,6 +261,7 @@ def character_page():
         equipped_slots=equipped_slots,
         active_sets=active_sets,
         own_element_bonus=own_element_bonus,
+        hidden_sets=hidden_sets,
         inventory_items=inventory_items,
         shop_type_labels=SHOP_TYPE_LABELS,
         cooldown_seconds=_cooldown_remaining_seconds(character["next_action_at"]),

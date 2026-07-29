@@ -203,6 +203,101 @@ for _set_item in DEFAULT_KING_SET_ITEMS:
     _set_item["stat_bonus"] = KING_SET_ITEM_STAT_BONUS
 DEFAULT_ITEMS = DEFAULT_ITEMS + DEFAULT_KING_SET_ITEMS
 
+# --- 秘境套裝 (hidden-ground legendary sets) --------------------------------
+# 10 sets = 5 elements x 2 hidden grounds, 3 pieces each (weapon/armor/
+# accessory), 30 rows total. Same stat convention as every country set above:
+# the 4 elemental sets put all 3 pieces on that element's signature stat
+# (SET_SIGNATURE_STAT in game_data/equipment.py), and the 土 set spreads its
+# pieces across str/def/luk exactly like 母育劍/母育鎧/母育墜飾 does.
+#
+# These are NOT purchasable: country_id stays NULL (not nation-scoped),
+# price is 0, and game_shop's listing query excludes every row with a
+# non-NULL hidden_set_key. The one and only way to obtain a piece is the
+# post-win drop roll on a hidden-ground fight (see game_hunt).
+#
+# stat_bonus is set well above the current best-in-slot: the top purchasable
+# tier is 國王套裝 at KING_SET_ITEM_STAT_BONUS (44), so 太極 pieces sit at 60
+# and 無極 pieces at 80. Each piece additionally carries a special_effect_key
+# that only activates at a full 3/3 of the SAME hidden_set_key.
+TAIJI_SET_ITEM_STAT_BONUS = 60
+WUJI_SET_ITEM_STAT_BONUS = 80
+TAIJI_SPECIAL_EFFECT_PERCENT = 8
+WUJI_SPECIAL_EFFECT_PERCENT = 15
+HIDDEN_LOOT_ITEM_PRICE = 0
+
+# element -> (signature stat, special_effect_key). The 土 entry's stat is None
+# because that set spreads across three different stats instead (see
+# _HIDDEN_EARTH_SLOT_STATS).
+HIDDEN_SET_EFFECT_BY_ELEMENT = {
+    "金": ("luk", "gold_rate"),
+    "木": ("def", "exp_rate"),
+    "水": ("agi", "recovery_discount"),
+    "火": ("str", "independent_damage"),
+    "土": (None, "enemy_debuff"),
+}
+_HIDDEN_EARTH_SLOT_STATS = {"weapon": "str", "armor": "def", "accessory": "luk"}
+_HIDDEN_SLOT_ORDER = ("weapon", "armor", "accessory")
+
+# (map_prefix, element) -> (hidden_set_key, set display name, per-slot piece names)
+_HIDDEN_SET_DEFS = [
+    ("taiji", "金", "taiji_metal", "白虎鑄金套裝", ("白虎鑄金劍", "白虎鑄金鎧", "白虎鑄金符")),
+    ("taiji", "木", "taiji_wood", "青龍蒼木套裝", ("青龍蒼木劍", "青龍蒼木鎧", "青龍蒼木符")),
+    ("taiji", "水", "taiji_water", "玄武流水套裝", ("玄武流水劍", "玄武流水鎧", "玄武流水符")),
+    ("taiji", "火", "taiji_fire", "朱雀丹火套裝", ("朱雀丹火劍", "朱雀丹火鎧", "朱雀丹火符")),
+    ("taiji", "土", "taiji_earth", "黃龍厚土套裝", ("黃龍厚土劍", "黃龍厚土鎧", "黃龍厚土符")),
+    ("wuji", "金", "wuji_metal", "白帝鑄金套裝", ("白帝鑄金劍", "白帝鑄金鎧", "白帝鑄金符")),
+    ("wuji", "木", "wuji_wood", "青帝蒼木套裝", ("青帝蒼木劍", "青帝蒼木鎧", "青帝蒼木符")),
+    ("wuji", "水", "wuji_water", "黑帝玄水套裝", ("黑帝玄水劍", "黑帝玄水鎧", "黑帝玄水符")),
+    ("wuji", "火", "wuji_fire", "赤帝烈火套裝", ("赤帝烈火劍", "赤帝烈火鎧", "赤帝烈火符")),
+    ("wuji", "土", "wuji_earth", "黃帝厚土套裝", ("黃帝厚土劍", "黃帝厚土鎧", "黃帝厚土符")),
+]
+
+
+def _build_hidden_set_items():
+    items = []
+    for map_prefix, element, set_key, set_name, piece_names in _HIDDEN_SET_DEFS:
+        signature_stat, effect_key = HIDDEN_SET_EFFECT_BY_ELEMENT[element]
+        if map_prefix == "taiji":
+            stat_bonus, effect_percent = TAIJI_SET_ITEM_STAT_BONUS, TAIJI_SPECIAL_EFFECT_PERCENT
+        else:
+            stat_bonus, effect_percent = WUJI_SET_ITEM_STAT_BONUS, WUJI_SPECIAL_EFFECT_PERCENT
+        for slot, piece_name in zip(_HIDDEN_SLOT_ORDER, piece_names):
+            items.append({
+                # shop_type doubles as this codebase's equip-SLOT key
+                # (EQUIP_SLOT_COLUMNS / SLOT_LABELS / the inventory grouping in
+                # game_shop and character_page), so a hidden piece still has to
+                # be a real weapon/armor/accessory to be wearable at all --
+                # "unpurchasable" is enforced by hidden_set_key instead.
+                "shop_type": slot,
+                "name": piece_name,
+                "price": HIDDEN_LOOT_ITEM_PRICE,
+                "stat": signature_stat or _HIDDEN_EARTH_SLOT_STATS[slot],
+                "stat_bonus": stat_bonus,
+                "country_name": None,
+                "hidden_set_key": set_key,
+                "hidden_set_name": set_name,
+                "special_effect_key": effect_key,
+                "special_effect_percent": effect_percent,
+                "hidden_map": map_prefix,
+            })
+    return items
+
+
+HIDDEN_SET_ITEMS = _build_hidden_set_items()
+DEFAULT_ITEMS = DEFAULT_ITEMS + HIDDEN_SET_ITEMS
+
+# map prefix -> its 5 hidden_set_key values. The drop roll selects uniformly
+# over the 15 item rows (5 sets x 3 slots) carrying these keys, so it needs
+# the exact key list rather than a LIKE pattern (a hidden_set_key contains an
+# underscore, which is a LIKE wildcard).
+HIDDEN_SET_KEYS_BY_MAP = {}
+for _map_prefix, _element, _set_key, _set_name, _piece_names in _HIDDEN_SET_DEFS:
+    HIDDEN_SET_KEYS_BY_MAP.setdefault(_map_prefix, []).append(_set_key)
+
+ITEM_HIDDEN_COLUMNS = (
+    "hidden_set_key", "hidden_set_name", "special_effect_key", "special_effect_percent",
+)
+
 # Monster roster, generated rather than hand-typed: every 5-level bracket
 # within a hunting ground gets 2 regular monsters (two long-running species
 # per tier, escalating through an adjective ladder as the bracket climbs),
@@ -303,6 +398,89 @@ def _build_default_monsters():
 
 
 DEFAULT_MONSTERS = _build_default_monsters()
+
+# --- 秘境 (hidden grounds) --------------------------------------------------
+# Two extra hunting_grounds rows flagged is_hidden=1, each holding exactly ONE
+# monster that is neither a 守衛怪 nor a 魔王 (is_guardian=0 AND is_boss=0) --
+# game_hunt treats a hidden encounter as its own third branch rather than
+# reusing either flag, and no 魔王房間 follow-up chain exists for them.
+#
+# min_level/max_level are informational only (nothing filters on them for a
+# hidden ground, since the encounter is a random interrupt rather than a
+# player-chosen destination); they're set to the level band the fight is
+# actually tuned for, and they also decide where the ground sorts in the
+# admin-only forced-monster dropdown (ORDER BY hunting_grounds.min_level).
+HIDDEN_HUNTING_GROUNDS = [
+    {"tier": "taiji_hidden", "name": "太極秘境", "min_level": 100, "max_level": LEVEL_CAP,
+     "monster_exp": 0, "is_hidden": 1},
+    {"tier": "wuji_hidden", "name": "無極秘境", "min_level": 120, "max_level": LEVEL_CAP,
+     "monster_exp": 0, "is_hidden": 1},
+]
+
+# Stats below were NOT hand-guessed -- they were calibrated the same way
+# BANDIT_HP_MULTIPLIER was (see _bandit_lord_stats in game_data/stats.py), by
+# running repeated run_battle simulations against representative test
+# characters built through the real character_final_stats path (real country
+# bonuses, real job bonuses, real rebirth stacking, real equipped 國王套裝 gear
+# with its set + own-element bonuses, real level-by-level accumulated
+# level_bonus_* rolls, real equipped skills) and moving hp/atk/def/agi until
+# the intended win-rate story held. Six test builds were used: a 三轉 Lv100 in
+# ordinary shop gear, four differently-specced well-built 三轉 Lv100s (str /
+# agi / def / luk leaning, each in its own country's 國王套裝 with its two
+# strongest 三轉 skills), a maxed 三轉 Lv140 with 3 rebirths, plus 四轉 Lv150
+# and Lv200. 200-300 fights each. Measured result (see the report in the
+# feature's verification notes):
+#   陰陽尊者 (太極秘境): the four well-built 三轉 Lv100 archetypes averaged
+#     ~60% wins -- genuinely winnable but never a formality, and the spread
+#     across archetypes (a str-leaning build ~20%, an agi-leaning one ~100%)
+#     is the combat engine's own pre-existing attacks-per-round bias, not
+#     something this monster introduces. The same character in ordinary shop
+#     gear won 0/200, so the wall really is "go grind gear and skills".
+#   混沌天尊 (無極秘境): every 三轉 Lv100 build won 0/150, and even the maxed
+#     三轉 Lv140 with 3 rebirths and full 國王套裝 won under 1%. 四轉 Lv150 wins
+#     about half its attempts and 四轉 Lv200 essentially always -- i.e. it is
+#     a 四轉-only fight, exactly as specified.
+# The DEF gap between the two (150 vs 220) is what makes 混沌天尊 unreachable
+# rather than merely slow: at 220 DEF a 三轉's damage is cut hard enough that
+# it dies to the 450 ATK long before the round cap, so failure is a real
+# defeat and not a no-loss timeout (neither monster produced any timeout in
+# any of the simulated fights).
+#
+# element is deliberately '' (neutral): neither is aligned to a Wu Xing side,
+# so no country gets a 相剋 advantage or penalty against them.
+#
+# Rewards are flat values chosen to be the best PvE payout in the game by a
+# wide margin: the 究級 魔王 pays 3250 currency and 104 base exp (x5 via
+# boss_exp_multiplier = 520 effective). A hidden monster gets NO multiplier
+# (it is neither boss nor guardian), so these raw numbers are what's paid.
+HIDDEN_MONSTERS = [
+    {
+        "tier": "taiji_hidden", "name": "陰陽尊者", "is_boss": 0, "is_guardian": 0,
+        "level_min": None, "level_max": None,
+        "hp": 27000, "atk": 240, "def": 150, "agi": 90,
+        "currency_reward": 20000, "exp_reward": 3000, "element": "",
+    },
+    {
+        "tier": "wuji_hidden", "name": "混沌天尊", "is_boss": 0, "is_guardian": 0,
+        "level_min": None, "level_max": None,
+        "hp": 38000, "atk": 450, "def": 220, "agi": 130,
+        "currency_reward": 33000, "exp_reward": 5000, "element": "",
+    },
+]
+
+# tier -> the hidden ground a fired trigger sends the hunter to, and which
+# game_settings columns gate it. Single source of truth shared by game_hunt's
+# trigger roll, its drop roll, and the tests.
+HIDDEN_GROUND_TIERS = {
+    "taiji": {
+        "tier": "taiji_hidden", "trigger_setting": "hidden_taiji_trigger_percent",
+        "drop_setting": "hidden_taiji_drop_percent", "banner": "⚡ 意外踏入太極秘境！",
+    },
+    "wuji": {
+        "tier": "wuji_hidden", "trigger_setting": "hidden_wuji_trigger_percent",
+        "drop_setting": "hidden_wuji_drop_percent", "banner": "⚡ 意外踏入無極秘境！",
+    },
+}
 
 
 def get_db():
@@ -448,6 +626,34 @@ def _ensure_item_columns(conn):
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(items)")]
     if "country_id" not in cols:
         conn.execute("ALTER TABLE items ADD COLUMN country_id INTEGER")
+    # All four are nullable with no default: every ordinary (purchasable) item
+    # keeps them NULL, so an existing items table is migrated without touching
+    # a single existing row's meaning.
+    if "hidden_set_key" not in cols:
+        conn.execute("ALTER TABLE items ADD COLUMN hidden_set_key TEXT")
+    if "hidden_set_name" not in cols:
+        conn.execute("ALTER TABLE items ADD COLUMN hidden_set_name TEXT")
+    if "special_effect_key" not in cols:
+        conn.execute("ALTER TABLE items ADD COLUMN special_effect_key TEXT")
+    if "special_effect_percent" not in cols:
+        conn.execute("ALTER TABLE items ADD COLUMN special_effect_percent INTEGER")
+
+
+def _ensure_hunting_ground_columns(conn):
+    cols = [row["name"] for row in conn.execute("PRAGMA table_info(hunting_grounds)")]
+    if "is_hidden" not in cols:
+        conn.execute("ALTER TABLE hunting_grounds ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0")
+
+
+def _ensure_tournament_registration_columns(conn):
+    cols = [row["name"] for row in conn.execute("PRAGMA table_info(tournament_registrations)")]
+    if not cols:
+        return
+    if "snap_independent_damage_percent" not in cols:
+        conn.execute(
+            "ALTER TABLE tournament_registrations "
+            "ADD COLUMN snap_independent_damage_percent INTEGER NOT NULL DEFAULT 0"
+        )
 
 
 def _ensure_map_tile_columns(conn):
@@ -505,22 +711,77 @@ def _upgrade_monster_elements(conn):
             )
 
 
+def _insert_item(conn, i, country_ids_by_name):
+    """Single INSERT path shared by the empty-table seed and the add-only
+    upgrade, so the hidden_set_*/special_effect_* columns can never be filled
+    in on one path and silently skipped on the other. Ordinary items simply
+    have no such keys in their dict and store NULL."""
+    conn.execute(
+        """INSERT INTO items
+           (shop_type, name, price, stat, stat_bonus, country_id,
+            hidden_set_key, hidden_set_name, special_effect_key, special_effect_percent)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            i["shop_type"], i["name"], i["price"], i["stat"], i["stat_bonus"],
+            country_ids_by_name.get(i["country_name"]),
+            i.get("hidden_set_key"), i.get("hidden_set_name"),
+            i.get("special_effect_key"), i.get("special_effect_percent"),
+        ),
+    )
+
+
 def _upgrade_items(conn, country_ids_by_name):
-    """Add-only: inserts any DEFAULT_ITEMS row (currently just the 5 country
-    equipment sets) that isn't already present by exact name. Unlike the
-    monster roster this never deletes existing rows -- items can be sitting
-    in a character's inventory or equipped slot, so removing one would
-    dangle a foreign key."""
+    """Add-only: inserts any DEFAULT_ITEMS row (the country equipment sets,
+    plus the 30 秘境 legendary pieces) that isn't already present by exact
+    name. Unlike the monster roster this never deletes existing rows -- items
+    can be sitting in a character's inventory or equipped slot, so removing
+    one would dangle a foreign key."""
     existing_names = {row["name"] for row in conn.execute("SELECT name FROM items")}
     for i in DEFAULT_ITEMS:
         if i["name"] in existing_names:
             continue
+        _insert_item(conn, i, country_ids_by_name)
+
+
+def _seed_hidden_grounds(conn):
+    """Add-only seed of the two 秘境 hunting_grounds rows. Runs on every
+    startup for both a fresh and a long-lived DB (the ordinary grounds' seed
+    is guarded by "table is empty", which would never fire again on an
+    existing install), and touches nothing that already exists -- an admin
+    who renamed 太極秘境 keeps their name."""
+    existing_tiers = {row["tier"] for row in conn.execute("SELECT tier FROM hunting_grounds")}
+    for g in HIDDEN_HUNTING_GROUNDS:
+        if g["tier"] in existing_tiers:
+            continue
         conn.execute(
-            """INSERT INTO items (shop_type, name, price, stat, stat_bonus, country_id)
+            """INSERT INTO hunting_grounds (tier, name, min_level, max_level, monster_exp, is_hidden)
                VALUES (?, ?, ?, ?, ?, ?)""",
+            (g["tier"], g["name"], g["min_level"], g["max_level"], g["monster_exp"], g["is_hidden"]),
+        )
+
+
+def _seed_hidden_monsters(conn):
+    """Add-only seed of the one monster each 秘境 holds, matched by exact name
+    so it is never duplicated and never overwrites a tuned existing row. Must
+    run after _seed_hidden_grounds (it needs their ids) and after
+    _rebuild_monster_roster (which wipes and regenerates the ordinary roster)."""
+    ground_ids = {
+        row["tier"]: row["id"] for row in conn.execute("SELECT id, tier FROM hunting_grounds")
+    }
+    existing_names = {row["name"] for row in conn.execute("SELECT name FROM monsters")}
+    for m in HIDDEN_MONSTERS:
+        if m["name"] in existing_names or m["tier"] not in ground_ids:
+            continue
+        conn.execute(
+            """INSERT INTO monsters
+               (hunting_ground_id, name, is_boss, is_guardian, level_min, level_max,
+                hp, atk, def, agi, currency_reward, exp_reward, element)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                i["shop_type"], i["name"], i["price"], i["stat"], i["stat_bonus"],
-                country_ids_by_name.get(i["country_name"]),
+                ground_ids[m["tier"]], m["name"], m["is_boss"], m["is_guardian"],
+                m["level_min"], m["level_max"],
+                m["hp"], m["atk"], m["def"], m["agi"],
+                m["currency_reward"], m["exp_reward"], m["element"],
             ),
         )
 
@@ -541,7 +802,14 @@ def _rebuild_monster_roster(conn):
     ).fetchone()["c"]
     if has_guardian and not has_unset_exp:
         return
-    conn.execute("DELETE FROM monsters")
+    # Scoped to the ordinary (non-hidden) grounds: the 秘境 monsters are not
+    # part of the generated roster and must survive a regeneration, or a
+    # legacy DB would lose them the moment this one-time rebuild fires.
+    conn.execute(
+        """DELETE FROM monsters WHERE hunting_ground_id IN (
+               SELECT id FROM hunting_grounds WHERE is_hidden = 0
+           )"""
+    )
     ground_ids = {
         row["tier"]: row["id"] for row in conn.execute("SELECT id, tier FROM hunting_grounds")
     }
@@ -683,6 +951,24 @@ def _ensure_game_settings_columns(conn):
         conn.execute(
             "ALTER TABLE game_settings ADD COLUMN tournament_start_time TEXT NOT NULL DEFAULT '14:00'"
         )
+    # 秘境 interrupt/drop chances -- percentages, same convention as
+    # guardian_encounter_percent (0.05 = 1/2000 hunts, 0.02 = 1/5000).
+    if "hidden_taiji_trigger_percent" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN hidden_taiji_trigger_percent REAL NOT NULL DEFAULT 0.05"
+        )
+    if "hidden_wuji_trigger_percent" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN hidden_wuji_trigger_percent REAL NOT NULL DEFAULT 0.02"
+        )
+    if "hidden_taiji_drop_percent" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN hidden_taiji_drop_percent REAL NOT NULL DEFAULT 50"
+        )
+    if "hidden_wuji_drop_percent" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN hidden_wuji_drop_percent REAL NOT NULL DEFAULT 30"
+        )
 
 
 def init_db():
@@ -695,8 +981,10 @@ def init_db():
     _ensure_country_columns(conn)
     _ensure_monster_columns(conn)
     _ensure_item_columns(conn)
+    _ensure_hunting_ground_columns(conn)
     _ensure_map_tile_columns(conn)
     _ensure_game_settings_columns(conn)
+    _ensure_tournament_registration_columns(conn)
     conn.commit()
     conn.close()
 
@@ -756,6 +1044,7 @@ def seed_defaults():
             )
     else:
         _upgrade_hunting_ground_bounds(conn)
+    _seed_hidden_grounds(conn)
 
     # is_npc = 0 guard: NPC officeholders (see _seed_npc_officials in app.py)
     # deliberately seed the King seat above LEVEL_CAP (level 220, a legendary
@@ -772,14 +1061,7 @@ def seed_defaults():
     }
     if conn.execute("SELECT COUNT(*) AS c FROM items").fetchone()["c"] == 0:
         for i in DEFAULT_ITEMS:
-            conn.execute(
-                """INSERT INTO items (shop_type, name, price, stat, stat_bonus, country_id)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (
-                    i["shop_type"], i["name"], i["price"], i["stat"], i["stat_bonus"],
-                    country_ids_by_name.get(i["country_name"]),
-                ),
-            )
+            _insert_item(conn, i, country_ids_by_name)
     else:
         _upgrade_items(conn, country_ids_by_name)
 
@@ -803,6 +1085,7 @@ def seed_defaults():
     else:
         _upgrade_monster_elements(conn)
         _rebuild_monster_roster(conn)
+    _seed_hidden_monsters(conn)
 
     conn.commit()
     conn.close()

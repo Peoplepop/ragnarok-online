@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 
-from db import get_db, log_activity, LEVEL_CAP
+from db import get_db, log_activity, LEVEL_CAP, HIDDEN_GROUND_TIERS, HIDDEN_SET_KEYS_BY_MAP
 from map_layout import axial_to_pixel, hex_corners, axial_distance
 from web_helpers import (
     character_required, _next_action_at, _cooldown_remaining_seconds, _in_war_window,
@@ -19,7 +19,7 @@ from game_data.constants import (
 )
 from game_data.jobs import _process_job_progression
 from game_data.skills import TIER4_SLOT2_SKILL_KEYS, SKILL_CATALOG, _character_usable_skills
-from game_data.equipment import _fetch_equipped_items
+from game_data.equipment import _fetch_equipped_items, character_special_effects
 from game_data.stats import (
     character_final_stats, defense_tower_stats, _current_hp_mp, _bandit_lord_stats,
 )
@@ -56,6 +56,90 @@ def _relocate_or_clear_garrison(db, character_id, new_tile):
         db.execute("DELETE FROM garrisons WHERE character_id = ?", (character_id,))
 
 
+def _roll_hidden_encounter(db, settings):
+    """The 秘境 interrupt roll, made once per ordinary /game/hunt action
+    (never for conquest, garrison duels, the tournament, the bandit lord or
+    the 魔王房間 follow-up, and never when an admin force-picks a monster).
+
+    Rarest first, and returned on the FIRST hit, so 太極 and 無極 can never
+    both fire in the same action. Applies at every one of the 4 regular
+    hunting grounds -- which ground the player picked makes no difference.
+
+    Returns (hidden_key, ground_row, monster_row) or (None, None, None)."""
+    for hidden_key in ("wuji", "taiji"):
+        cfg = HIDDEN_GROUND_TIERS[hidden_key]
+        if random.random() * 100 >= settings[cfg["trigger_setting"]]:
+            continue
+        ground = db.execute(
+            "SELECT * FROM hunting_grounds WHERE tier = ?", (cfg["tier"],)
+        ).fetchone()
+        if ground is None:
+            continue
+        monster = db.execute(
+            "SELECT * FROM monsters WHERE hunting_ground_id = ? LIMIT 1", (ground["id"],)
+        ).fetchone()
+        if monster is None:
+            continue
+        return hidden_key, ground, monster
+    return None, None, None
+
+
+def _hidden_key_for_ground(ground):
+    """Which HIDDEN_GROUND_TIERS entry (if any) a hunting_grounds row is.
+    Used to recognize an admin-forced hidden fight, which reaches game_hunt
+    through the forced-monster path instead of the trigger roll."""
+    if not ground["is_hidden"]:
+        return None
+    return next(
+        (key for key, cfg in HIDDEN_GROUND_TIERS.items() if cfg["tier"] == ground["tier"]), None
+    )
+
+
+def _roll_hidden_loot(db, settings, hidden_key, character_id):
+    """Post-WIN drop roll for a 秘境 fight. On success picks ONE row uniformly
+    at random from that map's own 15 pieces (5 elemental sets x 3 slots) --
+    explicitly NOT tied to the winner's own country element ("五行隨機") --
+    and puts it straight in the winner's inventory through the same
+    _add_to_inventory the shop and trade systems use.
+
+    Returns the dropped item row, or None when the roll failed (or, defensively,
+    when the map somehow has no loot pool seeded)."""
+    if random.random() * 100 >= settings[HIDDEN_GROUND_TIERS[hidden_key]["drop_setting"]]:
+        return None
+    set_keys = HIDDEN_SET_KEYS_BY_MAP.get(hidden_key, [])
+    if not set_keys:
+        return None
+    placeholders = ",".join("?" for _ in set_keys)
+    pool = db.execute(
+        f"SELECT * FROM items WHERE hidden_set_key IN ({placeholders}) ORDER BY id", set_keys,
+    ).fetchall()
+    if not pool:
+        return None
+    dropped = random.choice(pool)
+    _add_to_inventory(db, character_id, dropped["id"], 1)
+    return dropped
+
+
+def _debuffed_monster(monster, special_effects):
+    """A plain-dict copy of a monster row with its hp/atk/def/agi scaled down
+    by the wearer's 怪物弱化 (enemy_debuff) percent, floored at 1 so a huge
+    future percent can never produce a 0-stat monster. Always returns a dict
+    copy rather than mutating the argument: monster rows are sqlite3.Row,
+    which is immutable, and the tower/bandit callers pass dicts that other
+    code still reads afterwards.
+
+    Deliberately scoped to monster fights only (game_hunt and
+    game_hunt_boss_room) -- conquest, garrison duels and the tournament never
+    call this, per the confirmed "怪物 only" scope."""
+    percent = special_effects.get("enemy_debuff", 0)
+    scaled = dict(monster)
+    if not percent:
+        return scaled
+    for key in ("hp", "atk", "def", "agi"):
+        scaled[key] = max(1, round(scaled[key] * (1 - percent / 100)))
+    return scaled
+
+
 def _render_game(**extra):
     db = get_db()
     character = db.execute(
@@ -87,25 +171,36 @@ def _render_game(**extra):
         t["display_name"] = tile_display_name(t["name"], t["tile_type"])
     current_tile = next(t for t in tiles if t["tile_id"] == character["current_tile_id"])
     settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+    # is_hidden = 0: the two 秘境 are never selectable destinations -- they are
+    # only ever reached through the rare random interrupt inside game_hunt.
     hunting_grounds = db.execute(
-        "SELECT * FROM hunting_grounds ORDER BY min_level"
+        "SELECT * FROM hunting_grounds WHERE is_hidden = 0 ORDER BY min_level"
     ).fetchall()
     admin_monsters = []
     if session.get("is_admin"):
+        # Deliberately NOT filtered by is_hidden -- admin must be able to
+        # force-fight 陰陽尊者/混沌天尊 at any time, so the 秘境 monsters stay in
+        # this dropdown and are just labelled distinctly.
         rows = db.execute(
-            """SELECT monsters.*, hunting_grounds.name AS ground_name
+            """SELECT monsters.*, hunting_grounds.name AS ground_name,
+                      hunting_grounds.is_hidden AS ground_is_hidden
                FROM monsters JOIN hunting_grounds ON hunting_grounds.id = monsters.hunting_ground_id
                ORDER BY hunting_grounds.min_level, monsters.is_boss, monsters.is_guardian, monsters.level_min"""
         ).fetchall()
         for m in rows:
-            if m["is_boss"]:
+            if m["ground_is_hidden"]:
+                level_label = "秘境"
+            elif m["is_boss"]:
                 level_label = "首領"
             elif m["is_guardian"]:
                 level_label = "守衛怪"
             else:
                 level_label = f"Lv{m['level_min']}-{m['level_max']}"
+            ground_name = m["ground_name"]
+            if m["ground_is_hidden"]:
+                ground_name = f"[隱藏] {ground_name}"
             admin_monsters.append({
-                "id": m["id"], "name": m["name"], "ground_name": m["ground_name"],
+                "id": m["id"], "name": m["name"], "ground_name": ground_name,
                 "level_label": level_label,
             })
     equipped_items = _fetch_equipped_items(db, character)
@@ -405,8 +500,15 @@ def game_hunt():
             "SELECT * FROM hunting_grounds WHERE id = ?", (forced_monster["hunting_ground_id"],)
         ).fetchone()
     else:
+        # is_hidden = 0 mirrors _render_game's dropdown filter: a 秘境 is never
+        # a selectable destination, so a hand-crafted POST naming one must be
+        # rejected outright rather than silently farming the best PvE reward
+        # in the game on demand. The only two legitimate ways into a hidden
+        # ground are the trigger roll below and the admin forced-monster path
+        # above, both of which bypass this lookup entirely.
         ground = db.execute(
-            "SELECT * FROM hunting_grounds WHERE id = ?", (request.form.get("ground_id", ""),)
+            "SELECT * FROM hunting_grounds WHERE id = ? AND is_hidden = 0",
+            (request.form.get("ground_id", ""),),
         ).fetchone()
     if ground is None:
         db.close()
@@ -423,11 +525,27 @@ def game_hunt():
     king_war_defense_bonus = is_reigning_king and _in_any_war_window(settings)
     stats = character_final_stats(character, equipped_items, settings, king_war_defense_bonus)
     current_hp, current_mp = _current_hp_mp(character, stats)
+    special_effects = character_special_effects(equipped_items)
 
     if current_hp <= 0:
         db.close()
         flash("HP 已耗盡，無法戰鬥，請先回到要塞回復")
         return redirect(url_for("game.game"))
+
+    # 秘境 interrupt: rolled BEFORE any guardian/regular selection, and only
+    # when the player is hunting normally (never on an admin forced fight).
+    # A hit replaces the chosen ground AND its monster wholesale for the rest
+    # of this request -- rewards, battle, template and log all read the hidden
+    # ground's row from here on.
+    hidden_key = None
+    if forced_monster is None:
+        hidden_key, hidden_ground, hidden_monster = _roll_hidden_encounter(db, settings)
+        if hidden_key is not None:
+            ground, forced_monster = hidden_ground, hidden_monster
+    elif ground["is_hidden"]:
+        # Admin force-picked one of the 秘境 monsters -- same fight, same
+        # banner, same drop roll, just deliberately rather than by luck.
+        hidden_key = _hidden_key_for_ground(ground)
 
     monsters = db.execute(
         "SELECT * FROM monsters WHERE hunting_ground_id = ?", (ground["id"],)
@@ -453,10 +571,16 @@ def game_hunt():
         is_guardian_fight = bool(guardian) and random.random() * 100 < settings["guardian_encounter_percent"]
         monster = guardian if is_guardian_fight else random.choice(regular_pool)
 
+    # 怪物弱化: the monster actually fought is a scaled-down copy; every
+    # reward below still reads the ORIGINAL row's currency_reward/exp_reward,
+    # so weakening a monster never also shrinks its payout.
+    fought_monster = _debuffed_monster(monster, special_effects)
+
     usable_skills = _character_usable_skills(db, character)
     result = run_battle(
-        character["character_name"], stats, character["element"], current_hp, monster,
+        character["character_name"], stats, character["element"], current_hp, fought_monster,
         player_mp=current_mp, usable_skills=usable_skills,
+        player_independent_damage_percent=special_effects.get("independent_damage", 0),
     )
 
     exp_gain = 0
@@ -467,24 +591,47 @@ def game_hunt():
     pending_boss_id = None
     boss_room_available = False
     skill_book_dropped = None
+    hidden_loot_dropped = None
     if result["won"]:
         if is_guardian_fight:
             exp_multiplier = settings["guardian_exp_multiplier"]
         elif monster["is_boss"]:
             exp_multiplier = settings["boss_exp_multiplier"]
         else:
+            # A 秘境 monster is neither boss nor guardian, so it takes no
+            # multiplier at all -- its raw exp_reward is already the best in
+            # the game by design.
             exp_multiplier = 1.0
-        exp_gain = round(monster["exp_reward"] * exp_multiplier)
-        currency_gain = round(monster["currency_reward"] * (1 + gold_luk_bonus_pct(stats["luk"]) / 100))
+        exp_gain = round(
+            monster["exp_reward"] * exp_multiplier * (1 + special_effects.get("exp_rate", 0) / 100)
+        )
+        currency_gain = round(
+            monster["currency_reward"]
+            * (1 + gold_luk_bonus_pct(stats["luk"]) / 100 + special_effects.get("gold_rate", 0) / 100)
+        )
         new_level, new_exp, stat_gain = apply_exp(
             character["level"], character["exp"], exp_gain, settings,
             force_one=session.get("is_admin", False),
             job_class=character["job_class"], job_tier=character["job_tier"],
         )
         new_currency = character["currency"] + currency_gain
-        if is_guardian_fight and boss is not None and result["player_hp"] > 0:
+        # No 魔王房間 chain ever follows a 秘境 fight: a hidden ground holds a
+        # single monster and no boss at all, so `boss` is None there anyway --
+        # the explicit hidden_key guard just makes that intent unmissable.
+        if hidden_key is None and is_guardian_fight and boss is not None and result["player_hp"] > 0:
             boss_room_available = True
             pending_boss_id = boss["id"]
+        if hidden_key is not None:
+            hidden_loot_dropped = _roll_hidden_loot(
+                db, settings, hidden_key, character["character_id"],
+            )
+            if hidden_loot_dropped is not None:
+                log_activity(
+                    db, session["user_id"], session["username"], "hidden_loot_drop",
+                    detail=f"{ground['name']}：{hidden_loot_dropped['name']}"
+                           f"（{hidden_loot_dropped['hidden_set_name']}）",
+                    ip_address=request.remote_addr,
+                )
         # Rare monster-drop skill book: only rolls in the top-tier ultimate
         # hunting ground, independent of the hunter's own job (a "wrong
         # job's" book still isn't wasted -- once actually learned at 四轉,
@@ -537,6 +684,8 @@ def game_hunt():
         outcome_detail = f"敗給{monster['name']}，身上 {currency_lost} 諸神幣化為烏有"
     if is_guardian_fight:
         outcome_detail = f"[守衛怪] {outcome_detail}"
+    if hidden_key is not None:
+        outcome_detail = f"[秘境] {outcome_detail}"
     log_activity(
         db, session["user_id"], session["username"], "hunt",
         detail=f"{ground['name']} {outcome_detail}", ip_address=request.remote_addr,
@@ -557,8 +706,14 @@ def game_hunt():
     return render_template(
         "battle.html",
         ground=ground,
-        monster=monster,
+        # The DEBUFFED copy is what the player actually fought, so the
+        # "敵方" stat panel must show those numbers, not the pristine row's.
+        monster=fought_monster,
         guardian_encounter=is_guardian_fight,
+        hidden_encounter_banner=(
+            HIDDEN_GROUND_TIERS[hidden_key]["banner"] if hidden_key is not None else None
+        ),
+        hidden_loot_dropped=hidden_loot_dropped,
         boss_room_available=boss_room_available,
         skill_book_dropped=skill_book_dropped,
         log=result["log"],
@@ -619,6 +774,7 @@ def game_hunt_boss_room():
     equipped_items = _fetch_equipped_items(db, character)
     stats = character_final_stats(character, equipped_items, settings)
     current_hp, current_mp = _current_hp_mp(character, stats)
+    special_effects = character_special_effects(equipped_items)
 
     if current_hp <= 0:
         db.execute(
@@ -629,10 +785,12 @@ def game_hunt_boss_room():
         flash("HP 已耗盡，無法挑戰魔王，請先回到要塞回復")
         return redirect(url_for("game.game"))
 
+    fought_boss = _debuffed_monster(boss, special_effects)
     usable_skills = _character_usable_skills(db, character)
     result = run_battle(
-        character["character_name"], stats, character["element"], current_hp, boss,
+        character["character_name"], stats, character["element"], current_hp, fought_boss,
         player_mp=current_mp, usable_skills=usable_skills,
+        player_independent_damage_percent=special_effects.get("independent_damage", 0),
     )
 
     exp_gain = 0
@@ -641,8 +799,14 @@ def game_hunt_boss_room():
     new_level, new_exp = character["level"], character["exp"]
     stat_gain = {key: 0 for key in LEVEL_UP_POINT_VALUE}
     if result["won"]:
-        exp_gain = round(boss["exp_reward"] * settings["boss_exp_multiplier"])
-        currency_gain = round(boss["currency_reward"] * (1 + gold_luk_bonus_pct(stats["luk"]) / 100))
+        exp_gain = round(
+            boss["exp_reward"] * settings["boss_exp_multiplier"]
+            * (1 + special_effects.get("exp_rate", 0) / 100)
+        )
+        currency_gain = round(
+            boss["currency_reward"]
+            * (1 + gold_luk_bonus_pct(stats["luk"]) / 100 + special_effects.get("gold_rate", 0) / 100)
+        )
         new_level, new_exp, stat_gain = apply_exp(
             character["level"], character["exp"], exp_gain, settings,
             force_one=session.get("is_admin", False),
@@ -700,7 +864,7 @@ def game_hunt_boss_room():
     return render_template(
         "battle.html",
         ground=ground,
-        monster=boss,
+        monster=fought_boss,
         boss_room_challenge=True,
         log=result["log"],
         won=result["won"],
@@ -720,7 +884,9 @@ def game_hunt_boss_room():
     )
 
 
-def _resolve_bandit_conquest(db, character, settings, stats, current_hp, current_mp):
+def _resolve_bandit_conquest(
+    db, character, settings, stats, current_hp, current_mp, independent_damage_percent=0,
+):
     """Neutral-tile fight against the persistent-HP 山賊領主 (bandit lord) --
     the one deliberate exception to this game's usual single-action instant
     win/loss battle model (see the module note above _bandit_lord_stats in
@@ -743,6 +909,7 @@ def _resolve_bandit_conquest(db, character, settings, stats, current_hp, current
     result = run_battle(
         character["character_name"], stats, character["element"], current_hp, bandit_monster,
         player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
+        player_independent_damage_percent=independent_damage_percent,
     )
 
     bandit_hp_after = result["monster_hp"]
@@ -925,6 +1092,12 @@ def game_conquer():
         character, equipped_items, settings, attacker_is_reigning_king, attacker_morale_buff_active,
     )
     current_hp, current_mp = _current_hp_mp(character, stats)
+    # 獨立傷害 is a genuine equipped-gear stat, so unlike the four hunt-scoped
+    # effects it works in every kind of fight -- bandit lord, garrison duel
+    # and NPC tower alike. The other four are deliberately NOT read here.
+    attacker_independent_damage = character_special_effects(equipped_items).get(
+        "independent_damage", 0
+    )
 
     if current_hp <= 0:
         db.close()
@@ -935,7 +1108,9 @@ def game_conquer():
         db.execute("DELETE FROM garrisons WHERE id = ?", (own_garrison["id"],))
 
     if is_neutral_target:
-        return _resolve_bandit_conquest(db, character, settings, stats, current_hp, current_mp)
+        return _resolve_bandit_conquest(
+            db, character, settings, stats, current_hp, current_mp, attacker_independent_damage,
+        )
 
     defending_country = db.execute(
         "SELECT * FROM countries WHERE id = ?", (character["tile_country_id"],)
@@ -1012,6 +1187,7 @@ def game_conquer():
         result = run_battle(
             character["character_name"], stats, character["element"], current_hp, defender_monster,
             player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
+            player_independent_damage_percent=attacker_independent_damage,
         )
 
         # No currency/EXP for either side on a defender-vs-attacker duel --
@@ -1135,6 +1311,7 @@ def game_conquer():
     result = run_battle(
         character["character_name"], stats, character["element"], current_hp, tower,
         player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
+        player_independent_damage_percent=attacker_independent_damage,
     )
 
     currency_lost = 0
@@ -1327,6 +1504,12 @@ def game_recover():
 
     missing = (stats["hp"] - current_hp) + (stats["mp"] - current_mp)
     cost = round(missing * settings["heal_cost_per_point"])
+    # 回復費用折扣 from a fully-equipped 秘境 水 set. Applied to the computed
+    # bill before anything is charged, so both the affordability check below
+    # and the treasury credit further down see the discounted number.
+    recovery_discount = character_special_effects(equipped_items).get("recovery_discount", 0)
+    if recovery_discount:
+        cost = max(0, round(cost * (1 - recovery_discount / 100)))
     if cost > character["currency"]:
         if current_hp <= 0:
             # Stuck-safety valve: HP is fully gone and can't afford a full
@@ -1387,10 +1570,16 @@ def game_shop():
         "SELECT turn_wait_seconds, sell_back_percent FROM game_settings WHERE id = 1"
     ).fetchone()
 
+    # hidden_set_key IS NULL is what makes the 30 秘境 legendary pieces
+    # unpurchasable: they are ordinary weapon/armor/accessory rows in every
+    # other respect (they have to be, since shop_type doubles as the equip
+    # slot key), so this single listing query is the one place that decides
+    # what can be bought at all.
     all_items = db.execute(
         """SELECT items.*, countries.name AS set_country_name
            FROM items LEFT JOIN countries ON countries.id = items.country_id
-           WHERE items.country_id IS NULL OR items.country_id = ?
+           WHERE items.hidden_set_key IS NULL
+             AND (items.country_id IS NULL OR items.country_id = ?)
            ORDER BY items.shop_type, items.price""",
         (character["tile_country_id"],),
     ).fetchall()
@@ -1468,8 +1657,13 @@ def game_shop_buy():
         flash("請至少選擇一件要購買的裝備")
         return redirect(url_for("game.game_shop"))
 
+    # hidden_set_key IS NULL mirrors game_shop's listing filter: the 秘境
+    # pieces are never rendered as buyable, and (since they are priced 0) a
+    # hand-crafted POST must not be able to mint one for free either.
     placeholders = ",".join("?" for _ in item_ids)
-    items = db.execute(f"SELECT * FROM items WHERE id IN ({placeholders})", item_ids).fetchall()
+    items = db.execute(
+        f"SELECT * FROM items WHERE id IN ({placeholders}) AND hidden_set_key IS NULL", item_ids
+    ).fetchall()
     if not items:
         db.close()
         flash("請選擇有效的商品")
@@ -2155,6 +2349,9 @@ def country_challenge_king():
     result = run_battle(
         character["character_name"], challenger_stats, character["element"], current_hp, king_monster,
         player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
+        player_independent_damage_percent=character_special_effects(equipped_items).get(
+            "independent_damage", 0
+        ),
     )
 
     country_id = character["country_id"]
@@ -2420,6 +2617,9 @@ def country_challenge_official():
     result = run_battle(
         character["character_name"], challenger_stats, character["element"], current_hp, defender_monster,
         player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
+        player_independent_damage_percent=character_special_effects(equipped_items).get(
+            "independent_damage", 0
+        ),
     )
 
     country_id = target_country["id"]

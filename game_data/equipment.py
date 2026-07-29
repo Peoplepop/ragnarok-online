@@ -104,16 +104,115 @@ def _own_element_bonus_summary(equipped_items, own_element):
     return {"count": count, "bonus_text": bonus_text}
 
 
+# --- 秘境套裝 special effects ----------------------------------------------
+# The 10 hidden-ground legendary sets (db.py's HIDDEN_SET_ITEMS) each carry a
+# special_effect_key + special_effect_percent on all 3 of their pieces, on
+# top of the ordinary stat_bonus every item has. Unlike the country sets
+# above -- which pay a partial bonus from just 2 matching pieces -- a hidden
+# set's special effect is strictly ALL-OR-NOTHING: 1 or 2 pieces grant only
+# their own flat stat_bonus and nothing else; the effect switches on solely
+# at a full 3/3 of the exact same hidden_set_key.
+#
+# In practice a character can only ever complete one hidden set at a time
+# (there are only 3 equip slots in the whole game), but character_special_effects
+# deliberately sums across every completed set rather than assuming that, so
+# adding a 4th slot later wouldn't silently change the rule.
+HIDDEN_SET_PIECES_REQUIRED = 3
+SPECIAL_EFFECT_LABELS = {
+    "gold_rate": "金幣掉落率",
+    "exp_rate": "經驗值獲得",
+    "recovery_discount": "回復費用折扣",
+    "independent_damage": "獨立傷害",
+    "enemy_debuff": "怪物弱化",
+}
+
+
+def _hidden_set_counts(equipped_items):
+    """hidden_set_key -> (pieces equipped, set display name, effect key,
+    effect percent per piece). Ignores ordinary gear, whose hidden_set_key is
+    NULL. Tolerates rows fetched without the hidden columns (e.g. a caller
+    passing plain dicts) by treating them as ordinary items."""
+    counts = {}
+    for item in equipped_items:
+        if item is None:
+            continue
+        try:
+            key = item["hidden_set_key"]
+        except (IndexError, KeyError):
+            continue
+        if not key:
+            continue
+        entry = counts.setdefault(key, {
+            "count": 0,
+            "set_name": item["hidden_set_name"],
+            "effect_key": item["special_effect_key"],
+            "effect_percent": item["special_effect_percent"] or 0,
+        })
+        entry["count"] += 1
+    return counts
+
+
+def character_special_effects(equipped_items):
+    """{special_effect_key: total percent} for every hidden set the wearer has
+    FULLY equipped (all 3 pieces). Returns {} for an ordinary loadout, and
+    also for a 1/3 or 2/3 partial -- see the all-or-nothing note above.
+
+    The five keys and where each is consumed:
+      gold_rate          -- game_hunt / game_hunt_boss_room currency payout
+      exp_rate           -- game_hunt / game_hunt_boss_room exp payout
+      recovery_discount  -- game_recover's HP/MP heal bill
+      enemy_debuff       -- scales the fought monster's hp/atk/def/agi down
+                            (hunts only -- never towers, garrison defenders
+                            or tournament opponents)
+      independent_damage -- bonus post-mitigation damage in _combat_hit,
+                            active in EVERY fight the character takes part in
+    """
+    effects = {}
+    for entry in _hidden_set_counts(equipped_items).values():
+        if entry["count"] < HIDDEN_SET_PIECES_REQUIRED or not entry["effect_key"]:
+            continue
+        effects[entry["effect_key"]] = effects.get(entry["effect_key"], 0) + entry["effect_percent"]
+    return effects
+
+
+def _hidden_set_summaries(equipped_items):
+    """Human-readable hidden-set status for the character sheet, mirroring
+    _active_set_summaries. Unlike that one this also reports PARTIAL progress
+    (1/3, 2/3) with active=False, so a player who found one piece can see how
+    far they still are from switching the special effect on."""
+    summaries = []
+    for entry in _hidden_set_counts(equipped_items).values():
+        active = entry["count"] >= HIDDEN_SET_PIECES_REQUIRED and bool(entry["effect_key"])
+        label = SPECIAL_EFFECT_LABELS.get(entry["effect_key"], entry["effect_key"] or "")
+        summaries.append({
+            "set_name": entry["set_name"],
+            "count": entry["count"],
+            "required": HIDDEN_SET_PIECES_REQUIRED,
+            "active": active,
+            "effect_key": entry["effect_key"],
+            "effect_label": label,
+            "effect_percent": entry["effect_percent"],
+            "effect_text": f"{label} +{entry['effect_percent']}%" if label else "",
+        })
+    summaries.sort(key=lambda s: (-s["count"], s["set_name"] or ""))
+    return summaries
+
+
 def _fetch_equipped_items(db, character):
     """Equipped weapon/armor/accessory rows, each carrying a `set_element`
     field (the item's origin country's element, NULL for ordinary gear) so
-    compute_final_stats can tally equipment-set bonuses."""
+    compute_final_stats can tally equipment-set bonuses. The bare `items.*`
+    also brings along hidden_set_key/hidden_set_name/special_effect_key/
+    special_effect_percent (all NULL on ordinary gear) for
+    character_special_effects."""
     equipped_ids = [
         character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
     ]
     return [
         db.execute(
-            """SELECT items.*, countries.element AS set_element, countries.name AS set_country_name
+            """SELECT items.*, items.hidden_set_key, items.hidden_set_name,
+                      items.special_effect_key, items.special_effect_percent,
+                      countries.element AS set_element, countries.name AS set_country_name
                FROM items LEFT JOIN countries ON countries.id = items.country_id
                WHERE items.id = ?""",
             (item_id,),

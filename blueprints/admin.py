@@ -202,6 +202,10 @@ def admin_update_game_settings():
         rebirth_stat_bonus_percent = float(request.form.get("rebirth_stat_bonus_percent", ""))
         sell_back_percent = float(request.form.get("sell_back_percent", ""))
         guardian_encounter_percent = float(request.form.get("guardian_encounter_percent", ""))
+        hidden_taiji_trigger_percent = float(request.form.get("hidden_taiji_trigger_percent", ""))
+        hidden_wuji_trigger_percent = float(request.form.get("hidden_wuji_trigger_percent", ""))
+        hidden_taiji_drop_percent = float(request.form.get("hidden_taiji_drop_percent", ""))
+        hidden_wuji_drop_percent = float(request.form.get("hidden_wuji_drop_percent", ""))
         guardian_exp_multiplier = float(request.form.get("guardian_exp_multiplier", ""))
         boss_exp_multiplier = float(request.form.get("boss_exp_multiplier", ""))
         shop_tax_percent = float(request.form.get("shop_tax_percent", ""))
@@ -262,6 +266,16 @@ def admin_update_game_settings():
         or guardian_exp_multiplier < 1 or boss_exp_multiplier < 1
     ):
         flash("守衛怪遭遇機率須介於 0 到 100，經驗倍率須大於等於 1")
+        return redirect(url_for("admin.admin_settings"))
+
+    if min(
+        hidden_taiji_trigger_percent, hidden_wuji_trigger_percent,
+        hidden_taiji_drop_percent, hidden_wuji_drop_percent,
+    ) < 0 or max(
+        hidden_taiji_trigger_percent, hidden_wuji_trigger_percent,
+        hidden_taiji_drop_percent, hidden_wuji_drop_percent,
+    ) > 100:
+        flash("秘境的觸發與掉落機率必須介於 0 到 100 之間")
         return redirect(url_for("admin.admin_settings"))
 
     if shop_tax_percent < 0 or shop_tax_percent > 100 or heal_cost_per_point < 0:
@@ -350,7 +364,9 @@ def admin_update_game_settings():
                defense_repair_cost_per_percent = ?,
                tournament_registration_fee = ?, tournament_treasury_cut_percent = ?,
                tournament_registration_deadline_weekday = ?, tournament_registration_deadline_time = ?,
-               tournament_start_weekday = ?, tournament_start_time = ?
+               tournament_start_weekday = ?, tournament_start_time = ?,
+               hidden_taiji_trigger_percent = ?, hidden_wuji_trigger_percent = ?,
+               hidden_taiji_drop_percent = ?, hidden_wuji_drop_percent = ?
            WHERE id = 1""",
         (
             turn_wait_seconds, exp_base, exp_growth_novice_percent,
@@ -371,6 +387,8 @@ def admin_update_game_settings():
             tournament_registration_fee, tournament_treasury_cut_percent,
             tournament_registration_deadline_weekday, tournament_registration_deadline_time,
             tournament_start_weekday, tournament_start_time,
+            hidden_taiji_trigger_percent, hidden_wuji_trigger_percent,
+            hidden_taiji_drop_percent, hidden_wuji_drop_percent,
         ),
     )
     db.commit()

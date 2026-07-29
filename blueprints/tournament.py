@@ -25,7 +25,7 @@ from web_helpers import (
     character_required, _next_weekly_instant_at, _taipei_time_label,
     _tournament_registration_open, ACTION_DT_FORMAT,
 )
-from game_data.equipment import _fetch_equipped_items
+from game_data.equipment import _fetch_equipped_items, character_special_effects
 from game_data.skills import _equipped_combat_skills, _learned_skill_keys
 from game_data.stats import character_final_stats
 from game_data.combat import run_pvp_duel
@@ -155,6 +155,11 @@ def _resolve_game(db, tournament_id, round_number, match_index, game_number, a, 
     result = run_pvp_duel(
         a["character_name"], a["stats"], a["snap_element"], a["skills"],
         b["character_name"], b["stats"], b["snap_element"], b["skills"],
+        # 獨立傷害 from a fully-equipped 秘境 火 set, read off each side's
+        # frozen snapshot like every other combat input here -- gear swapped
+        # after signup deliberately has no effect on the bracket.
+        a_independent_damage_percent=a["snap_independent_damage_percent"],
+        b_independent_damage_percent=b["snap_independent_damage_percent"],
     )
 
     if result["winner"] == "a":
@@ -369,8 +374,8 @@ def tournament_register():
                (tournament_id, character_id, character_name, country_id, country_name, fee_paid,
                 snap_hp, snap_mp, snap_str, snap_def, snap_agi, snap_luk, snap_element,
                 snap_job_class, snap_job_tier, snap_equipped_skill_1, snap_equipped_skill_2,
-                snap_learned_skill_keys)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                snap_learned_skill_keys, snap_independent_damage_percent)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 tournament["id"], character["character_id"], character["character_name"],
                 # character["name"] is the COUNTRY's name here (bare
@@ -380,6 +385,7 @@ def tournament_register():
                 stats["hp"], stats["mp"], stats["str"], stats["def"], stats["agi"], stats["luk"],
                 character["element"], character["job_class"], character["job_tier"],
                 character["equipped_skill_1"], character["equipped_skill_2"], learned_keys,
+                character_special_effects(equipped_items).get("independent_damage", 0),
             ),
         )
     except sqlite3.IntegrityError:

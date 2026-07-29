@@ -150,7 +150,16 @@ CREATE TABLE IF NOT EXISTS game_settings (
     tournament_registration_deadline_weekday INTEGER NOT NULL DEFAULT 6,
     tournament_registration_deadline_time TEXT NOT NULL DEFAULT '20:00',
     tournament_start_weekday INTEGER NOT NULL DEFAULT 7,
-    tournament_start_time TEXT NOT NULL DEFAULT '14:00'
+    tournament_start_time TEXT NOT NULL DEFAULT '14:00',
+    -- 秘境 (hidden ground) interrupt chances, as a PERCENT (so the 0.05
+    -- default is 1/2000 per hunt, and 0.02 is 1/5000). Rolled only inside
+    -- an ordinary /game/hunt action, wuji first so the two can never both
+    -- fire in one action. The drop_percent pair gates the legendary set
+    -- drop on a WIN of the matching hidden fight.
+    hidden_taiji_trigger_percent REAL NOT NULL DEFAULT 0.05,
+    hidden_wuji_trigger_percent REAL NOT NULL DEFAULT 0.02,
+    hidden_taiji_drop_percent REAL NOT NULL DEFAULT 50,
+    hidden_wuji_drop_percent REAL NOT NULL DEFAULT 30
 );
 
 CREATE TABLE IF NOT EXISTS site_visits (
@@ -200,15 +209,30 @@ CREATE TABLE IF NOT EXISTS garrisons (
     FOREIGN KEY (tile_id) REFERENCES map_tiles(id)
 );
 
+-- is_hidden marks a 秘境 (hidden ground): never offered in the player-facing
+-- hunt dropdown, never chosen by picking a ground_id. The only way in is the
+-- rare random interrupt rolled inside /game/hunt (see game_hunt), plus the
+-- admin-only forced-monster dropdown. Each hidden ground holds exactly ONE
+-- monster, which is neither is_boss nor is_guardian -- hidden encounters are
+-- a third, separate path through game_hunt, not a reuse of either flag.
 CREATE TABLE IF NOT EXISTS hunting_grounds (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tier TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
     min_level INTEGER NOT NULL,
     max_level INTEGER NOT NULL,
-    monster_exp INTEGER NOT NULL DEFAULT 0
+    monster_exp INTEGER NOT NULL DEFAULT 0,
+    is_hidden INTEGER NOT NULL DEFAULT 0
 );
 
+-- hidden_set_key/hidden_set_name/special_effect_* are all NULL for every
+-- ordinary (purchasable) item. They are only ever set on the 10 legendary
+-- 秘境 sets, which cannot be bought anywhere -- the shop's listing query
+-- filters on `hidden_set_key IS NULL` -- and only enter play as a drop from
+-- winning a hidden-ground fight. Unlike the partial 2-piece country-set
+-- bonus, a hidden set's special effect is ALL-OR-NOTHING: it activates only
+-- when all 3 pieces of the same hidden_set_key are equipped at once (see
+-- character_special_effects in game_data/equipment.py).
 CREATE TABLE IF NOT EXISTS items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     shop_type TEXT NOT NULL,
@@ -217,6 +241,10 @@ CREATE TABLE IF NOT EXISTS items (
     stat TEXT NOT NULL,
     stat_bonus INTEGER NOT NULL DEFAULT 0,
     country_id INTEGER,
+    hidden_set_key TEXT,
+    hidden_set_name TEXT,
+    special_effect_key TEXT,
+    special_effect_percent INTEGER,
     FOREIGN KEY (country_id) REFERENCES countries(id)
 );
 
@@ -304,6 +332,11 @@ CREATE TABLE IF NOT EXISTS tournament_registrations (
     snap_job_class TEXT NOT NULL, snap_job_tier INTEGER NOT NULL,
     snap_equipped_skill_1 TEXT, snap_equipped_skill_2 TEXT,
     snap_learned_skill_keys TEXT,
+    -- Frozen 獨立傷害 (independent damage) percent from whatever hidden set
+    -- the registrant had fully equipped at signup -- the bracket runs days
+    -- later off snapshots alone, so this follows the same freeze-everything
+    -- rule as every other snap_* column rather than re-reading live gear.
+    snap_independent_damage_percent INTEGER NOT NULL DEFAULT 0,
     registered_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (tournament_id) REFERENCES tournaments(id),
     FOREIGN KEY (character_id) REFERENCES characters(id),

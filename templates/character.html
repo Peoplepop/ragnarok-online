@@ -69,6 +69,17 @@
       <div>同屬性加成：身上 {{ own_element_bonus.count }} 件{{ character.name }}（{{ character.element }}屬性）裝備 → {{ own_element_bonus.bonus_text }}</div>
     </div>
     {% endif %}
+    {% if hidden_sets %}
+    <div style="margin-top:10px; font-size:13px;">
+      {% for s in hidden_sets %}
+      {% if s.active %}
+      <div style="color:var(--gold-bright);">✨ {{ s.set_name }}（{{ s.count }}/{{ s.required }}）— {{ s.effect_text }}</div>
+      {% else %}
+      <div style="color:var(--text-dim);">🔒 {{ s.set_name }}（{{ s.count }}/{{ s.required }}）— 集滿 {{ s.required }} 件才會啟動「{{ s.effect_label }} +{{ s.effect_percent }}%」</div>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
   </div>
 
   <div class="panel" style="margin-bottom:20px;">
