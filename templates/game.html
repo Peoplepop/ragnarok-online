@@ -266,6 +266,94 @@
     {% endif %}
   </div>
 
+  <div class="panel" style="margin-top:20px;">
+    <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">💬 聊天</h3>
+    <div style="display:flex; gap:18px; flex-wrap:wrap;">
+      <div style="flex:1 1 300px; min-width:260px;">
+        <div style="font-size:12px; color:var(--text-dim); margin-bottom:6px;">公共頻道</div>
+        <div id="chat-public-list" style="height:220px; overflow-y:auto; background:var(--panel-2); border:1px solid var(--border); border-radius:6px; padding:8px 10px; font-size:12px; line-height:1.7;"></div>
+        <form id="chat-public-form" style="display:flex; gap:8px; margin-top:8px;">
+          <input type="text" id="chat-public-input" maxlength="{{ chat_message_max_len }}" placeholder="輸入訊息..." style="flex:1; width:auto; margin-bottom:0; font-size:12px; padding:6px 10px;">
+          <button type="submit" style="padding:6px 14px; font-size:13px;">送出</button>
+        </form>
+      </div>
+      <div style="flex:1 1 300px; min-width:260px;">
+        <div style="font-size:12px; color:var(--text-dim); margin-bottom:6px;">{{ character.name }}國頻道</div>
+        <div id="chat-country-list" style="height:220px; overflow-y:auto; background:var(--panel-2); border:1px solid var(--border); border-radius:6px; padding:8px 10px; font-size:12px; line-height:1.7;"></div>
+        <form id="chat-country-form" style="display:flex; gap:8px; margin-top:8px;">
+          <input type="text" id="chat-country-input" maxlength="{{ chat_message_max_len }}" placeholder="輸入訊息..." style="flex:1; width:auto; margin-bottom:0; font-size:12px; padding:6px 10px;">
+          <button type="submit" style="padding:6px 14px; font-size:13px;">送出</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var CHAT_CHANNELS = ["public", "country"];
+
+      function escapeHtml(str) {
+        var div = document.createElement("div");
+        div.textContent = str;
+        return div.innerHTML;
+      }
+
+      function renderMessages(channel, messages) {
+        var list = document.getElementById("chat-" + channel + "-list");
+        if (!list) return;
+        var wasAtBottom = list.scrollTop + list.clientHeight >= list.scrollHeight - 10;
+        list.innerHTML = messages.map(function (m) {
+          return '<div style="margin-bottom:4px;">' +
+            '<span style="color:var(--text-dim);">' + escapeHtml(m.time_label) + '</span> ' +
+            '<span style="color:var(--gold-bright);">' + escapeHtml(m.character_name) + '</span>' +
+            '<span style="color:var(--text-dim);">：</span>' +
+            '<span>' + escapeHtml(m.message) + '</span>' +
+          '</div>';
+        }).join("") || '<span class="hint">還沒有人說話</span>';
+        if (wasAtBottom) list.scrollTop = list.scrollHeight;
+      }
+
+      function pollChannel(channel) {
+        fetch("/chat/messages?channel=" + channel)
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.ok) renderMessages(channel, data.messages);
+          })
+          .catch(function () {});
+      }
+
+      function pollAllChannels() {
+        CHAT_CHANNELS.forEach(pollChannel);
+      }
+
+      CHAT_CHANNELS.forEach(function (channel) {
+        var form = document.getElementById("chat-" + channel + "-form");
+        var input = document.getElementById("chat-" + channel + "-input");
+        if (!form || !input) return;
+        form.addEventListener("submit", function (e) {
+          e.preventDefault();
+          var message = input.value.trim();
+          if (!message) return;
+          var body = new URLSearchParams();
+          body.set("channel", channel);
+          body.set("message", message);
+          fetch("/chat/send", { method: "POST", body: body })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              if (data.ok) {
+                input.value = "";
+                pollChannel(channel);
+              }
+            })
+            .catch(function () {});
+        });
+      });
+
+      pollAllChannels();
+      setInterval(pollAllChannels, 4000);
+    })();
+  </script>
+
   <script>
     (function () {
       var remaining = {{ cooldown_seconds }};

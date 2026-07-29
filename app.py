@@ -18,6 +18,7 @@ from blueprints.game import game_bp
 from blueprints.trade import trade_bp
 from blueprints.admin import admin_bp
 from blueprints.tournament import tournament_bp, _settle_due_cycle
+from blueprints.chat import chat_bp
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-only-secret-change-me")
@@ -294,6 +295,7 @@ app.register_blueprint(game_bp)
 app.register_blueprint(trade_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(tournament_bp)
+app.register_blueprint(chat_bp)
 
 
 if __name__ == "__main__":

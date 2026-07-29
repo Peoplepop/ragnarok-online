@@ -16,6 +16,7 @@ from web_helpers import (
 from game_data.constants import (
     SHOP_TYPE_LABELS, SLOT_LABELS, EQUIP_SLOT_COLUMNS, GOVERNMENT_ROLES, tile_display_name,
     HEX_SIZE, ELEMENT_COLORS, NEUTRAL_TILE_COLOR, MOUNTAIN_TILE_COLOR, STAT_LABELS,
+    CHAT_MESSAGE_MAX_LEN,
 )
 from game_data.jobs import _process_job_progression
 from game_data.skills import TIER4_SLOT2_SKILL_KEYS, SKILL_CATALOG, _character_usable_skills
@@ -340,8 +341,14 @@ def _render_game(**extra):
         })
 
     padding = HEX_SIZE
+    # Extra bottom padding: game.html overlays the map legend as an absolutely
+    # positioned box in the map panel's bottom-left corner, which otherwise
+    # sits on top of the lowest row of hexes. Reserving this much viewBox
+    # space below the actual hex content pushes the legend into empty space
+    # instead of covering tiles.
+    legend_padding = HEX_SIZE * 2.4
     min_x, max_x = min(xs) - padding, max(xs) + padding
-    min_y, max_y = min(ys) - padding, max(ys) + padding
+    min_y, max_y = min(ys) - padding, max(ys) + legend_padding
 
     # 貢獻值 donation cap display: NOTE this SELECT ends with a bare
     # countries.*, so character["id"] resolves to the COUNTRY's id (last
@@ -396,6 +403,7 @@ def _render_game(**extra):
         tournament_fee=settings["tournament_registration_fee"],
         tournament_deadline_label=tournament_deadline_label,
         major_events=major_events,
+        chat_message_max_len=CHAT_MESSAGE_MAX_LEN,
     )
     context.update(extra)
     return render_template("game.html", **context)

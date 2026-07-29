@@ -3,6 +3,7 @@ MIN_PASSWORD_LEN = 8
 MAX_PASSWORD_LEN = 12
 MIN_CHARACTER_NAME_LEN = 2
 MAX_CHARACTER_NAME_LEN = 20
+CHAT_MESSAGE_MAX_LEN = 200
 STAT_FIELDS = ["hp_bonus", "mp_bonus", "str_bonus", "def_bonus", "agi_bonus", "luk_bonus"]
 IDLE_THRESHOLD_MINUTES = 15
 ACTION_LABELS = {

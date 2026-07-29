@@ -375,3 +375,22 @@ CREATE TABLE IF NOT EXISTS trade_items (
     FOREIGN KEY (trade_id) REFERENCES trades(id),
     FOREIGN KEY (item_id) REFERENCES items(id)
 );
+
+-- channel is 'public' (everyone) or 'country' (scoped by country_id, NULL on
+-- 'public' rows). character_name/country_name are denormalized snapshots at
+-- send-time (matches this codebase's existing snapshot convention, e.g.
+-- tournament_registrations) so a later rename/rejoin_country never rewrites
+-- history in the chat log.
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel TEXT NOT NULL,
+    country_id INTEGER,
+    character_id INTEGER NOT NULL,
+    character_name TEXT NOT NULL,
+    country_name TEXT NOT NULL,
+    message TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (character_id) REFERENCES characters(id),
+    FOREIGN KEY (country_id) REFERENCES countries(id)
+);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_feed ON chat_messages(channel, country_id, id);
