@@ -119,7 +119,13 @@ CREATE TABLE IF NOT EXISTS game_settings (
     exp_growth_tier3_percent REAL NOT NULL DEFAULT 0.8,
     exp_growth_tier4_percent REAL NOT NULL DEFAULT 0.8,
     rebirth_stat_bonus_percent REAL NOT NULL DEFAULT 15,
-    stat_reroll_cost INTEGER NOT NULL DEFAULT 100000
+    stat_reroll_cost INTEGER NOT NULL DEFAULT 100000,
+    war_town_weekday INTEGER NOT NULL DEFAULT 3,
+    war_town_start_time TEXT NOT NULL DEFAULT '20:00',
+    war_town_end_time TEXT NOT NULL DEFAULT '21:00',
+    war_fortress_weekday INTEGER NOT NULL DEFAULT 5,
+    war_fortress_start_time TEXT NOT NULL DEFAULT '20:00',
+    war_fortress_end_time TEXT NOT NULL DEFAULT '21:30'
 );
 
 CREATE TABLE IF NOT EXISTS site_visits (

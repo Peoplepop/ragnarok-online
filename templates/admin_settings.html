@@ -83,6 +83,45 @@
         商店買賣會有「商店稅率%」流入玩家所屬國家的國庫；回復站依實際回復的 HP+MP 點數收費；
         攻打城鎮/要塞時，防衛隊會以該國數值套用「城鎮/要塞防衛等級」現算戰力
       </p>
+
+      <h3 style="color: var(--gold-bright); font-size: 15px; margin-bottom:8px;">國戰時段設定（台灣時間）</h3>
+      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom:16px;">
+        <div>
+          <label>城鎮／荒地國戰星期</label>
+          <select name="war_town_weekday">
+            {% for wd, label in [(1,'週一'),(2,'週二'),(3,'週三'),(4,'週四'),(5,'週五'),(6,'週六'),(7,'週日')] %}
+            <option value="{{ wd }}" {% if settings.war_town_weekday == wd %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>城鎮／荒地國戰開始時間</label>
+          <input type="text" name="war_town_start_time" value="{{ settings.war_town_start_time }}" placeholder="20:00">
+        </div>
+        <div>
+          <label>城鎮／荒地國戰結束時間</label>
+          <input type="text" name="war_town_end_time" value="{{ settings.war_town_end_time }}" placeholder="21:00">
+        </div>
+        <div>
+          <label>要塞國戰星期</label>
+          <select name="war_fortress_weekday">
+            {% for wd, label in [(1,'週一'),(2,'週二'),(3,'週三'),(4,'週四'),(5,'週五'),(6,'週六'),(7,'週日')] %}
+            <option value="{{ wd }}" {% if settings.war_fortress_weekday == wd %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>要塞國戰開始時間</label>
+          <input type="text" name="war_fortress_start_time" value="{{ settings.war_fortress_start_time }}" placeholder="20:00">
+        </div>
+        <div>
+          <label>要塞國戰結束時間</label>
+          <input type="text" name="war_fortress_end_time" value="{{ settings.war_fortress_end_time }}" placeholder="21:30">
+        </div>
+      </div>
+      <p class="hint" style="margin-bottom:16px;">
+        只有在上述時段內才能攻打城鎮／荒地（山賊領主）或要塞；荒地與城鎮共用同一組國戰時段。時間格式須為 HH:MM（24 小時制），且開始時間必須早於結束時間
+      </p>
       <button type="submit">儲存設定</button>
     </form>
   </div>

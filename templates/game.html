@@ -145,6 +145,8 @@
       {% endif %}
       {% if current_hp <= 0 %}
       <p class="hint" style="margin:0; color:var(--danger);">HP 已耗盡，無法{% if current_tile.tile_type == 'neutral' %}討伐山賊{% else %}攻城{% endif %}，請回到要塞選擇「回復」</p>
+      {% elif not in_war_window %}
+      <p class="hint" style="margin:0; color:var(--danger);">現在不是國戰時段，無法攻打。開放時段：{{ war_window_label }}（台灣時間）</p>
       {% elif pending_conquer_confirm %}
       <p class="hint" style="margin:0 0 8px; color:var(--danger);">你目前正在駐防中，攻打前必須先撤離駐防，請確認是否撤離並攻打</p>
       <form method="post" action="{{ url_for('game_conquer') }}">

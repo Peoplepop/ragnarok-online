@@ -588,6 +588,18 @@ def _ensure_game_settings_columns(conn):
         conn.execute("ALTER TABLE game_settings ADD COLUMN guardian_exp_multiplier REAL NOT NULL DEFAULT 2")
     if "stat_reroll_cost" not in cols:
         conn.execute("ALTER TABLE game_settings ADD COLUMN stat_reroll_cost INTEGER NOT NULL DEFAULT 100000")
+    if "war_town_weekday" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN war_town_weekday INTEGER NOT NULL DEFAULT 3")
+    if "war_town_start_time" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN war_town_start_time TEXT NOT NULL DEFAULT '20:00'")
+    if "war_town_end_time" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN war_town_end_time TEXT NOT NULL DEFAULT '21:00'")
+    if "war_fortress_weekday" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN war_fortress_weekday INTEGER NOT NULL DEFAULT 5")
+    if "war_fortress_start_time" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN war_fortress_start_time TEXT NOT NULL DEFAULT '20:00'")
+    if "war_fortress_end_time" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN war_fortress_end_time TEXT NOT NULL DEFAULT '21:30'")
 
 
 def init_db():

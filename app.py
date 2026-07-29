@@ -4,7 +4,7 @@ import re
 import secrets
 import sqlite3
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 
 from flask import Flask, render_template, request, redirect, url_for, session, flash
@@ -259,6 +259,40 @@ def _cooldown_remaining_seconds(next_action_at):
         return 0
     until = datetime.strptime(next_action_at, ACTION_DT_FORMAT)
     return max(0, round((until - datetime.utcnow()).total_seconds()))
+
+
+TAIPEI_TZ = timezone(timedelta(hours=8))
+ISO_WEEKDAY_LABELS = {1: "週一", 2: "週二", 3: "週三", 4: "週四", 5: "週五", 6: "週六", 7: "週日"}
+
+
+def _taipei_now():
+    return datetime.now(TAIPEI_TZ)
+
+
+def _in_war_window(weekday, start_time, end_time, now=None):
+    now = now if now is not None else _taipei_now()
+    if now.isoweekday() != weekday:
+        return False
+    start_h, start_m = (int(x) for x in start_time.split(":"))
+    end_h, end_m = (int(x) for x in end_time.split(":"))
+    window_start = now.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
+    window_end = now.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
+    return window_start <= now < window_end
+
+
+def _war_window_label(weekday, start_time, end_time):
+    return f"{ISO_WEEKDAY_LABELS.get(weekday, '?')} {start_time}-{end_time}"
+
+
+WAR_TIME_PATTERN = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+
+
+def _valid_war_time(value):
+    return bool(WAR_TIME_PATTERN.match(value))
+
+
+def _war_window_kind_for_tile_type(tile_type):
+    return "fortress" if tile_type == "fortress" else "town"
 
 
 def _format_duration(seconds):
@@ -759,6 +793,17 @@ def _render_game(**extra):
             and current_tile["country_id"] != character["id"]
         )
     )
+    war_window_kind = _war_window_kind_for_tile_type(current_tile["tile_type"])
+    if war_window_kind == "fortress":
+        war_weekday, war_start_time, war_end_time = (
+            settings["war_fortress_weekday"], settings["war_fortress_start_time"], settings["war_fortress_end_time"]
+        )
+    else:
+        war_weekday, war_start_time, war_end_time = (
+            settings["war_town_weekday"], settings["war_town_start_time"], settings["war_town_end_time"]
+        )
+    in_war_window = _in_war_window(war_weekday, war_start_time, war_end_time)
+    war_window_label = _war_window_label(war_weekday, war_start_time, war_end_time)
     bandit_hp_max = None
     bandit_hp = None
     if current_tile["tile_type"] == "neutral":
@@ -842,6 +887,8 @@ def _render_game(**extra):
         cooldown_seconds=cooldown_seconds,
         recover_cost=recover_cost,
         can_attack_tile=can_attack_tile,
+        in_war_window=in_war_window,
+        war_window_label=war_window_label,
         defense_level=defense_level,
         bandit_hp=bandit_hp,
         bandit_hp_max=bandit_hp_max,
@@ -1431,6 +1478,35 @@ def game_conquer():
         flash("這裡沒有可以攻打的敵方據點")
         return redirect(url_for("game"))
 
+    settings = db.execute(
+        """SELECT turn_wait_seconds, town_defense_level, fortress_defense_level, rebirth_stat_bonus_percent,
+                  war_town_weekday, war_town_start_time, war_town_end_time,
+                  war_fortress_weekday, war_fortress_start_time, war_fortress_end_time
+           FROM game_settings WHERE id = 1"""
+    ).fetchone()
+
+    # War-window gate: must run before the garrison-withdrawal-confirmation
+    # gate below, so a player outside the window gets the "not war time"
+    # message immediately instead of first being asked to confirm withdrawing
+    # a garrison for an attack that can't happen anyway.
+    window_kind = _war_window_kind_for_tile_type(character["tile_type"])
+    if window_kind == "fortress":
+        war_weekday, war_start_time, war_end_time = (
+            settings["war_fortress_weekday"], settings["war_fortress_start_time"], settings["war_fortress_end_time"]
+        )
+    else:
+        war_weekday, war_start_time, war_end_time = (
+            settings["war_town_weekday"], settings["war_town_start_time"], settings["war_town_end_time"]
+        )
+    if not _in_war_window(war_weekday, war_start_time, war_end_time):
+        db.close()
+        kind_label = "要塞" if window_kind == "fortress" else "城鎮／荒地"
+        flash(
+            f"現在不是國戰時段，無法攻打{kind_label}。"
+            f"開放時段：{_war_window_label(war_weekday, war_start_time, war_end_time)}（台灣時間）"
+        )
+        return redirect(url_for("game"))
+
     # Garrisoning anywhere (not necessarily at this tile) blocks attacking --
     # you can't defend your own country's tiles and attack an enemy tile in
     # the same breath. Withdrawal-and-attack combine into this one action
@@ -1442,11 +1518,6 @@ def game_conquer():
         db.close()
         flash("你目前正在駐防中，攻打前必須先撤離駐防，請確認是否撤離並攻打")
         return _render_game(pending_conquer_confirm=True)
-
-    settings = db.execute(
-        """SELECT turn_wait_seconds, town_defense_level, fortress_defense_level, rebirth_stat_bonus_percent
-           FROM game_settings WHERE id = 1"""
-    ).fetchone()
 
     equipped_items = _fetch_equipped_items(db, character)
     stats = character_final_stats(character, equipped_items, settings)
@@ -4145,6 +4216,12 @@ def admin_update_game_settings():
         town_defense_level = int(request.form.get("town_defense_level", ""))
         fortress_defense_level = int(request.form.get("fortress_defense_level", ""))
         stat_reroll_cost = int(request.form.get("stat_reroll_cost", ""))
+        war_town_weekday = int(request.form.get("war_town_weekday", ""))
+        war_town_start_time = request.form.get("war_town_start_time", "").strip()
+        war_town_end_time = request.form.get("war_town_end_time", "").strip()
+        war_fortress_weekday = int(request.form.get("war_fortress_weekday", ""))
+        war_fortress_start_time = request.form.get("war_fortress_start_time", "").strip()
+        war_fortress_end_time = request.form.get("war_fortress_end_time", "").strip()
     except ValueError:
         flash("設定值格式不正確")
         return redirect(url_for("admin_settings"))
@@ -4185,6 +4262,25 @@ def admin_update_game_settings():
         flash("屬性重洗費用不可為負數")
         return redirect(url_for("admin_settings"))
 
+    if war_town_weekday < 1 or war_town_weekday > 7 or war_fortress_weekday < 1 or war_fortress_weekday > 7:
+        flash("國戰時段的星期必須介於 1（週一）到 7（週日）之間")
+        return redirect(url_for("admin_settings"))
+
+    if not (
+        _valid_war_time(war_town_start_time) and _valid_war_time(war_town_end_time)
+        and _valid_war_time(war_fortress_start_time) and _valid_war_time(war_fortress_end_time)
+    ):
+        flash("國戰時段的時間格式須為 HH:MM（24 小時制）")
+        return redirect(url_for("admin_settings"))
+
+    if war_town_start_time >= war_town_end_time:
+        flash("城鎮國戰開始時間必須早於結束時間")
+        return redirect(url_for("admin_settings"))
+
+    if war_fortress_start_time >= war_fortress_end_time:
+        flash("要塞國戰開始時間必須早於結束時間")
+        return redirect(url_for("admin_settings"))
+
     db = get_db()
     db.execute(
         """UPDATE game_settings
@@ -4194,7 +4290,9 @@ def admin_update_game_settings():
                guardian_encounter_percent = ?, guardian_exp_multiplier = ?,
                boss_exp_multiplier = ?, shop_tax_percent = ?,
                heal_cost_per_point = ?, town_defense_level = ?, fortress_defense_level = ?,
-               stat_reroll_cost = ?
+               stat_reroll_cost = ?,
+               war_town_weekday = ?, war_town_start_time = ?, war_town_end_time = ?,
+               war_fortress_weekday = ?, war_fortress_start_time = ?, war_fortress_end_time = ?
            WHERE id = 1""",
         (
             turn_wait_seconds, exp_base, exp_growth_novice_percent,
@@ -4204,6 +4302,8 @@ def admin_update_game_settings():
             boss_exp_multiplier, shop_tax_percent,
             heal_cost_per_point, town_defense_level, fortress_defense_level,
             stat_reroll_cost,
+            war_town_weekday, war_town_start_time, war_town_end_time,
+            war_fortress_weekday, war_fortress_start_time, war_fortress_end_time,
         ),
     )
     db.commit()
