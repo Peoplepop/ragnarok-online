@@ -15,6 +15,22 @@
     </div>
   </div>
 
+  {% if authorized_challenge %}
+  <div class="panel" style="margin-bottom:18px; border:1px solid var(--gold-bright);">
+    <h3 style="margin:0 0 8px; color:var(--gold-bright); font-size:15px;">⚔️ 你已被授權挑戰</h3>
+    <p style="margin:0 0 10px; font-size:13px;">
+      「{{ authorized_challenge.country_name }}」的國王授權你挑戰{{ authorized_challenge.seat_label }}之位
+    </p>
+    {% if in_any_war_window %}
+    <p class="hint" style="margin:0; color:var(--danger);">國戰或城鎮戰期間無法應戰</p>
+    {% else %}
+    <form method="post" action="{{ url_for('game.country_challenge_official') }}">
+      <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">應戰</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+
   {% for c in countries %}
   <div class="panel" style="margin-bottom:18px;">
     <div class="element">屬性：{{ c.element }}</div>
@@ -49,8 +65,65 @@
       </div>
     </div>
     {% endif %}
+
+    {% if c.is_own_country %}
+    <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
+      {% if not c.is_own_king %}
+      <div style="font-size:12px; color:var(--gold-bright); margin-bottom:6px;">👑 篡位</div>
+      {% if in_any_war_window %}
+      <p class="hint" style="margin:0; color:var(--danger);">國戰或城鎮戰期間無法篡位</p>
+      {% else %}
+      <form method="post" action="{{ url_for('game.country_challenge_king') }}">
+        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">挑戰國王</button>
+      </form>
+      {% endif %}
+      {% endif %}
+
+      {% if c.is_own_king %}
+      <div style="margin-top:14px; font-size:12px; color:var(--gold-bright); margin-bottom:6px;">📜 指派挑戰者</div>
+      {% if c.pending_challenge %}
+      <p style="margin:0 0 8px; font-size:13px;">
+        目前已授權 <strong>{{ c.pending_challenge.holder_name or "（角色已不存在）" }}</strong> 挑戰{{ c.pending_challenge.seat_label }}之位
+      </p>
+      <form method="post" action="{{ url_for('game.country_revoke_challenge') }}">
+        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">收回授權</button>
+      </form>
+      {% else %}
+      <form method="post" action="{{ url_for('game.country_authorize_challenge') }}" style="display:flex; gap:8px; flex-wrap:wrap; align-items:end;">
+        <div>
+          <label style="font-size:12px;">官職</label>
+          <select name="seat">
+            <option value="advisor">參謀</option>
+            <option value="general">大將軍</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;">角色名稱</label>
+          <input type="text" name="target_name" placeholder="要授權的角色名稱" required>
+        </div>
+        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">授權挑戰</button>
+      </form>
+      {% endif %}
+      {% endif %}
+    </div>
+    {% endif %}
   </div>
   {% endfor %}
+
+  {% if is_officer %}
+  <div class="panel" style="margin-bottom:18px;">
+    <h3 style="margin:0 0 8px; color:var(--gold-bright); font-size:15px;">💰 領取本週國庫分潤</h3>
+    {% if already_claimed_today %}
+    <p class="hint" style="margin:0;">這週已經領取過了</p>
+    {% elif is_friday %}
+    <form method="post" action="{{ url_for('game.country_claim_income') }}">
+      <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">領取分潤</button>
+    </form>
+    {% else %}
+    <p class="hint" style="margin:0;">只有每週五才能領取國庫分潤</p>
+    {% endif %}
+  </div>
+  {% endif %}
 
   <p style="margin-top:20px;"><a href="{{ url_for('game.game') }}" class="btn">← 返回主畫面</a></p>
 {% endblock %}

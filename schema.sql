@@ -35,9 +35,13 @@ CREATE TABLE IF NOT EXISTS countries (
     king_character_id INTEGER,
     advisor_character_id INTEGER,
     general_character_id INTEGER,
+    pending_challenge_seat TEXT,
+    pending_challenge_character_id INTEGER,
+    pending_challenge_authorized_at TEXT,
     FOREIGN KEY (king_character_id) REFERENCES characters(id),
     FOREIGN KEY (advisor_character_id) REFERENCES characters(id),
-    FOREIGN KEY (general_character_id) REFERENCES characters(id)
+    FOREIGN KEY (general_character_id) REFERENCES characters(id),
+    FOREIGN KEY (pending_challenge_character_id) REFERENCES characters(id)
 );
 
 CREATE TABLE IF NOT EXISTS characters (
@@ -81,6 +85,7 @@ CREATE TABLE IF NOT EXISTS characters (
     donated_today INTEGER NOT NULL DEFAULT 0,
     donated_today_date TEXT,
     garrison_cooldown_until TEXT,
+    income_claimed_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (country_id) REFERENCES countries(id),
@@ -125,7 +130,11 @@ CREATE TABLE IF NOT EXISTS game_settings (
     war_town_end_time TEXT NOT NULL DEFAULT '21:00',
     war_fortress_weekday INTEGER NOT NULL DEFAULT 5,
     war_fortress_start_time TEXT NOT NULL DEFAULT '20:00',
-    war_fortress_end_time TEXT NOT NULL DEFAULT '21:30'
+    war_fortress_end_time TEXT NOT NULL DEFAULT '21:30',
+    king_weekly_income_percent INTEGER NOT NULL DEFAULT 5,
+    official_weekly_income_percent INTEGER NOT NULL DEFAULT 3,
+    king_war_defense_bonus_percent INTEGER NOT NULL DEFAULT 5,
+    office_challenge_aura_bonus_percent INTEGER NOT NULL DEFAULT 20
 );
 
 CREATE TABLE IF NOT EXISTS site_visits (

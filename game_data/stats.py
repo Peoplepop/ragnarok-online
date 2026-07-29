@@ -44,12 +44,24 @@ STAT_FLOOR_COLUMNS = {
 }
 
 
-def character_final_stats(character, equipped_items, settings):
+def character_final_stats(character, equipped_items, settings, king_war_defense_bonus=False):
     """Like compute_final_stats, but layers in the character's job-tier bonus
     and stacking rebirth bonus, then clamps every stat to its stat-floor
     snapshot (if any) so a promotion can never make a stat go down. Rebirth
-    intentionally bypasses this floor -- see game_rebirth, which clears it."""
+    intentionally bypasses this floor -- see game_rebirth, which clears it.
+
+    king_war_defense_bonus defaults to False so every pre-existing call site
+    is completely unaffected; callers pass True only when they've already
+    established the character IS the reigning king of their own country AND
+    the current moment is inside a war window (town or fortress) -- see the
+    office-challenge/usurpation feature. When True, it folds
+    game_settings.king_war_defense_bonus_percent into the same additive
+    percentage-bonus term job/country/rebirth bonuses already share, applied
+    only to def, rather than bolting on a separate multiply pass."""
     job_bonus = job_stat_bonus_pct(character["job_class"], character["job_tier"])
+    if king_war_defense_bonus:
+        job_bonus = dict(job_bonus)
+        job_bonus["def"] = job_bonus.get("def", 0) + settings["king_war_defense_bonus_percent"]
     rebirth_bonus = character["rebirth_count"] * settings["rebirth_stat_bonus_percent"]
     level_bonus_stats = {key: character[f"level_bonus_{key}"] for key in BASE_STATS}
     stats = compute_final_stats(

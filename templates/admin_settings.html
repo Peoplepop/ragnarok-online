@@ -122,6 +122,31 @@
       <p class="hint" style="margin-bottom:16px;">
         只有在上述時段內才能攻打城鎮／荒地（山賊領主）或要塞；荒地與城鎮共用同一組國戰時段。時間格式須為 HH:MM（24 小時制），且開始時間必須早於結束時間
       </p>
+
+      <h3 style="color: var(--gold-bright); font-size: 15px; margin-bottom:8px;">篡位／官職挑戰／國庫分潤設定</h3>
+      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom:16px;">
+        <div>
+          <label>國王每週分潤 (%)</label>
+          <input type="text" inputmode="numeric" name="king_weekly_income_percent" value="{{ settings.king_weekly_income_percent }}">
+        </div>
+        <div>
+          <label>參謀／大將軍每週分潤 (%)</label>
+          <input type="text" inputmode="numeric" name="official_weekly_income_percent" value="{{ settings.official_weekly_income_percent }}">
+        </div>
+        <div>
+          <label>國王國戰防禦加成 (%)</label>
+          <input type="text" inputmode="numeric" name="king_war_defense_bonus_percent" value="{{ settings.king_war_defense_bonus_percent }}">
+        </div>
+        <div>
+          <label>官職挑戰氣勢加成 (%)</label>
+          <input type="text" inputmode="numeric" name="office_challenge_aura_bonus_percent" value="{{ settings.office_challenge_aura_bonus_percent }}">
+        </div>
+      </div>
+      <p class="hint" style="margin-bottom:16px;">
+        國王／參謀／大將軍每週五可領取「國庫 × 分潤%」的諸神幣（每人每週限領一次）；
+        國王在國戰或城鎮戰時段內，防禦力額外獲得「國戰防禦加成%」；
+        受國王授權應戰參謀／大將軍之位的挑戰者，在該場戰鬥中六圍全部獲得「氣勢加成%」的臨時加成
+      </p>
       <button type="submit">儲存設定</button>
     </form>
   </div>

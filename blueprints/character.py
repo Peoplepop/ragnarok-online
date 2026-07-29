@@ -6,7 +6,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 from db import get_db, log_activity, LEVEL_CAP, ELEMENT_OVERCOMES
 from web_helpers import (
     login_required, admin_required, character_required, _cooldown_remaining_seconds,
-    _validate_character_name,
+    _validate_character_name, _in_any_war_window,
 )
 from game_data.constants import (
     SHOP_TYPE_LABELS, SLOT_LABELS, EQUIP_SLOT_COLUMNS, LEVEL_STAT_GROWTH, STAT_LABELS,
@@ -163,7 +163,12 @@ def character_page():
 
     db.close()
 
-    stats = character_final_stats(character, equipped_items, settings)
+    # King war-defense bonus: character["character_id"] is the viewer's own
+    # id (character["id"] is shadowed to the country's id by the bare
+    # countries.* join above, same gotcha documented in blueprints/game.py).
+    is_reigning_king = character["character_id"] == character["king_character_id"]
+    king_war_defense_bonus = is_reigning_king and _in_any_war_window(settings)
+    stats = character_final_stats(character, equipped_items, settings, king_war_defense_bonus)
     current_hp, current_mp = _current_hp_mp(character, stats)
     exp_needed = (
         exp_required_for_level(character["level"], settings, force_one=session.get("is_admin", False))

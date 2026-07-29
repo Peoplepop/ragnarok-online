@@ -215,6 +215,10 @@ def admin_update_game_settings():
         war_fortress_weekday = int(request.form.get("war_fortress_weekday", ""))
         war_fortress_start_time = request.form.get("war_fortress_start_time", "").strip()
         war_fortress_end_time = request.form.get("war_fortress_end_time", "").strip()
+        king_weekly_income_percent = int(request.form.get("king_weekly_income_percent", ""))
+        official_weekly_income_percent = int(request.form.get("official_weekly_income_percent", ""))
+        king_war_defense_bonus_percent = int(request.form.get("king_war_defense_bonus_percent", ""))
+        office_challenge_aura_bonus_percent = int(request.form.get("office_challenge_aura_bonus_percent", ""))
     except ValueError:
         flash("設定值格式不正確")
         return redirect(url_for("admin.admin_settings"))
@@ -274,6 +278,13 @@ def admin_update_game_settings():
         flash("要塞國戰開始時間必須早於結束時間")
         return redirect(url_for("admin.admin_settings"))
 
+    if min(
+        king_weekly_income_percent, official_weekly_income_percent,
+        king_war_defense_bonus_percent, office_challenge_aura_bonus_percent,
+    ) < 0:
+        flash("國王／官職相關的分潤與加成數值不可為負數")
+        return redirect(url_for("admin.admin_settings"))
+
     db = get_db()
     db.execute(
         """UPDATE game_settings
@@ -285,7 +296,9 @@ def admin_update_game_settings():
                heal_cost_per_point = ?, town_defense_level = ?, fortress_defense_level = ?,
                stat_reroll_cost = ?,
                war_town_weekday = ?, war_town_start_time = ?, war_town_end_time = ?,
-               war_fortress_weekday = ?, war_fortress_start_time = ?, war_fortress_end_time = ?
+               war_fortress_weekday = ?, war_fortress_start_time = ?, war_fortress_end_time = ?,
+               king_weekly_income_percent = ?, official_weekly_income_percent = ?,
+               king_war_defense_bonus_percent = ?, office_challenge_aura_bonus_percent = ?
            WHERE id = 1""",
         (
             turn_wait_seconds, exp_base, exp_growth_novice_percent,
@@ -297,6 +310,8 @@ def admin_update_game_settings():
             stat_reroll_cost,
             war_town_weekday, war_town_start_time, war_town_end_time,
             war_fortress_weekday, war_fortress_start_time, war_fortress_end_time,
+            king_weekly_income_percent, official_weekly_income_percent,
+            king_war_defense_bonus_percent, office_challenge_aura_bonus_percent,
         ),
     )
     db.commit()

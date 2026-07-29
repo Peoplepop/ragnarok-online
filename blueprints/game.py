@@ -9,7 +9,7 @@ from map_layout import axial_to_pixel, hex_corners, axial_distance
 from web_helpers import (
     character_required, _next_action_at, _cooldown_remaining_seconds, _in_war_window,
     _war_window_label, _war_window_kind_for_tile_type, _format_duration, _add_to_inventory,
-    _remove_from_inventory,
+    _remove_from_inventory, _in_any_war_window, _taipei_now, _parse_dt,
 )
 from game_data.constants import (
     SHOP_TYPE_LABELS, SLOT_LABELS, EQUIP_SLOT_COLUMNS, GOVERNMENT_ROLES, tile_display_name,
@@ -132,7 +132,12 @@ def _render_game(**extra):
     ).fetchone()["c"]
     db.close()
 
-    stats = character_final_stats(character, equipped_items, settings)
+    # King war-defense bonus: character["character_id"] is the character's
+    # own id (character["id"] is shadowed to the COUNTRY's id by the bare
+    # countries.* join above -- see the 貢獻值 donate_cap note further down).
+    is_reigning_king = character["character_id"] == character["king_character_id"]
+    king_war_defense_bonus = is_reigning_king and _in_any_war_window(settings)
+    stats = character_final_stats(character, equipped_items, settings, king_war_defense_bonus)
     current_hp, current_mp = _current_hp_mp(character, stats)
 
     exp_needed = (
@@ -390,7 +395,12 @@ def game_hunt():
     settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
 
     equipped_items = _fetch_equipped_items(db, character)
-    stats = character_final_stats(character, equipped_items, settings)
+    # King war-defense bonus: character["character_id"] is the hunter's own
+    # id (character["id"] is shadowed to the country's id by the bare
+    # countries.* join in this route's SELECT above).
+    is_reigning_king = character["character_id"] == character["king_character_id"]
+    king_war_defense_bonus = is_reigning_king and _in_any_war_window(settings)
+    stats = character_final_stats(character, equipped_items, settings, king_war_defense_bonus)
     current_hp, current_mp = _current_hp_mp(character, stats)
 
     if current_hp <= 0:
@@ -516,7 +526,7 @@ def game_hunt():
         updated["level"] = new_level
         for stat in ("hp", "mp", "str", "def", "agi", "luk"):
             updated[f"level_bonus_{stat}"] = character[f"level_bonus_{stat}"] + stat_gain[stat]
-        stats_after = character_final_stats(updated, equipped_items, settings)
+        stats_after = character_final_stats(updated, equipped_items, settings, king_war_defense_bonus)
     else:
         stats_after = None
 
@@ -841,7 +851,8 @@ def game_conquer():
     settings = db.execute(
         """SELECT turn_wait_seconds, town_defense_level, fortress_defense_level, rebirth_stat_bonus_percent,
                   war_town_weekday, war_town_start_time, war_town_end_time,
-                  war_fortress_weekday, war_fortress_start_time, war_fortress_end_time
+                  war_fortress_weekday, war_fortress_start_time, war_fortress_end_time,
+                  king_war_defense_bonus_percent
            FROM game_settings WHERE id = 1"""
     ).fetchone()
 
@@ -880,7 +891,13 @@ def game_conquer():
         return _render_game(pending_conquer_confirm=True)
 
     equipped_items = _fetch_equipped_items(db, character)
-    stats = character_final_stats(character, equipped_items, settings)
+    # King war-defense bonus for the ATTACKER: character["character_id"] is
+    # the attacker's own id (character["id"] is shadowed to the country's id
+    # by the bare countries.* join above). The war-window gate above already
+    # guarantees we're inside the window matching this tile's kind, so "is
+    # the reigning king" is the only remaining condition to check here.
+    attacker_is_reigning_king = character["character_id"] == character["king_character_id"]
+    stats = character_final_stats(character, equipped_items, settings, attacker_is_reigning_king)
     current_hp, current_mp = _current_hp_mp(character, stats)
 
     if current_hp <= 0:
@@ -936,7 +953,15 @@ def game_conquer():
             "equipped_armor_id": defender_row["equipped_armor_id"],
             "equipped_accessory_id": defender_row["equipped_accessory_id"],
         })
-        defender_stats = character_final_stats(defender_row, defender_equipped_items, settings)
+        # Same king war-defense bonus, for the DEFENDER this time: the
+        # war-window gate above already guarantees we're inside the window
+        # matching this tile's kind, so only "is the reigning king" matters.
+        # defender_row["defender_id"] is the defender's own id (its "id" is
+        # shadowed to the country's id by the bare countries.* join above).
+        defender_is_reigning_king = defender_row["defender_id"] == defender_row["king_character_id"]
+        defender_stats = character_final_stats(
+            defender_row, defender_equipped_items, settings, defender_is_reigning_king,
+        )
         defender_monster = {
             "name": defender_row["defender_name"],
             "hp": defender_stats["hp"], "atk": defender_stats["str"],
@@ -1827,14 +1852,15 @@ def countries_page():
     # the viewing character's OWN country, and only when that character
     # holds one of its government seats -- never exposed for other countries.
     own_character = db.execute(
-        "SELECT id, country_id FROM characters WHERE user_id = ?", (session["user_id"],)
+        "SELECT id, country_id, income_claimed_at FROM characters WHERE user_id = ?", (session["user_id"],)
     ).fetchone()
+    own_character_id = own_character["id"]
     own_country = next((c for c in countries if c["id"] == own_character["country_id"]), None)
-    is_officer = own_country is not None and own_character["id"] in (
-        own_country["king_character_id"],
-        own_country["advisor_character_id"],
-        own_country["general_character_id"],
+    is_own_king = own_country is not None and own_character_id == own_country["king_character_id"]
+    is_own_official = own_country is not None and own_character_id in (
+        own_country["advisor_character_id"], own_country["general_character_id"],
     )
+    is_officer = is_own_king or is_own_official
     garrison_tiles_by_country_id = {}
     if is_officer:
         tile_rows = db.execute(
@@ -1853,11 +1879,44 @@ def countries_page():
             }
             for r in tile_rows
         ]
+
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+    in_any_war_window = _in_any_war_window(settings)
+
+    now_taipei = _taipei_now()
+    is_friday = now_taipei.isoweekday() == 5
+    already_claimed_today = False
+    if own_character["income_claimed_at"]:
+        claimed_dt = _parse_dt(own_character["income_claimed_at"])
+        already_claimed_today = claimed_dt is not None and claimed_dt.date() == now_taipei.date()
+
+    # Authorized-challenger banner: search across ALL countries (not just the
+    # viewer's own) for a pending_challenge_character_id matching the viewer
+    # -- the king who authorized them may belong to any country.
+    authorized_challenge = None
+    for c in countries:
+        if c["pending_challenge_character_id"] == own_character_id:
+            authorized_challenge = {
+                "country_name": c["name"],
+                "seat": c["pending_challenge_seat"],
+                "seat_label": "參謀" if c["pending_challenge_seat"] == "advisor" else "大將軍",
+            }
+            break
+
     db.close()
 
     rows = []
     for c in countries:
+        is_own = own_country is not None and c["id"] == own_country["id"]
+        pending_challenge = None
+        if c["pending_challenge_seat"]:
+            pending_challenge = {
+                "seat": c["pending_challenge_seat"],
+                "seat_label": "參謀" if c["pending_challenge_seat"] == "advisor" else "大將軍",
+                "holder_name": character_names.get(c["pending_challenge_character_id"]),
+            }
         rows.append({
+            "id": c["id"],
             "name": c["name"],
             "element": c["element"],
             "description": c["description"],
@@ -1868,6 +1927,495 @@ def countries_page():
                 for role in GOVERNMENT_ROLES
             ],
             "garrison_tiles": garrison_tiles_by_country_id.get(c["id"]),
+            "is_own_country": is_own,
+            "is_own_king": is_own and is_own_king,
+            "pending_challenge": pending_challenge,
         })
 
-    return render_template("countries.html", countries=rows, roles=GOVERNMENT_ROLES)
+    return render_template(
+        "countries.html", countries=rows, roles=GOVERNMENT_ROLES,
+        is_own_king=is_own_king,
+        is_own_official=is_own_official,
+        is_officer=is_officer,
+        in_any_war_window=in_any_war_window,
+        is_friday=is_friday,
+        already_claimed_today=already_claimed_today,
+        authorized_challenge=authorized_challenge,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 篡位 (king usurpation), 官職挑戰 (advisor/general challenge authorization),
+# and 每週分潤 (weekly treasury income claim). Added next to countries_page
+# above since that's already where /countries lives -- no new blueprint.
+# ---------------------------------------------------------------------------
+
+@game_bp.route("/country/challenge_king", methods=["POST"])
+@character_required
+def country_challenge_king():
+    db = get_db()
+    character = db.execute(
+        """SELECT characters.id AS character_id, characters.country_id, characters.next_action_at,
+                  characters.current_hp, characters.current_mp, characters.currency, characters.level,
+                  characters.name AS character_name,
+                  characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id,
+                  characters.job_class, characters.job_tier, characters.rebirth_count,
+                  characters.stat_floor_hp, characters.stat_floor_mp, characters.stat_floor_str,
+                  characters.stat_floor_def, characters.stat_floor_agi, characters.stat_floor_luk,
+                  characters.level_bonus_hp, characters.level_bonus_mp, characters.level_bonus_str,
+                  characters.level_bonus_def, characters.level_bonus_agi, characters.level_bonus_luk,
+                  countries.*
+           FROM characters JOIN countries ON countries.id = characters.country_id
+           WHERE characters.user_id = ?""",
+        (session["user_id"],),
+    ).fetchone()
+
+    if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
+        db.close()
+        flash("還在冷卻中，請稍候再行動")
+        return redirect(url_for("game.countries_page"))
+
+    if character["king_character_id"] is None:
+        db.close()
+        flash("這個國家目前沒有國王，無法篡位")
+        return redirect(url_for("game.countries_page"))
+
+    if character["king_character_id"] == character["character_id"]:
+        db.close()
+        flash("你已經是這個國家的國王了")
+        return redirect(url_for("game.countries_page"))
+
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+
+    # Opposite polarity from game_conquer's war-window gate: usurpation is
+    # only allowed OUTSIDE both the town and fortress war windows.
+    if _in_any_war_window(settings):
+        db.close()
+        flash("國戰或城鎮戰期間無法篡位")
+        return redirect(url_for("game.countries_page"))
+
+    king_row = db.execute(
+        """SELECT characters.id AS defender_id, characters.name AS defender_name, characters.level,
+                  characters.job_class, characters.job_tier, characters.rebirth_count,
+                  characters.stat_floor_hp, characters.stat_floor_mp, characters.stat_floor_str,
+                  characters.stat_floor_def, characters.stat_floor_agi, characters.stat_floor_luk,
+                  characters.level_bonus_hp, characters.level_bonus_mp, characters.level_bonus_str,
+                  characters.level_bonus_def, characters.level_bonus_agi, characters.level_bonus_luk,
+                  characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id,
+                  countries.*
+           FROM characters JOIN countries ON countries.id = characters.country_id
+           WHERE characters.id = ?""",
+        (character["king_character_id"],),
+    ).fetchone()
+
+    equipped_items = _fetch_equipped_items(db, character)
+    challenger_stats = character_final_stats(character, equipped_items, settings)
+    current_hp, current_mp = _current_hp_mp(character, challenger_stats)
+
+    if current_hp <= 0:
+        db.close()
+        flash("HP 已耗盡，無法發動篡位挑戰，請先回到要塞回復")
+        return redirect(url_for("game.countries_page"))
+
+    # King war-defense bonus intentionally left OFF here (default False):
+    # this route's own gate above already requires being outside BOTH war
+    # windows before a fight can happen at all, so the bonus's "inside a war
+    # window" condition can never be true for this battle -- wiring it here
+    # would just be permanently-dead code.
+    king_equipped_items = _fetch_equipped_items(db, king_row)
+    king_stats = character_final_stats(king_row, king_equipped_items, settings)
+    king_monster = {
+        "name": king_row["defender_name"],
+        "hp": king_stats["hp"], "atk": king_stats["str"],
+        "def": king_stats["def"], "agi": king_stats["agi"],
+        "element": king_row["element"],
+    }
+
+    result = run_battle(
+        character["character_name"], challenger_stats, character["element"], current_hp, king_monster,
+        player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
+    )
+
+    country_id = character["country_id"]
+    country_name = character["name"]  # bare countries.* -> "name" is the country's own name here
+    currency_lost = 0
+    if result["won"]:
+        new_currency = character["currency"]
+        # One-seat-per-player: vacate any seat this challenger already holds
+        # ANYWHERE ELSE first -- a sitting Advisor/General winning a King
+        # challenge is a promotion, not a block, but they can't hold two
+        # seats at once.
+        for seat_col in ("king_character_id", "advisor_character_id", "general_character_id"):
+            db.execute(
+                f"UPDATE countries SET {seat_col} = NULL WHERE {seat_col} = ?",
+                (character["character_id"],),
+            )
+        db.execute(
+            """UPDATE countries
+               SET king_character_id = ?, pending_challenge_seat = NULL,
+                   pending_challenge_character_id = NULL, pending_challenge_authorized_at = NULL
+               WHERE id = ?""",
+            (character["character_id"], country_id),
+        )
+        outcome_detail = f"擊敗國王{king_row['defender_name']}，篡位成功，成為「{country_name}」新任國王"
+        flash(f"篡位成功！你已成為「{country_name}」的新任國王")
+    elif result["timed_out"]:
+        new_currency = character["currency"]
+        outcome_detail = "篡位挑戰回合已滿，未分勝負，沒有任何諸神幣損失"
+        flash("篡位挑戰未分勝負（戰鬥回合已滿），沒有任何諸神幣損失")
+    else:
+        currency_lost = character["currency"] // 2
+        new_currency = character["currency"] - currency_lost
+        db.execute(
+            "UPDATE countries SET treasury = treasury + ? WHERE id = ?", (currency_lost, country_id)
+        )
+        outcome_detail = f"篡位失敗，身上 {currency_lost} 諸神幣被沒入「{country_name}」國庫"
+        flash(f"篡位失敗，身上 {currency_lost} 諸神幣被沒入國庫")
+
+    db.execute(
+        """UPDATE characters
+           SET currency = ?, current_hp = ?, current_mp = ?, next_action_at = ?,
+               pvp_battles_count = pvp_battles_count + 1, pvp_wins_count = pvp_wins_count + ?,
+               pending_boss_monster_id = NULL
+           WHERE id = ?""",
+        (
+            new_currency, result["player_hp"], result["player_mp"], _next_action_at(settings["turn_wait_seconds"]),
+            1 if result["won"] else 0, character["character_id"],
+        ),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "challenge_king",
+        detail=outcome_detail, ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+    return redirect(url_for("game.countries_page"))
+
+
+@game_bp.route("/country/authorize_challenge", methods=["POST"])
+@character_required
+def country_authorize_challenge():
+    db = get_db()
+    character = db.execute(
+        "SELECT id, country_id FROM characters WHERE user_id = ?", (session["user_id"],)
+    ).fetchone()
+    country = db.execute("SELECT * FROM countries WHERE id = ?", (character["country_id"],)).fetchone()
+
+    if country is None or country["king_character_id"] != character["id"]:
+        db.close()
+        flash("只有國王可以指派挑戰者")
+        return redirect(url_for("game.countries_page"))
+
+    seat = request.form.get("seat", "").strip()
+    if seat not in ("advisor", "general"):
+        db.close()
+        flash("請選擇有效的官職（參謀或大將軍）")
+        return redirect(url_for("game.countries_page"))
+
+    if country["pending_challenge_seat"] is not None:
+        db.close()
+        flash("目前已經有授權中的挑戰者，請先收回授權")
+        return redirect(url_for("game.countries_page"))
+
+    target_name = request.form.get("target_name", "").strip()
+    if not target_name:
+        db.close()
+        flash("請輸入要授權挑戰的角色名稱")
+        return redirect(url_for("game.countries_page"))
+
+    target = db.execute(
+        "SELECT id, name FROM characters WHERE lower(name) = lower(?)", (target_name,)
+    ).fetchone()
+    if target is None:
+        db.close()
+        flash("找不到這個角色")
+        return redirect(url_for("game.countries_page"))
+
+    if target["id"] == country["king_character_id"]:
+        db.close()
+        flash("不能授權國王本人挑戰自己國家的官職")
+        return redirect(url_for("game.countries_page"))
+
+    seat_label = "參謀" if seat == "advisor" else "大將軍"
+    db.execute(
+        """UPDATE countries
+           SET pending_challenge_seat = ?, pending_challenge_character_id = ?, pending_challenge_authorized_at = ?
+           WHERE id = ?""",
+        (seat, target["id"], datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), country["id"]),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "authorize_challenge",
+        detail=f"授權 {target['name']} 挑戰{seat_label}之位", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+    flash(f"已授權 {target['name']} 挑戰{seat_label}之位")
+    return redirect(url_for("game.countries_page"))
+
+
+@game_bp.route("/country/revoke_challenge", methods=["POST"])
+@character_required
+def country_revoke_challenge():
+    db = get_db()
+    character = db.execute(
+        "SELECT id, country_id FROM characters WHERE user_id = ?", (session["user_id"],)
+    ).fetchone()
+    country = db.execute("SELECT * FROM countries WHERE id = ?", (character["country_id"],)).fetchone()
+
+    if country is None or country["king_character_id"] != character["id"]:
+        db.close()
+        flash("只有國王可以收回授權")
+        return redirect(url_for("game.countries_page"))
+
+    if country["pending_challenge_seat"] is None:
+        db.close()
+        flash("目前沒有授權中的挑戰者")
+        return redirect(url_for("game.countries_page"))
+
+    db.execute(
+        """UPDATE countries
+           SET pending_challenge_seat = NULL, pending_challenge_character_id = NULL,
+               pending_challenge_authorized_at = NULL
+           WHERE id = ?""",
+        (country["id"],),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "revoke_challenge", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+    flash("已收回挑戰授權")
+    return redirect(url_for("game.countries_page"))
+
+
+@game_bp.route("/country/challenge_official", methods=["POST"])
+@character_required
+def country_challenge_official():
+    db = get_db()
+    character = db.execute(
+        """SELECT characters.id AS character_id, characters.country_id, characters.next_action_at,
+                  characters.current_hp, characters.current_mp, characters.currency, characters.level,
+                  characters.name AS character_name,
+                  characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id,
+                  characters.job_class, characters.job_tier, characters.rebirth_count,
+                  characters.stat_floor_hp, characters.stat_floor_mp, characters.stat_floor_str,
+                  characters.stat_floor_def, characters.stat_floor_agi, characters.stat_floor_luk,
+                  characters.level_bonus_hp, characters.level_bonus_mp, characters.level_bonus_str,
+                  characters.level_bonus_def, characters.level_bonus_agi, characters.level_bonus_luk,
+                  countries.*
+           FROM characters JOIN countries ON countries.id = characters.country_id
+           WHERE characters.user_id = ?""",
+        (session["user_id"],),
+    ).fetchone()
+
+    if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
+        db.close()
+        flash("還在冷卻中，請稍候再行動")
+        return redirect(url_for("game.countries_page"))
+
+    target_country = db.execute(
+        "SELECT * FROM countries WHERE pending_challenge_character_id = ?", (character["character_id"],)
+    ).fetchone()
+    if target_country is None:
+        db.close()
+        flash("你目前沒有被授權的挑戰資格")
+        return redirect(url_for("game.countries_page"))
+
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+    if _in_any_war_window(settings):
+        db.close()
+        flash("國戰或城鎮戰期間無法應戰")
+        return redirect(url_for("game.countries_page"))
+
+    seat = target_country["pending_challenge_seat"]
+    seat_column = "advisor_character_id" if seat == "advisor" else "general_character_id"
+    seat_label = "參謀" if seat == "advisor" else "大將軍"
+    officeholder_id = target_country[seat_column]
+
+    if officeholder_id is None:
+        # Shouldn't normally happen (every seat always has an NPC or player
+        # in it), but guard anyway rather than crash on a NULL id lookup.
+        db.execute(
+            """UPDATE countries
+               SET pending_challenge_seat = NULL, pending_challenge_character_id = NULL,
+                   pending_challenge_authorized_at = NULL
+               WHERE id = ?""",
+            (target_country["id"],),
+        )
+        db.commit()
+        db.close()
+        flash(f"「{target_country['name']}」的{seat_label}目前出缺，授權已被清除")
+        return redirect(url_for("game.countries_page"))
+
+    officeholder_row = db.execute(
+        """SELECT characters.id AS defender_id, characters.name AS defender_name, characters.level,
+                  characters.job_class, characters.job_tier, characters.rebirth_count,
+                  characters.stat_floor_hp, characters.stat_floor_mp, characters.stat_floor_str,
+                  characters.stat_floor_def, characters.stat_floor_agi, characters.stat_floor_luk,
+                  characters.level_bonus_hp, characters.level_bonus_mp, characters.level_bonus_str,
+                  characters.level_bonus_def, characters.level_bonus_agi, characters.level_bonus_luk,
+                  characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id,
+                  countries.*
+           FROM characters JOIN countries ON countries.id = characters.country_id
+           WHERE characters.id = ?""",
+        (officeholder_id,),
+    ).fetchone()
+
+    equipped_items = _fetch_equipped_items(db, character)
+    base_stats = character_final_stats(character, equipped_items, settings)
+    current_hp, current_mp = _current_hp_mp(character, base_stats)
+
+    if current_hp <= 0:
+        db.close()
+        flash("HP 已耗盡，無法應戰，請先回到要塞回復")
+        return redirect(url_for("game.countries_page"))
+
+    # Office-challenge aura: a one-off +office_challenge_aura_bonus_percent%
+    # multiply applied to ALL SIX stats, for THIS fight only -- deliberately
+    # a local post-hoc multiply on the already-computed dict rather than
+    # threaded into compute_final_stats' permanent-bonus formula. run_battle
+    # never actually reads player_stats["hp"]/["mp"] (only the separate
+    # player_hp/player_mp args below, which stay at the character's real
+    # persisted current HP/MP so a one-fight buff never inflates their real
+    # stored HP ceiling) -- hp/mp are still scaled here for consistency with
+    # the "all six stats" spec even though they're inert for this battle.
+    aura_pct = settings["office_challenge_aura_bonus_percent"]
+    challenger_stats = {key: round(value * (1 + aura_pct / 100)) for key, value in base_stats.items()}
+
+    # King war-defense bonus intentionally left OFF for the officeholder here
+    # (default False): the one-seat-per-player rule means an Advisor/General
+    # can never simultaneously be a King, and this route's own gate above
+    # already requires being outside both war windows anyway -- the bonus
+    # condition is doubly unreachable in this route.
+    defender_equipped_items = _fetch_equipped_items(db, officeholder_row)
+    defender_stats = character_final_stats(officeholder_row, defender_equipped_items, settings)
+    defender_monster = {
+        "name": officeholder_row["defender_name"],
+        "hp": defender_stats["hp"], "atk": defender_stats["str"],
+        "def": defender_stats["def"], "agi": defender_stats["agi"],
+        "element": officeholder_row["element"],
+    }
+
+    result = run_battle(
+        character["character_name"], challenger_stats, character["element"], current_hp, defender_monster,
+        player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
+    )
+
+    country_id = target_country["id"]
+    country_name = target_country["name"]
+    currency_lost = 0
+    if result["won"]:
+        new_currency = character["currency"]
+        for seat_col in ("king_character_id", "advisor_character_id", "general_character_id"):
+            db.execute(
+                f"UPDATE countries SET {seat_col} = NULL WHERE {seat_col} = ?",
+                (character["character_id"],),
+            )
+        db.execute(
+            f"""UPDATE countries
+                SET {seat_column} = ?, pending_challenge_seat = NULL,
+                    pending_challenge_character_id = NULL, pending_challenge_authorized_at = NULL
+                WHERE id = ?""",
+            (character["character_id"], country_id),
+        )
+        outcome_detail = f"擊敗{officeholder_row['defender_name']}，成功奪得「{country_name}」{seat_label}之位"
+        flash(f"應戰成功！你已成為「{country_name}」的{seat_label}")
+    elif result["timed_out"]:
+        # Not explicitly specced (spec only describes WIN/LOSS) -- treated
+        # like every other timed_out fight in this codebase: a true no-op,
+        # so the authorization is deliberately left in place (unconsumed)
+        # rather than cleared, letting the challenger simply try again once
+        # their cooldown expires.
+        new_currency = character["currency"]
+        outcome_detail = "應戰回合已滿，未分勝負，沒有任何諸神幣損失，授權依然有效"
+        flash("應戰未分勝負（戰鬥回合已滿），沒有任何諸神幣損失，授權依然有效，可再次應戰")
+    else:
+        currency_lost = character["currency"] // 2
+        new_currency = character["currency"] - currency_lost
+        db.execute("UPDATE countries SET treasury = treasury + ? WHERE id = ?", (currency_lost, country_id))
+        db.execute(
+            """UPDATE countries
+               SET pending_challenge_seat = NULL, pending_challenge_character_id = NULL,
+                   pending_challenge_authorized_at = NULL
+               WHERE id = ?""",
+            (country_id,),
+        )
+        outcome_detail = f"應戰失敗，身上 {currency_lost} 諸神幣被沒入「{country_name}」國庫，授權已消耗"
+        flash(f"應戰失敗，身上 {currency_lost} 諸神幣被沒入國庫，授權已消耗")
+
+    db.execute(
+        """UPDATE characters
+           SET currency = ?, current_hp = ?, current_mp = ?, next_action_at = ?,
+               pvp_battles_count = pvp_battles_count + 1, pvp_wins_count = pvp_wins_count + ?,
+               pending_boss_monster_id = NULL
+           WHERE id = ?""",
+        (
+            new_currency, result["player_hp"], result["player_mp"], _next_action_at(settings["turn_wait_seconds"]),
+            1 if result["won"] else 0, character["character_id"],
+        ),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "challenge_official",
+        detail=outcome_detail, ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+    return redirect(url_for("game.countries_page"))
+
+
+@game_bp.route("/country/claim_income", methods=["POST"])
+@character_required
+def country_claim_income():
+    db = get_db()
+    character = db.execute(
+        "SELECT id, country_id, currency, income_claimed_at FROM characters WHERE user_id = ?",
+        (session["user_id"],),
+    ).fetchone()
+
+    now = _taipei_now()
+    if now.isoweekday() != 5:
+        db.close()
+        flash("只有每週五才能領取國庫分潤")
+        return redirect(url_for("game.countries_page"))
+
+    country = db.execute("SELECT * FROM countries WHERE id = ?", (character["country_id"],)).fetchone()
+    if country is not None and character["id"] == country["king_character_id"]:
+        role = "king"
+    elif country is not None and character["id"] in (
+        country["advisor_character_id"], country["general_character_id"],
+    ):
+        role = "official"
+    else:
+        db.close()
+        flash("你目前不是王室成員")
+        return redirect(url_for("game.countries_page"))
+
+    if character["income_claimed_at"]:
+        claimed_dt = _parse_dt(character["income_claimed_at"])
+        if claimed_dt is not None and claimed_dt.date() == now.date():
+            db.close()
+            flash("這週已經領取過了")
+            return redirect(url_for("game.countries_page"))
+
+    settings = db.execute(
+        "SELECT king_weekly_income_percent, official_weekly_income_percent FROM game_settings WHERE id = 1"
+    ).fetchone()
+    percent = (
+        settings["king_weekly_income_percent"] if role == "king"
+        else settings["official_weekly_income_percent"]
+    )
+    amount = round(country["treasury"] * percent / 100)
+
+    db.execute("UPDATE countries SET treasury = treasury - ? WHERE id = ?", (amount, country["id"]))
+    db.execute(
+        "UPDATE characters SET currency = currency + ?, income_claimed_at = ? WHERE id = ?",
+        (amount, now.strftime("%Y-%m-%d %H:%M:%S"), character["id"]),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "claim_income",
+        detail=f"領取本週國庫分潤 {amount} 諸神幣", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+    flash(f"已領取本週國庫分潤 {amount} 諸神幣")
+    return redirect(url_for("game.countries_page"))

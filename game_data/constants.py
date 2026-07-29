@@ -37,6 +37,11 @@ ACTION_LABELS = {
     "trade_decline": "拒絕交易邀請",
     "trade_cancel": "取消交易",
     "trade_complete": "完成交易",
+    "challenge_king": "篡位挑戰國王",
+    "authorize_challenge": "授權官職挑戰",
+    "revoke_challenge": "收回官職挑戰授權",
+    "challenge_official": "應戰官職挑戰",
+    "claim_income": "領取國庫分潤",
 }
 
 SHOP_TYPE_LABELS = {

@@ -61,6 +61,25 @@ def _war_window_label(weekday, start_time, end_time):
     return f"{ISO_WEEKDAY_LABELS.get(weekday, '?')} {start_time}-{end_time}"
 
 
+def _in_any_war_window(settings, now=None):
+    """True if either the town/wilderness or the fortress war window is
+    currently active (Taipei time). Used by the king-usurpation/office-
+    challenge routes, which gate on being OUTSIDE war time entirely --
+    the opposite polarity from game_conquer, which requires being INSIDE
+    the single window matching whatever tile is being attacked. settings
+    must carry the full set of war_town_*/war_fortress_* columns (i.e. a
+    `SELECT *` from game_settings, not a narrowed column list)."""
+    return (
+        _in_war_window(
+            settings["war_town_weekday"], settings["war_town_start_time"], settings["war_town_end_time"], now,
+        )
+        or _in_war_window(
+            settings["war_fortress_weekday"], settings["war_fortress_start_time"], settings["war_fortress_end_time"],
+            now,
+        )
+    )
+
+
 WAR_TIME_PATTERN = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
 

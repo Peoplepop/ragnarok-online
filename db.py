@@ -404,6 +404,8 @@ def _ensure_character_columns(conn):
         conn.execute("ALTER TABLE characters ADD COLUMN donated_today_date TEXT")
     if "garrison_cooldown_until" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN garrison_cooldown_until TEXT")
+    if "income_claimed_at" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN income_claimed_at TEXT")
 
 
 def _ensure_country_columns(conn):
@@ -416,6 +418,12 @@ def _ensure_country_columns(conn):
         conn.execute("ALTER TABLE countries ADD COLUMN advisor_character_id INTEGER")
     if "general_character_id" not in cols:
         conn.execute("ALTER TABLE countries ADD COLUMN general_character_id INTEGER")
+    if "pending_challenge_seat" not in cols:
+        conn.execute("ALTER TABLE countries ADD COLUMN pending_challenge_seat TEXT")
+    if "pending_challenge_character_id" not in cols:
+        conn.execute("ALTER TABLE countries ADD COLUMN pending_challenge_character_id INTEGER")
+    if "pending_challenge_authorized_at" not in cols:
+        conn.execute("ALTER TABLE countries ADD COLUMN pending_challenge_authorized_at TEXT")
 
 
 def _ensure_monster_columns(conn):
@@ -600,6 +608,16 @@ def _ensure_game_settings_columns(conn):
         conn.execute("ALTER TABLE game_settings ADD COLUMN war_fortress_start_time TEXT NOT NULL DEFAULT '20:00'")
     if "war_fortress_end_time" not in cols:
         conn.execute("ALTER TABLE game_settings ADD COLUMN war_fortress_end_time TEXT NOT NULL DEFAULT '21:30'")
+    if "king_weekly_income_percent" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN king_weekly_income_percent INTEGER NOT NULL DEFAULT 5")
+    if "official_weekly_income_percent" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN official_weekly_income_percent INTEGER NOT NULL DEFAULT 3")
+    if "king_war_defense_bonus_percent" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN king_war_defense_bonus_percent INTEGER NOT NULL DEFAULT 5")
+    if "office_challenge_aura_bonus_percent" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN office_challenge_aura_bonus_percent INTEGER NOT NULL DEFAULT 20"
+        )
 
 
 def init_db():
