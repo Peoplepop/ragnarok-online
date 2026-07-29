@@ -926,6 +926,18 @@ def game_conquer():
     # LIFO defender queue: the most recently-stationed garrison at this tile
     # is fought first. Only once every garrisoned defender is cleared does an
     # attack action reach the tile's NPC defense tower.
+    #
+    # Exception (explicit user requirement): the reigning King is always the
+    # LAST player defender fought at any of his own country's tiles,
+    # regardless of when he stationed relative to everyone else -- he never
+    # takes a turn in the ordinary stationed_at-DESC rotation. The first
+    # ORDER BY key sorts non-king garrisons (0) before the king's own row
+    # (1) when both are present; stationed_at DESC is only the tiebreaker
+    # among the non-king rows, same LIFO behaviour as before. countries.*
+    # here is always the DEFENDING country (joined off the garrisoned
+    # character's own country_id, which can only be a tile that country
+    # owns), so countries.king_character_id correctly identifies its own
+    # king without any cross-country ambiguity.
     defender_row = db.execute(
         """SELECT garrisons.id AS garrison_id, characters.id AS defender_id,
                   characters.name AS defender_name, characters.level, characters.job_class,
@@ -941,7 +953,7 @@ def game_conquer():
            JOIN characters ON characters.id = garrisons.character_id
            JOIN countries ON countries.id = characters.country_id
            WHERE garrisons.tile_id = ?
-           ORDER BY garrisons.stationed_at DESC
+           ORDER BY (characters.id = countries.king_character_id) ASC, garrisons.stationed_at DESC
            LIMIT 1""",
         (character["current_tile_id"],),
     ).fetchone()
