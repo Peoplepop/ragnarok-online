@@ -7,7 +7,7 @@
   <p class="hint" style="margin-top:-8px; margin-bottom:20px;">調整每回合等待秒數，以及升級所需經驗的成長曲線</p>
 
   <div class="panel" style="margin-bottom: 18px;">
-    <form method="post" action="{{ url_for('admin_update_game_settings') }}">
+    <form method="post" action="{{ url_for('admin.admin_update_game_settings') }}">
       <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
         <div>
           <label>每回合等待秒數</label>
@@ -131,7 +131,7 @@
 
   {% for g in hunting_grounds %}
   <div class="panel" style="margin-bottom: 18px;">
-    <form method="post" action="{{ url_for('admin_update_hunting_ground', ground_id=g.id) }}">
+    <form method="post" action="{{ url_for('admin.admin_update_hunting_ground', ground_id=g.id) }}">
       <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
         <div>
           <label>名稱</label>

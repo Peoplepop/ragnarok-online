@@ -152,12 +152,12 @@
       {% if session.get('username') %}
         <span class="user">{{ nav_display_name }}</span>
         {% if session.get('is_admin') %}
-        <a href="{{ url_for('admin') }}">管理後台</a>
+        <a href="{{ url_for('admin.admin') }}">管理後台</a>
         {% endif %}
-        <a href="{{ url_for('logout') }}">登出</a>
+        <a href="{{ url_for('auth.logout') }}">登出</a>
       {% else %}
-        <a href="{{ url_for('login') }}">登入</a>
-        <a href="{{ url_for('register') }}">註冊</a>
+        <a href="{{ url_for('auth.login') }}">登入</a>
+        <a href="{{ url_for('auth.register') }}">註冊</a>
       {% endif %}
     </div>
   </nav>

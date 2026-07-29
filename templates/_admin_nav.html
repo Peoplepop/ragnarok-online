@@ -1,7 +1,7 @@
 <div style="display:flex; gap:18px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:12px;">
-  <a href="{{ url_for('admin') }}" style="text-decoration:none; font-size:14px; color: {{ 'var(--gold-bright)' if active_tab=='countries' else 'var(--text-dim)' }};">國家管理</a>
-  <a href="{{ url_for('admin_sessions') }}" style="text-decoration:none; font-size:14px; color: {{ 'var(--gold-bright)' if active_tab=='sessions' else 'var(--text-dim)' }};">使用者狀態</a>
-  <a href="{{ url_for('admin_logs') }}" style="text-decoration:none; font-size:14px; color: {{ 'var(--gold-bright)' if active_tab=='logs' else 'var(--text-dim)' }};">系統紀錄</a>
-  <a href="{{ url_for('admin_settings') }}" style="text-decoration:none; font-size:14px; color: {{ 'var(--gold-bright)' if active_tab=='settings' else 'var(--text-dim)' }};">遊戲設定</a>
-  <a href="{{ url_for('game') }}" style="text-decoration:none; font-size:14px; color: var(--text-dim); margin-left:auto;">🎮 返回遊戲</a>
+  <a href="{{ url_for('admin.admin') }}" style="text-decoration:none; font-size:14px; color: {{ 'var(--gold-bright)' if active_tab=='countries' else 'var(--text-dim)' }};">國家管理</a>
+  <a href="{{ url_for('admin.admin_sessions') }}" style="text-decoration:none; font-size:14px; color: {{ 'var(--gold-bright)' if active_tab=='sessions' else 'var(--text-dim)' }};">使用者狀態</a>
+  <a href="{{ url_for('admin.admin_logs') }}" style="text-decoration:none; font-size:14px; color: {{ 'var(--gold-bright)' if active_tab=='logs' else 'var(--text-dim)' }};">系統紀錄</a>
+  <a href="{{ url_for('admin.admin_settings') }}" style="text-decoration:none; font-size:14px; color: {{ 'var(--gold-bright)' if active_tab=='settings' else 'var(--text-dim)' }};">遊戲設定</a>
+  <a href="{{ url_for('game.game') }}" style="text-decoration:none; font-size:14px; color: var(--text-dim); margin-left:auto;">🎮 返回遊戲</a>
 </div>

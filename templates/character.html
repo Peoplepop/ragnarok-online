@@ -6,7 +6,7 @@
     <h2 style="margin:0 0 4px; color:var(--gold-bright);">{{ character.character_name }}</h2>
     <div class="element" style="font-size:13px;">屬性：{{ character.element }}　|　所屬國家：{{ character.name }}　|　職業：{{ character.job_class }}（{{ job_tier_label }}）</div>
     <p style="margin:6px 0 0; color:var(--text-dim); font-size:13px;">{{ character.description }}</p>
-    <form method="post" action="{{ url_for('character_rename') }}" style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+    <form method="post" action="{{ url_for('character.character_rename') }}" style="margin-top:8px; display:flex; gap:8px; align-items:center;">
       <input type="text" name="new_name" placeholder="新角色名稱" style="max-width:180px;">
       <button type="submit">改名（{{ next_rename_cost }} 諸神幣）</button>
     </form>
@@ -79,7 +79,7 @@
     </div>
 
     {% if can_promote_tier1 %}
-    <form method="post" action="{{ url_for('character_promote_tier1') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <form method="post" action="{{ url_for('character.character_promote_tier1') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
       <select name="job_name">
         {% for name, info in tier1_jobs.items() %}
         <option value="{{ name }}">{{ name }}（{{ '力量' if info.primary == 'str' else '防禦' if info.primary == 'def' else '敏捷' if info.primary == 'agi' else '幸運' }}＋{{ '力量' if info.secondary == 'str' else '防禦' if info.secondary == 'def' else '敏捷' if info.secondary == 'agi' else '幸運' }}）</option>
@@ -88,7 +88,7 @@
       <button type="submit">一轉</button>
     </form>
     {% elif can_promote_tier2 %}
-    <form method="post" action="{{ url_for('character_promote_tier2') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <form method="post" action="{{ url_for('character.character_promote_tier2') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
       <select name="job_name">
         {% for name in tier2_choices %}
         {% set info = tier2_job_info[name] %}
@@ -98,7 +98,7 @@
       <button type="submit">二轉</button>
     </form>
     {% elif can_promote_tier3 %}
-    <form method="post" action="{{ url_for('character_promote_tier3') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <form method="post" action="{{ url_for('character.character_promote_tier3') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
       <select name="job_name">
         {% for name in tier3_choices %}
         {% set info = tier3_job_info[name] %}
@@ -108,12 +108,12 @@
       <button type="submit">三轉</button>
     </form>
     {% elif can_promote_tier4 %}
-    <form method="post" action="{{ url_for('character_promote_tier4') }}">
+    <form method="post" action="{{ url_for('character.character_promote_tier4') }}">
       <p class="hint" style="margin:0 0 10px;">四轉是職業旅程的終點，結果由你已精通的三個三轉職業之屬性權重決定，非隨機。</p>
       <button type="submit">四轉</button>
     </form>
     {% elif can_rebirth %}
-    <form method="post" action="{{ url_for('character_rebirth') }}">
+    <form method="post" action="{{ url_for('character.character_rebirth') }}">
       <p class="hint" style="margin:0 0 10px;">轉生會將等級重置為 10 級、職業回到初心者，並清除目前的屬性下限；國家、金幣、銀行存款、裝備與背包都不受影響。</p>
       <button type="submit">轉生</button>
     </form>
@@ -123,7 +123,7 @@
     </p>
     {% endif %}
 
-    <form method="post" action="{{ url_for('character_reroll_stats') }}" onsubmit="return confirm('花費 {{ stat_reroll_cost }} 諸神幣重洗目前累積的升級屬性點，結果是隨機的，可能比目前更差，確定要繼續嗎？');" style="margin-top:12px;">
+    <form method="post" action="{{ url_for('character.character_reroll_stats') }}" onsubmit="return confirm('花費 {{ stat_reroll_cost }} 諸神幣重洗目前累積的升級屬性點，結果是隨機的，可能比目前更差，確定要繼續嗎？');" style="margin-top:12px;">
       <button type="submit" {% if character.level <= 1 or character.currency < stat_reroll_cost %}disabled{% endif %}>花費 {{ stat_reroll_cost }} 諸神幣重洗屬性點</button>
     </form>
   </div>
@@ -137,7 +137,7 @@
       {% for entry in equipped_skills %}
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:6px;">
         <span>技能{{ entry.slot }}：{{ entry.skill.name }}（MP{{ entry.skill.mp_cost }}／{{ entry.skill.trigger_chance }}%／{{ entry.skill.multiplier }}x／以{{ stat_labels[entry.skill.stat] }}計算）</span>
-        <form method="post" action="{{ url_for('character_unequip_skill') }}">
+        <form method="post" action="{{ url_for('character.character_unequip_skill') }}">
           <input type="hidden" name="slot" value="{{ entry.slot }}">
           <button type="submit" style="padding:4px 12px; font-size:12px;">卸下</button>
         </form>
@@ -154,12 +154,12 @@
       {% for skill in skill_library %}
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--text-dim); margin-bottom:6px;">
         <span>{{ skill.name }}（MP{{ skill.mp_cost }}／{{ skill.trigger_chance }}%／{{ skill.multiplier }}x／以{{ stat_labels[skill.stat] }}計算）</span>
-        <form method="post" action="{{ url_for('character_equip_skill') }}">
+        <form method="post" action="{{ url_for('character.character_equip_skill') }}">
           <input type="hidden" name="skill_key" value="{{ skill.key }}">
           <input type="hidden" name="slot" value="1">
           <button type="submit" style="padding:4px 12px; font-size:12px;">配置為技能1</button>
         </form>
-        <form method="post" action="{{ url_for('character_equip_skill') }}">
+        <form method="post" action="{{ url_for('character.character_equip_skill') }}">
           <input type="hidden" name="skill_key" value="{{ skill.key }}">
           <input type="hidden" name="slot" value="2">
           <button type="submit" style="padding:4px 12px; font-size:12px;">配置為技能2</button>
@@ -173,7 +173,7 @@
     <div style="margin-bottom:14px;">
       <div style="color:var(--gold-bright); font-size:13px; margin-bottom:6px;">可學習技能</div>
       {% for skill in learnable_skills %}
-      <form method="post" action="{{ url_for('character_learn_skill') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--text-dim); margin-bottom:6px;">
+      <form method="post" action="{{ url_for('character.character_learn_skill') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--text-dim); margin-bottom:6px;">
         <input type="hidden" name="skill_key" value="{{ skill.key }}">
         <span>{{ skill.name }}（MP{{ skill.mp_cost }}／{{ skill.trigger_chance }}%／{{ skill.multiplier }}x／以{{ stat_labels[skill.stat] }}計算）</span>
         <span>費用 {{ skill.learn_cost }} 諸神幣</span>
@@ -187,7 +187,7 @@
     <div style="margin-bottom:14px;">
       <div style="color:var(--gold-bright); font-size:13px; margin-bottom:6px;">持有技能書</div>
       {% for entry in held_skill_books %}
-      <form method="post" action="{{ url_for('character_skill_book_use') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--text-dim); margin-bottom:6px;">
+      <form method="post" action="{{ url_for('character.character_skill_book_use') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--text-dim); margin-bottom:6px;">
         <input type="hidden" name="skill_key" value="{{ entry.skill.key }}">
         <span>📖 {{ entry.skill.name }}（持有 {{ entry.quantity }} 本，MP{{ entry.skill.mp_cost }}／{{ entry.skill.trigger_chance }}%／{{ entry.skill.multiplier }}x）</span>
         {% if character.job_tier == 4 %}
@@ -211,17 +211,17 @@
     <h3 style="margin:0 0 10px; color:var(--danger); font-size:15px;">🛠️ 管理者除錯工具</h3>
     <p class="hint" style="margin:0 0 10px;">僅供快速測試轉生數值變化，直接修改你自己角色的等級／轉生次數，不消耗冷卻時間</p>
     <div style="display:flex; gap:20px; flex-wrap:wrap;">
-      <form method="post" action="{{ url_for('character_debug_set_level') }}" style="display:flex; gap:8px; align-items:center;">
+      <form method="post" action="{{ url_for('character.character_debug_set_level') }}" style="display:flex; gap:8px; align-items:center;">
         <label style="margin:0; font-size:13px;">設定等級</label>
         <input type="text" inputmode="numeric" name="level" value="{{ character.level }}" style="width:80px; margin-bottom:0;">
         <button type="submit">套用</button>
       </form>
-      <form method="post" action="{{ url_for('character_debug_set_rebirth') }}" style="display:flex; gap:8px; align-items:center;">
+      <form method="post" action="{{ url_for('character.character_debug_set_rebirth') }}" style="display:flex; gap:8px; align-items:center;">
         <label style="margin:0; font-size:13px;">設定轉生次數</label>
         <input type="text" inputmode="numeric" name="rebirth_count" value="{{ character.rebirth_count }}" style="width:80px; margin-bottom:0;">
         <button type="submit">套用</button>
       </form>
-      <form method="post" action="{{ url_for('character_debug_reset') }}" onsubmit="return confirm('確定要重置角色嗎？等級、職業、轉生次數與精通紀錄都會清空，此動作無法復原。');">
+      <form method="post" action="{{ url_for('character.character_debug_reset') }}" onsubmit="return confirm('確定要重置角色嗎？等級、職業、轉生次數與精通紀錄都會清空，此動作無法復原。');">
         <button type="submit">🔄 重置為 1 級初心者</button>
       </form>
     </div>
@@ -280,7 +280,7 @@
         <span style="font-size:13px; color:var(--text-dim); min-width:40px;">{{ s.label }}</span>
         {% if s.item %}
         <span style="font-size:13px;">{{ s.item.name }}（{{ s.item.stat }}+{{ s.item.stat_bonus }}）</span>
-        <form method="post" action="{{ url_for('game_unequip') }}">
+        <form method="post" action="{{ url_for('game.game_unequip') }}">
           <input type="hidden" name="slot" value="{{ s.slot }}">
           <input type="hidden" name="next" value="character">
           <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">卸下</button>
@@ -304,7 +304,7 @@
         <div style="font-size:13px; color:var(--text-dim); margin-bottom:6px;">{{ label }}</div>
         <div style="display:flex; flex-direction:column; gap:6px;">
           {% for item in inventory_items[shop_type] %}
-          <form method="post" action="{{ url_for('game_equip') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <form method="post" action="{{ url_for('game.game_equip') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <input type="hidden" name="item_id" value="{{ item.id }}">
             <input type="hidden" name="next" value="character">
             <span style="font-size:13px;">{{ item.name }}（{{ item.stat }}+{{ item.stat_bonus }}）持有 {{ item.quantity }} 件</span>
@@ -321,7 +321,7 @@
     {% endif %}
   </div>
 
-  <p style="margin-top:20px;"><a href="{{ url_for('game') }}" class="btn">← 返回主畫面</a></p>
+  <p style="margin-top:20px;"><a href="{{ url_for('game.game') }}" class="btn">← 返回主畫面</a></p>
 
   <script>
     (function () {

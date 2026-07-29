@@ -7,7 +7,7 @@
     <h2 style="margin:0; color:var(--gold-bright); font-size:18px;">🏪 要塞商店</h2>
     <div style="display:flex; align-items:center; gap:14px;">
       <span style="color:var(--gold); font-size:14px;">💰 {{ character.currency }} 諸神幣</span>
-      <a href="{{ url_for('game') }}" class="btn" style="padding:6px 14px; font-size:13px;">← 返回主畫面</a>
+      <a href="{{ url_for('game.game') }}" class="btn" style="padding:6px 14px; font-size:13px;">← 返回主畫面</a>
     </div>
   </div>
 
@@ -20,7 +20,7 @@
     <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">✨ 背包裡有更好的裝備，要換上嗎？</h3>
     <div style="display:flex; flex-direction:column; gap:10px;">
       {% for s in suggestions %}
-      <form method="post" action="{{ url_for('game_equip') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <form method="post" action="{{ url_for('game.game_equip') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <input type="hidden" name="item_id" value="{{ s.item.id }}">
         <span style="font-size:13px; color:var(--text-dim); min-width:40px;">{{ s.label }}</span>
         <span style="font-size:13px;">
@@ -46,7 +46,7 @@
         <span style="font-size:13px; color:var(--text-dim); min-width:40px;">{{ s.label }}</span>
         {% if s.item %}
         <span style="font-size:13px;">{{ s.item.name }}（{{ s.item.stat }}+{{ s.item.stat_bonus }}）</span>
-        <form method="post" action="{{ url_for('game_unequip') }}">
+        <form method="post" action="{{ url_for('game.game_unequip') }}">
           <input type="hidden" name="slot" value="{{ s.slot }}">
           <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">卸下</button>
         </form>
@@ -61,7 +61,7 @@
   <div class="panel" style="margin-bottom:20px;">
     <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">購買裝備</h3>
     <p class="hint" style="margin-top:0;">標示【○○套裝】的裝備只在該國要塞販售，武器／防具／飾品同屬一套穿滿 2 件或 3 件會有額外屬性加成</p>
-    <form method="post" action="{{ url_for('game_shop_buy') }}">
+    <form method="post" action="{{ url_for('game.game_shop_buy') }}">
       {% for shop_type, label in shop_type_labels.items() %}
       {% if shop_items[shop_type] %}
       <div style="margin-bottom:14px;">
@@ -87,7 +87,7 @@
     <p class="hint" style="margin-top:0;">出售可回收原價的 {{ sell_back_percent }}%，身上穿著的裝備不會出現在背包裡，請先卸下再出售</p>
     {% set has_inventory = inventory_items.values() | map('length') | sum > 0 %}
     {% if has_inventory %}
-    <form method="post" action="{{ url_for('game_shop_sell') }}">
+    <form method="post" action="{{ url_for('game.game_shop_sell') }}">
       {% for shop_type, label in shop_type_labels.items() %}
       {% if inventory_items[shop_type] %}
       <div style="margin-bottom:14px;">

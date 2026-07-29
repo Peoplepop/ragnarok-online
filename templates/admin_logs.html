@@ -6,7 +6,7 @@
   <h2 style="color: var(--gold-bright); font-size: 18px; margin-top:0;">系統紀錄</h2>
   <div style="display:flex; justify-content:space-between; align-items:center; margin-top:-8px; margin-bottom:20px;">
     <p class="hint" style="margin:0;">顯示最近 200 筆註冊 / 登入 / 登出紀錄</p>
-    <form method="post" action="{{ url_for('admin_clear_logs') }}" onsubmit="return confirm('確定要清空全部系統紀錄嗎？此動作無法復原。');">
+    <form method="post" action="{{ url_for('admin.admin_clear_logs') }}" onsubmit="return confirm('確定要清空全部系統紀錄嗎？此動作無法復原。');">
       <button type="submit">清空紀錄</button>
     </form>
   </div>

@@ -102,7 +102,7 @@
     <p style="margin:10px 0 0; font-size:13px; color:var(--gold-bright);">📖 稀世珍寶！你獲得了技能書「{{ skill_book_dropped }}」，四轉後可用它學習這個技能！</p>
     {% endif %}
     {% if boss_room_available %}
-    <form method="post" action="{{ url_for('game_hunt_boss_room') }}" style="display:inline-block; margin-top:14px;">
+    <form method="post" action="{{ url_for('game.game_hunt_boss_room') }}" style="display:inline-block; margin-top:14px;">
       <p class="hint" style="margin:0 0 8px;">你擊敗了守衛怪，可以選擇挑戰魔王房間，或直接返回主畫面</p>
       <button type="submit">⚔️ 進攻魔王房間</button>
     </form>
@@ -123,7 +123,7 @@
   </div>
   {% endif %}
 
-  <a href="{{ url_for('game') }}" class="btn">← 返回主畫面</a>
+  <a href="{{ url_for('game.game') }}" class="btn">← 返回主畫面</a>
 
   <script>
     (function () {
