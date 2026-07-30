@@ -105,8 +105,11 @@
           {% endif %}
         </div>
       </div>
+    </div>
+  </div>
 
-      <div class="panel">
+  <div style="display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; margin-top:18px;">
+      <div class="panel" style="flex:1 1 380px;">
         <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">⚔️ 戰鬥與行動</h3>
 
         <div style="font-size:13px; color:var(--text-dim); margin-bottom:8px;">前往打怪</div>
@@ -217,7 +220,7 @@
       </div>
 
       {% if current_tile.tile_type == 'fortress' %}
-      <div class="panel">
+      <div class="panel" style="flex:1 1 380px;">
         <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">🏪 商店與資產</h3>
         <div style="display:flex; flex-direction:column; gap:10px; align-items:flex-start;">
           <a href="{{ url_for('game.game_shop') }}" class="btn" style="padding:8px 18px; font-size:13px;">🏪 前往要塞商店</a>
@@ -259,7 +262,6 @@
         </div>
       </div>
       {% endif %}
-    </div>
   </div>
 
   <div class="panel" style="margin-top:20px;">
