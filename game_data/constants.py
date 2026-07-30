@@ -131,9 +131,7 @@ STAT_LABELS = {"str": "力量", "def": "防禦", "agi": "敏捷", "luk": "幸運
 # MUST be kept in sync with db.py's _ensure_game_settings_columns
 # action_block_order ALTER TABLE DEFAULT string (same keys, same order).
 GAME_LAYOUT_BLOCKS = {
-    "location": "📍 你目前所在位置",
-    "combat": "⚔️ 戰鬥",
-    "move": "🚶 移動",
+    "action": "⚡ 行動",
     "conquer": "⚔️ 攻城／討伐",
     "tournament": "🏆 天下武道大會",
     "shop": "🏪 商店與交易",

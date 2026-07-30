@@ -7,8 +7,8 @@
   <p class="hint" style="margin:0 0 8px;">捐獻金額須為 1000 的倍數</p>
   <p class="hint" style="margin:0 0 8px;">今日已捐 {{ donated_today_display }} / 上限 {{ donate_cap }} 諸神幣</p>
   <form method="post" action="{{ url_for('game.game_treasury_donate') }}" style="display:flex; gap:8px; align-items:center;">
-    <input type="text" inputmode="numeric" name="amount" placeholder="1000的倍數" class="turn-action-control" style="width:120px;">
-    <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">捐獻</button>
+    <input type="text" inputmode="numeric" name="amount" placeholder="1000的倍數" style="width:120px;">
+    <button type="submit" style="padding:6px 14px; font-size:13px;">捐獻</button>
   </form>
 </div>
 {% endif %}

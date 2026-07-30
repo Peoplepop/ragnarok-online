@@ -1005,7 +1005,7 @@ def _ensure_game_settings_columns(conn):
     if "action_block_order" not in cols:
         conn.execute(
             "ALTER TABLE game_settings ADD COLUMN action_block_order TEXT NOT NULL "
-            "DEFAULT 'location,combat,move,conquer,tournament,shop,bank,treasury'"
+            "DEFAULT 'action,conquer,tournament,shop,bank,treasury'"
         )
 
 

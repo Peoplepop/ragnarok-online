@@ -5,12 +5,12 @@
   <p class="hint" style="margin:0 0 8px;">存入／提領金額須為 1000 的倍數</p>
   <div style="display:flex; flex-direction:column; gap:8px;">
     <form method="post" action="{{ url_for('game.game_bank_deposit') }}" style="display:flex; gap:8px; align-items:center;">
-      <input type="text" inputmode="numeric" name="amount" placeholder="1000的倍數" class="turn-action-control" style="width:120px;">
-      <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">存入</button>
+      <input type="text" inputmode="numeric" name="amount" placeholder="1000的倍數" style="width:120px;">
+      <button type="submit" style="padding:6px 14px; font-size:13px;">存入</button>
     </form>
     <form method="post" action="{{ url_for('game.game_bank_withdraw') }}" style="display:flex; gap:8px; align-items:center;">
-      <input type="text" inputmode="numeric" name="amount" placeholder="1000的倍數" class="turn-action-control" style="width:120px;">
-      <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">提領</button>
+      <input type="text" inputmode="numeric" name="amount" placeholder="1000的倍數" style="width:120px;">
+      <button type="submit" style="padding:6px 14px; font-size:13px;">提領</button>
     </form>
   </div>
 </div>

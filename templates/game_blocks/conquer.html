@@ -19,15 +19,15 @@
   <p class="hint" style="margin:0 0 8px; color:var(--danger);">你目前正在駐防中，攻打前必須先撤離駐防，請確認是否撤離並攻打</p>
   <form method="post" action="{{ url_for('game.game_conquer') }}">
     <input type="hidden" name="confirm_withdraw_garrison" value="1">
-    <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">確認撤離駐防並攻打</button>
+    <button type="submit" style="padding:6px 14px; font-size:13px;">確認撤離駐防並攻打</button>
   </form>
   {% elif current_tile.tile_type == 'neutral' %}
   <form method="post" action="{{ url_for('game.game_conquer') }}">
-    <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">⚔️ 討伐山賊領主</button>
+    <button type="submit" style="padding:6px 14px; font-size:13px;">⚔️ 討伐山賊領主</button>
   </form>
   {% else %}
   <form method="post" action="{{ url_for('game.game_conquer') }}">
-    <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">⚔️ 攻打此地</button>
+    <button type="submit" style="padding:6px 14px; font-size:13px;">⚔️ 攻打此地</button>
   </form>
   {% endif %}
 </div>

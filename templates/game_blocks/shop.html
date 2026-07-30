@@ -6,7 +6,7 @@
     <a href="{{ url_for('trade.trade_home') }}" class="btn" style="padding:8px 18px; font-size:13px;">🤝 交易</a>
     {% if current_hp < stats.hp or current_mp < stats.mp %}
     <form method="post" action="{{ url_for('game.game_recover') }}" style="display:flex; flex-direction:column; gap:6px;">
-      <button type="submit" class="turn-action-control" style="padding:8px 18px; font-size:13px;">✨ 回復 HP／MP（{{ recover_cost }} 諸神幣）</button>
+      <button type="submit" style="padding:8px 18px; font-size:13px;">✨ 回復 HP／MP（{{ recover_cost }} 諸神幣）</button>
       <span class="hint" style="margin:0;">費用將計入「{{ current_tile.country_name }}」國庫</span>
     </form>
     {% endif %}
