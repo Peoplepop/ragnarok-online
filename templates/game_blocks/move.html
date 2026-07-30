@@ -1,0 +1,28 @@
+<div class="panel" style="flex:1 1 380px;">
+  <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">🚶 移動</h3>
+  <div style="font-size:13px; color:var(--text-dim); margin-bottom:8px;">移動到相鄰地點</div>
+  {% if move_targets %}
+  <form method="post" action="{{ url_for('game.game_move') }}" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+    <select name="tile_id" class="turn-action-control">
+      {% for t in move_targets %}
+      <option value="{{ t.tile_id }}">{{ t.display_name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">移動</button>
+  </form>
+  {% else %}
+  <p class="hint" style="margin:0;">附近沒有可以移動的地點</p>
+  {% endif %}
+  {% if pending_move_tile_id %}
+  <div style="margin-top:10px; padding:10px 12px; background:var(--panel-2); border-radius:6px; border:1px solid var(--danger);">
+    <p class="hint" style="margin:0 0 8px; color:var(--danger);">
+      你目前正在駐防中，移動到「{{ pending_move_tile_name }}」將會變更或解除駐防狀態，請確認是否繼續
+    </p>
+    <form method="post" action="{{ url_for('game.game_move') }}">
+      <input type="hidden" name="tile_id" value="{{ pending_move_tile_id }}">
+      <input type="hidden" name="confirm_garrison_move" value="1">
+      <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">確認移動</button>
+    </form>
+  </div>
+  {% endif %}
+</div>

@@ -12,6 +12,7 @@ from flask import redirect, url_for, session, flash
 from db import get_db
 from game_data.constants import (
     MIN_USERNAME_LEN, MIN_PASSWORD_LEN, MAX_PASSWORD_LEN, MIN_CHARACTER_NAME_LEN, MAX_CHARACTER_NAME_LEN,
+    GAME_LAYOUT_BLOCKS,
 )
 from game_data.avatars import BUILT_IN_AVATAR_KEYS, DEFAULT_AVATAR_KEY
 
@@ -215,6 +216,33 @@ def _format_duration(seconds):
     if minutes:
         return f"{minutes} 分 {sec} 秒"
     return f"{sec} 秒"
+
+
+def _sanitized_action_block_order(raw_value):
+    """Parse+sanitize a comma-separated action_block_order string (either the
+    stored game_settings.action_block_order value, or a raw client-submitted
+    `order` form field) into a complete, valid permutation of
+    GAME_LAYOUT_BLOCKS's keys.
+
+    Shared by game.py's _render_game (read path) and admin.py's
+    admin_update_layout (write path, where the input is untrusted client
+    data) so both apply the exact same rules: keep only known keys, dedupe
+    preserving first occurrence, preserve the given order, then append any
+    missing valid keys (in GAME_LAYOUT_BLOCKS's own order) at the end -- this
+    guarantees the result always contains every key exactly once, so a block
+    can never silently disappear from the page even if the DB row or a
+    submitted form is incomplete/garbled."""
+    seen = set()
+    ordered = []
+    for key in (raw_value or "").split(","):
+        key = key.strip()
+        if key in GAME_LAYOUT_BLOCKS and key not in seen:
+            seen.add(key)
+            ordered.append(key)
+    for key in GAME_LAYOUT_BLOCKS:
+        if key not in seen:
+            ordered.append(key)
+    return ordered
 
 
 def _add_to_inventory(db, character_id, item_id, quantity=1):

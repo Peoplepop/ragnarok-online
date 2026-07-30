@@ -258,6 +258,52 @@
     </form>
   </div>
 
+  <div class="panel" style="margin-bottom:20px;">
+    <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">🧩 遊戲畫面排版</h3>
+    <p class="hint" style="margin:0 0 12px;">拖曳調整玩家在遊戲主畫面看到的區塊順序（地圖固定在最左側，不受此排序影響）</p>
+    <form method="post" action="{{ url_for('admin.admin_update_layout') }}">
+      <ul id="layout-order-list" style="list-style:none; margin:0 0 14px; padding:0; display:flex; flex-direction:column; gap:6px; max-width:380px;">
+        {% for key in current_action_block_order %}
+        <li draggable="true" data-key="{{ key }}" style="padding:10px 14px; background:var(--panel-2); border:1px solid var(--border); border-radius:6px; cursor:grab; font-size:13px; user-select:none;">
+          ☰ {{ game_layout_blocks[key] }}
+        </li>
+        {% endfor %}
+      </ul>
+      <input type="hidden" name="order" id="layout-order-input">
+      <button type="submit">儲存排版</button>
+    </form>
+  </div>
+
+  <script>
+    (function () {
+      var list = document.getElementById("layout-order-list");
+      var input = document.getElementById("layout-order-input");
+      var form = list ? list.closest("form") : null;
+      if (!list || !form) return;
+      var dragging = null;
+
+      list.addEventListener("dragstart", function (e) {
+        dragging = e.target.closest("li");
+        e.dataTransfer.effectAllowed = "move";
+      });
+      list.addEventListener("dragover", function (e) {
+        e.preventDefault();
+        var target = e.target.closest("li");
+        if (!target || target === dragging || !list.contains(target)) return;
+        var rect = target.getBoundingClientRect();
+        var before = (e.clientY - rect.top) < rect.height / 2;
+        list.insertBefore(dragging, before ? target : target.nextSibling);
+      });
+
+      form.addEventListener("submit", function () {
+        var keys = Array.prototype.map.call(list.querySelectorAll("li"), function (li) {
+          return li.getAttribute("data-key");
+        });
+        input.value = keys.join(",");
+      });
+    })();
+  </script>
+
   <h2 style="color: var(--gold-bright); font-size: 18px;">打怪場管理</h2>
   <p class="hint" style="margin-top:-8px; margin-bottom:20px;">調整各打怪場的建議等級區間與每次擊殺經驗值</p>
 

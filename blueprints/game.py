@@ -11,7 +11,7 @@ from web_helpers import (
     _war_window_label, _war_window_kind_for_tile_type, _format_duration, _add_to_inventory,
     _remove_from_inventory, _in_any_war_window, _taipei_now, _parse_dt,
     _current_war_window_end, _morale_buff_active, _tournament_registration_open,
-    _taipei_time_label, ACTION_DT_FORMAT, _major_event_feed,
+    _taipei_time_label, ACTION_DT_FORMAT, _major_event_feed, _sanitized_action_block_order,
 )
 from game_data.constants import (
     SHOP_TYPE_LABELS, SLOT_LABELS, EQUIP_SLOT_COLUMNS, GOVERNMENT_ROLES, tile_display_name,
@@ -404,6 +404,7 @@ def _render_game(**extra):
         tournament_deadline_label=tournament_deadline_label,
         major_events=major_events,
         chat_message_max_len=CHAT_MESSAGE_MAX_LEN,
+        action_block_order=_sanitized_action_block_order(settings["action_block_order"]),
     )
     context.update(extra)
     return render_template("game.html", **context)

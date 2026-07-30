@@ -5,10 +5,10 @@ from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 
 from db import get_db, LEVEL_CAP, log_activity
-from web_helpers import admin_required, _parse_dt, _valid_war_time, _format_duration
+from web_helpers import admin_required, _parse_dt, _valid_war_time, _format_duration, _sanitized_action_block_order
 from game_data.constants import (
     STAT_FIELDS, IDLE_THRESHOLD_MINUTES, ACTION_LABELS, GOVERNMENT_ROLES,
-    FEEDBACK_STATUSES, FEEDBACK_STATUS_LABELS,
+    FEEDBACK_STATUSES, FEEDBACK_STATUS_LABELS, GAME_LAYOUT_BLOCKS,
 )
 
 admin_bp = Blueprint("admin", __name__)
@@ -346,6 +346,8 @@ def admin_settings():
     return render_template(
         "admin_settings.html",
         settings=settings, hunting_grounds=hunting_grounds, active_tab="settings", level_cap=LEVEL_CAP,
+        game_layout_blocks=GAME_LAYOUT_BLOCKS,
+        current_action_block_order=_sanitized_action_block_order(settings["action_block_order"]),
     )
 
 
@@ -562,6 +564,26 @@ def admin_update_game_settings():
     db.close()
 
     flash("已更新遊戲設定")
+    return redirect(url_for("admin.admin_settings"))
+
+
+@admin_bp.route("/admin/layout/update", methods=["POST"])
+@admin_required
+def admin_update_layout():
+    # Never trust the client's drag-reorder result as-is -- sanitize the same
+    # way the read path does, so a malicious/buggy submission can't corrupt
+    # the stored order into garbage or drop a block category permanently.
+    order = _sanitized_action_block_order(request.form.get("order", ""))
+
+    db = get_db()
+    db.execute(
+        "UPDATE game_settings SET action_block_order = ? WHERE id = 1",
+        (",".join(order),),
+    )
+    db.commit()
+    db.close()
+
+    flash("已更新遊戲畫面排版")
     return redirect(url_for("admin.admin_settings"))
 
 
