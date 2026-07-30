@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}新手指引 - 五行爭鋒{% endblock %}
+
+{% block content %}
+  <div id="tutorial-choice" class="panel" style="max-width:520px; margin:40px auto; text-align:center;">
+    <h2 style="margin-top:0; color:var(--gold-bright); font-size:20px;">歡迎來到五行爭鋒</h2>
+    <p class="hint" style="font-size:14px;">只需要 1-2 分鐘，帶你快速了解遊戲的核心玩法</p>
+    <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:20px;">
+      <button type="button" id="tutorial-start-btn">開始新手指引</button>
+      <form method="post" action="{{ url_for('character.character_tutorial_dismiss') }}">
+        <button type="submit" class="btn" style="background:var(--panel-2); color:var(--text-dim); box-shadow:none;">略過，直接開始遊戲</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="tutorial-steps" class="panel" style="max-width:600px; margin:40px auto; display:none;">
+    <div class="tutorial-step">
+      <h3 style="margin-top:0; color:var(--gold-bright); font-size:17px;">🌍 歡迎來到五行爭鋒</h3>
+      <ul style="font-size:14px; line-height:1.9; padding-left:20px; margin:0;">
+        <li>選擇金、木、水、火、土其中一個國家，五行屬性彼此相生相剋</li>
+        <li>建立角色後就能立刻開始你的冒險</li>
+      </ul>
+    </div>
+    <div class="tutorial-step" style="display:none;">
+      <h3 style="margin-top:0; color:var(--gold-bright); font-size:17px;">📈 角色成長</h3>
+      <ul style="font-size:14px; line-height:1.9; padding-left:20px; margin:0;">
+        <li>六圍：HP、MP、力量、防禦、敏捷、幸運</li>
+        <li>等級上限 200，透過轉職（一轉→二轉→三轉）與轉生持續變強，最終邁向四轉</li>
+      </ul>
+    </div>
+    <div class="tutorial-step" style="display:none;">
+      <h3 style="margin-top:0; color:var(--gold-bright); font-size:17px;">🗺️ 地圖與戰鬥</h3>
+      <ul style="font-size:14px; line-height:1.9; padding-left:20px; margin:0;">
+        <li>在地圖上移動、前往打怪場練功，或討伐無主之地的山賊領主</li>
+        <li>攻打敵國的城鎮與要塞可以擴張自己國家的領土</li>
+      </ul>
+    </div>
+    <div class="tutorial-step" style="display:none;">
+      <h3 style="margin-top:0; color:var(--gold-bright); font-size:17px;">🏪 商店與經濟</h3>
+      <ul style="font-size:14px; line-height:1.9; padding-left:20px; margin:0;">
+        <li>用諸神幣購買裝備、回復 HP/MP</li>
+        <li>銀行可以存款保護財產避免戰敗損失，捐獻國庫還能累積貢獻值</li>
+      </ul>
+    </div>
+    <div class="tutorial-step" style="display:none;">
+      <h3 style="margin-top:0; color:var(--gold-bright); font-size:17px;">👑 國家與國戰</h3>
+      <ul style="font-size:14px; line-height:1.9; padding-left:20px; margin:0;">
+        <li>每個國家都有國王、參謀、大將軍，各自握有不同權限</li>
+        <li>國戰時段才能攻城，也能透過挑戰奪取這些職位</li>
+      </ul>
+    </div>
+    <div class="tutorial-step" style="display:none;">
+      <h3 style="margin-top:0; color:var(--gold-bright); font-size:17px;">🏆 天下武道大會與交易</h3>
+      <ul style="font-size:14px; line-height:1.9; padding-left:20px; margin:0;">
+        <li>每週固定時間開放報名，單淘汰賽制一較高下，優勝者名留青史</li>
+        <li>也能跟其他玩家自由交易道具與諸神幣</li>
+      </ul>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:24px;">
+      <button type="button" id="tutorial-prev">← 上一步</button>
+      <span id="tutorial-dots" class="hint" style="margin:0;"></span>
+      <button type="button" id="tutorial-next">下一步 →</button>
+    </div>
+    <div style="text-align:center; margin-top:14px;">
+      <form method="post" action="{{ url_for('character.character_tutorial_dismiss') }}">
+        <button type="submit" class="btn" style="background:none; box-shadow:none; color:var(--text-dim); font-weight:400; padding:4px;">略過教學</button>
+      </form>
+    </div>
+  </div>
+
+  <form id="tutorial-finish-form" method="post" action="{{ url_for('character.character_tutorial_dismiss') }}" style="display:none;"></form>
+
+  <script>
+    (function () {
+      var choiceEl = document.getElementById('tutorial-choice');
+      var stepsEl = document.getElementById('tutorial-steps');
+      var steps = document.querySelectorAll('.tutorial-step');
+      var prevBtn = document.getElementById('tutorial-prev');
+      var nextBtn = document.getElementById('tutorial-next');
+      var dotsEl = document.getElementById('tutorial-dots');
+      var finishForm = document.getElementById('tutorial-finish-form');
+      var current = 0;
+
+      function render() {
+        steps.forEach(function (el, i) {
+          el.style.display = (i === current) ? '' : 'none';
+        });
+        prevBtn.disabled = current === 0;
+        nextBtn.textContent = (current === steps.length - 1) ? '開始遊戲 →' : '下一步 →';
+        dotsEl.textContent = (current + 1) + ' / ' + steps.length;
+      }
+
+      prevBtn.addEventListener('click', function () {
+        if (current > 0) {
+          current -= 1;
+          render();
+        }
+      });
+      nextBtn.addEventListener('click', function () {
+        if (current < steps.length - 1) {
+          current += 1;
+          render();
+        } else {
+          finishForm.submit();
+        }
+      });
+
+      document.getElementById('tutorial-start-btn').addEventListener('click', function () {
+        choiceEl.style.display = 'none';
+        stepsEl.style.display = '';
+        current = 0;
+        render();
+      });
+    })();
+  </script>
+{% endblock %}

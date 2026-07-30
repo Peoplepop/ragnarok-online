@@ -412,6 +412,13 @@ def _render_game(**extra):
 @game_bp.route("/game")
 @character_required
 def game():
+    db = get_db()
+    tutorial_seen = db.execute(
+        "SELECT tutorial_seen FROM characters WHERE user_id = ?", (session["user_id"],)
+    ).fetchone()["tutorial_seen"]
+    db.close()
+    if not tutorial_seen:
+        return redirect(url_for("character.character_tutorial"))
     return _render_game()
 
 

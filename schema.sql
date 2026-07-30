@@ -100,6 +100,12 @@ CREATE TABLE IF NOT EXISTS characters (
     garrison_cooldown_until TEXT,
     income_claimed_at TEXT,
     siege_attack_next_at TEXT,
+    -- DEFAULT 1 so a fresh DB's schema-created rows never get nagged with the
+    -- tutorial prompt; _create_character() explicitly overrides this to 0 in
+    -- its INSERT so brand-new characters DO get prompted (see the
+    -- ALTER TABLE migration note in db.py for why existing DBs are backfilled
+    -- the same way).
+    tutorial_seen INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (country_id) REFERENCES countries(id),

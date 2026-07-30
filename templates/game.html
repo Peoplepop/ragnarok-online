@@ -22,6 +22,7 @@
       <span style="color:var(--gold); font-size:14px;">💰 {{ character.currency }} 諸神幣</span>
       <a href="{{ url_for('game.countries_page') }}" class="btn" style="padding:6px 14px; font-size:13px;">國家詳情</a>
       <a href="{{ url_for('character.character_page') }}" class="btn" style="padding:6px 14px; font-size:13px;">角色詳情</a>
+      <a href="{{ url_for('character.character_lookup') }}" class="btn" style="padding:6px 14px; font-size:13px;">🔍 角色查詢</a>
       <a href="{{ url_for('feedback.feedback_page') }}" class="btn" style="padding:6px 14px; font-size:13px;">📮 意見箱</a>
     </div>
   </div>
@@ -80,20 +81,6 @@
     </div>
 
     <div style="flex:1 1 260px; min-width:240px; display:flex; flex-direction:column; gap:14px;">
-      <div class="panel">
-        <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">📜 重大事件</h3>
-        {% if major_events %}
-        <div id="major-events-list" style="display:flex; flex-direction:column; gap:10px; min-height:100px;"></div>
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
-          <button type="button" id="major-events-prev" class="btn" style="padding:4px 10px; font-size:12px;">← 上一頁</button>
-          <span id="major-events-page-label" style="font-size:11px; color:var(--text-dim);"></span>
-          <button type="button" id="major-events-next" class="btn" style="padding:4px 10px; font-size:12px;">下一頁 →</button>
-        </div>
-        {% else %}
-        <p class="hint" style="margin:0;">目前還沒有重大事件</p>
-        {% endif %}
-      </div>
-
       <div class="panel">
         <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">⚔️ 戰鬥</h3>
         <div style="font-size:13px; color:var(--text-dim); margin-bottom:8px;">前往打怪</div>
@@ -154,123 +141,137 @@
         </div>
       </div>
       {% endif %}
+
+      <div class="panel">
+        <h3 style="margin:0 0 4px; color:var(--gold-bright); font-size:15px;">你目前在「{{ current_tile.display_name }}」</h3>
+        <p class="hint" id="cooldown-display" style="margin-top:0; {% if cooldown_seconds <= 0 %}display:none;{% endif %}">
+          冷卻中，還需等待 <span id="cooldown-seconds">{{ cooldown_seconds }}</span> 秒才能行動
+        </p>
+
+        <div style="margin-top:14px; padding:10px 12px; background:var(--panel-2); border-radius:6px;">
+          {% if garrison %}
+          <div style="font-size:13px; color:var(--gold-bright); margin-bottom:8px;">
+            🛡️ 你目前駐防於「{{ garrison_tile.display_name if garrison_tile else "未知地點" }}」
+          </div>
+          <form method="post" action="{{ url_for('game.game_garrison_withdraw') }}">
+            <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">撤離駐防</button>
+          </form>
+          {% elif can_station_here %}
+          <div style="font-size:13px; color:var(--text-dim); margin-bottom:8px;">你目前沒有駐防，可以在此地（自己國家的要塞／城鎮）駐防守衛</div>
+          <form method="post" action="{{ url_for('game.game_garrison_station') }}">
+            <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">🛡️ 駐防此地</button>
+          </form>
+          {% else %}
+          <div style="font-size:13px; color:var(--text-dim);">你目前沒有駐防</div>
+          {% endif %}
+        </div>
+
+        <div style="margin-top:18px;">
+          <div style="font-size:13px; color:var(--text-dim); margin-bottom:8px;">移動到相鄰地點</div>
+          {% if move_targets %}
+          <form method="post" action="{{ url_for('game.game_move') }}" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <select name="tile_id" class="turn-action-control">
+              {% for t in move_targets %}
+              <option value="{{ t.tile_id }}">{{ t.display_name }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">移動</button>
+          </form>
+          {% else %}
+          <p class="hint" style="margin:0;">附近沒有可以移動的地點</p>
+          {% endif %}
+          {% if pending_move_tile_id %}
+          <div style="margin-top:10px; padding:10px 12px; background:var(--panel-2); border-radius:6px; border:1px solid var(--danger);">
+            <p class="hint" style="margin:0 0 8px; color:var(--danger);">
+              你目前正在駐防中，移動到「{{ pending_move_tile_name }}」將會變更或解除駐防狀態，請確認是否繼續
+            </p>
+            <form method="post" action="{{ url_for('game.game_move') }}">
+              <input type="hidden" name="tile_id" value="{{ pending_move_tile_id }}">
+              <input type="hidden" name="confirm_garrison_move" value="1">
+              <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">確認移動</button>
+            </form>
+          </div>
+          {% endif %}
+        </div>
+
+        {% if can_attack_tile %}
+        <div style="margin-top:18px; border-top:1px solid var(--border); padding-top:14px;">
+          {% if current_tile.tile_type == 'neutral' %}
+          <div style="font-size:13px; color:var(--text-dim); margin-bottom:8px;">
+            此地由山賊盤據，尚未被任何國家佔領<br>
+            山賊領主 HP {{ bandit_hp }}/{{ bandit_hp_max }}
+          </div>
+          {% else %}
+          <div style="font-size:13px; color:var(--text-dim); margin-bottom:8px;">
+            此地屬於「{{ current_tile.country_name }}」，防衛隊等級 {{ defense_level }}
+          </div>
+          {% endif %}
+          {% if current_hp <= 0 %}
+          <p class="hint" style="margin:0; color:var(--danger);">HP 已耗盡，無法{% if current_tile.tile_type == 'neutral' %}討伐山賊{% else %}攻城{% endif %}，請回到要塞選擇「回復」</p>
+          {% elif not in_war_window %}
+          <p class="hint" style="margin:0; color:var(--danger);">現在不是國戰時段，無法攻打。開放時段：{{ war_window_label }}（台灣時間）</p>
+          {% elif pending_conquer_confirm %}
+          <p class="hint" style="margin:0 0 8px; color:var(--danger);">你目前正在駐防中，攻打前必須先撤離駐防，請確認是否撤離並攻打</p>
+          <form method="post" action="{{ url_for('game.game_conquer') }}">
+            <input type="hidden" name="confirm_withdraw_garrison" value="1">
+            <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">確認撤離駐防並攻打</button>
+          </form>
+          {% elif current_tile.tile_type == 'neutral' %}
+          <form method="post" action="{{ url_for('game.game_conquer') }}">
+            <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">⚔️ 討伐山賊領主</button>
+          </form>
+          {% else %}
+          <form method="post" action="{{ url_for('game.game_conquer') }}">
+            <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">⚔️ 攻打此地</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {% if current_tile.tile_type == 'fortress' %}
+        <div style="margin-top:24px; border-top:1px solid var(--border); padding-top:18px;">
+          <div style="font-size:13px; color:var(--gold-bright); margin-bottom:8px;">🏆 天下武道大會</div>
+          {% if tournament_already_registered %}
+          <p class="hint" style="margin:0;">你已經報名本屆天下武道大會，請於開賽後至 <a href="{{ url_for('tournament.tournament_page') }}">武道大會</a> 查看賽果</p>
+          {% elif tournament_registration_open %}
+          <p class="hint" style="margin:0 0 8px;">
+            報名費 {{ tournament_fee }} 諸神幣，報名截止：{{ tournament_deadline_label }}（台灣時間）
+          </p>
+          <form method="post" action="{{ url_for('tournament.tournament_register') }}">
+            <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">🏆 報名天下武道大會</button>
+          </form>
+          {% else %}
+          <p class="hint" style="margin:0;">目前不是報名時間，請至 <a href="{{ url_for('tournament.tournament_page') }}">武道大會</a> 查看賽程與歷代優勝者</p>
+          {% endif %}
+        </div>
+
+        <div style="margin-top:18px; border-top:1px solid var(--border); padding-top:18px;">
+          <div style="font-size:13px; color:var(--gold-bright); margin-bottom:8px;">
+            🏛️ {{ character.name }}國庫：{{ own_treasury }} 諸神幣
+          </div>
+          <p class="hint" style="margin:0 0 8px;">捐獻金額須為 1000 的倍數</p>
+          <p class="hint" style="margin:0 0 8px;">今日已捐 {{ donated_today_display }} / 上限 {{ donate_cap }} 諸神幣</p>
+          <form method="post" action="{{ url_for('game.game_treasury_donate') }}" style="display:flex; gap:8px; align-items:center;">
+            <input type="text" inputmode="numeric" name="amount" placeholder="1000的倍數" class="turn-action-control" style="width:120px;">
+            <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">捐獻</button>
+          </form>
+        </div>
+        {% endif %}
+      </div>
     </div>
   </div>
 
   <div class="panel" style="margin-top:20px;">
-    <h3 style="margin:0 0 4px; color:var(--gold-bright); font-size:15px;">你目前在「{{ current_tile.display_name }}」</h3>
-    <p class="hint" id="cooldown-display" style="margin-top:0; {% if cooldown_seconds <= 0 %}display:none;{% endif %}">
-      冷卻中，還需等待 <span id="cooldown-seconds">{{ cooldown_seconds }}</span> 秒才能行動
-    </p>
-
-    <div style="margin-top:14px; padding:10px 12px; background:var(--panel-2); border-radius:6px;">
-      {% if garrison %}
-      <div style="font-size:13px; color:var(--gold-bright); margin-bottom:8px;">
-        🛡️ 你目前駐防於「{{ garrison_tile.display_name if garrison_tile else "未知地點" }}」
-      </div>
-      <form method="post" action="{{ url_for('game.game_garrison_withdraw') }}">
-        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">撤離駐防</button>
-      </form>
-      {% elif can_station_here %}
-      <div style="font-size:13px; color:var(--text-dim); margin-bottom:8px;">你目前沒有駐防，可以在此地（自己國家的要塞／城鎮）駐防守衛</div>
-      <form method="post" action="{{ url_for('game.game_garrison_station') }}">
-        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">🛡️ 駐防此地</button>
-      </form>
-      {% else %}
-      <div style="font-size:13px; color:var(--text-dim);">你目前沒有駐防</div>
-      {% endif %}
+    <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">📜 重大事件</h3>
+    {% if major_events %}
+    <div id="major-events-list" style="display:flex; flex-direction:column; gap:10px; min-height:100px;"></div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+      <button type="button" id="major-events-prev" class="btn" style="padding:4px 10px; font-size:12px;">← 上一頁</button>
+      <span id="major-events-page-label" style="font-size:11px; color:var(--text-dim);"></span>
+      <button type="button" id="major-events-next" class="btn" style="padding:4px 10px; font-size:12px;">下一頁 →</button>
     </div>
-
-    <div style="margin-top:18px;">
-      <div style="font-size:13px; color:var(--text-dim); margin-bottom:8px;">移動到相鄰地點</div>
-      {% if move_targets %}
-      <form method="post" action="{{ url_for('game.game_move') }}" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-        <select name="tile_id" class="turn-action-control">
-          {% for t in move_targets %}
-          <option value="{{ t.tile_id }}">{{ t.display_name }}</option>
-          {% endfor %}
-        </select>
-        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">移動</button>
-      </form>
-      {% else %}
-      <p class="hint" style="margin:0;">附近沒有可以移動的地點</p>
-      {% endif %}
-      {% if pending_move_tile_id %}
-      <div style="margin-top:10px; padding:10px 12px; background:var(--panel-2); border-radius:6px; border:1px solid var(--danger);">
-        <p class="hint" style="margin:0 0 8px; color:var(--danger);">
-          你目前正在駐防中，移動到「{{ pending_move_tile_name }}」將會變更或解除駐防狀態，請確認是否繼續
-        </p>
-        <form method="post" action="{{ url_for('game.game_move') }}">
-          <input type="hidden" name="tile_id" value="{{ pending_move_tile_id }}">
-          <input type="hidden" name="confirm_garrison_move" value="1">
-          <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">確認移動</button>
-        </form>
-      </div>
-      {% endif %}
-    </div>
-
-    {% if can_attack_tile %}
-    <div style="margin-top:18px; border-top:1px solid var(--border); padding-top:14px;">
-      {% if current_tile.tile_type == 'neutral' %}
-      <div style="font-size:13px; color:var(--text-dim); margin-bottom:8px;">
-        此地由山賊盤據，尚未被任何國家佔領<br>
-        山賊領主 HP {{ bandit_hp }}/{{ bandit_hp_max }}
-      </div>
-      {% else %}
-      <div style="font-size:13px; color:var(--text-dim); margin-bottom:8px;">
-        此地屬於「{{ current_tile.country_name }}」，防衛隊等級 {{ defense_level }}
-      </div>
-      {% endif %}
-      {% if current_hp <= 0 %}
-      <p class="hint" style="margin:0; color:var(--danger);">HP 已耗盡，無法{% if current_tile.tile_type == 'neutral' %}討伐山賊{% else %}攻城{% endif %}，請回到要塞選擇「回復」</p>
-      {% elif not in_war_window %}
-      <p class="hint" style="margin:0; color:var(--danger);">現在不是國戰時段，無法攻打。開放時段：{{ war_window_label }}（台灣時間）</p>
-      {% elif pending_conquer_confirm %}
-      <p class="hint" style="margin:0 0 8px; color:var(--danger);">你目前正在駐防中，攻打前必須先撤離駐防，請確認是否撤離並攻打</p>
-      <form method="post" action="{{ url_for('game.game_conquer') }}">
-        <input type="hidden" name="confirm_withdraw_garrison" value="1">
-        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">確認撤離駐防並攻打</button>
-      </form>
-      {% elif current_tile.tile_type == 'neutral' %}
-      <form method="post" action="{{ url_for('game.game_conquer') }}">
-        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">⚔️ 討伐山賊領主</button>
-      </form>
-      {% else %}
-      <form method="post" action="{{ url_for('game.game_conquer') }}">
-        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">⚔️ 攻打此地</button>
-      </form>
-      {% endif %}
-    </div>
-    {% endif %}
-
-    {% if current_tile.tile_type == 'fortress' %}
-    <div style="margin-top:24px; border-top:1px solid var(--border); padding-top:18px;">
-      <div style="font-size:13px; color:var(--gold-bright); margin-bottom:8px;">🏆 天下武道大會</div>
-      {% if tournament_already_registered %}
-      <p class="hint" style="margin:0;">你已經報名本屆天下武道大會，請於開賽後至 <a href="{{ url_for('tournament.tournament_page') }}">武道大會</a> 查看賽果</p>
-      {% elif tournament_registration_open %}
-      <p class="hint" style="margin:0 0 8px;">
-        報名費 {{ tournament_fee }} 諸神幣，報名截止：{{ tournament_deadline_label }}（台灣時間）
-      </p>
-      <form method="post" action="{{ url_for('tournament.tournament_register') }}">
-        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">🏆 報名天下武道大會</button>
-      </form>
-      {% else %}
-      <p class="hint" style="margin:0;">目前不是報名時間，請至 <a href="{{ url_for('tournament.tournament_page') }}">武道大會</a> 查看賽程與歷代優勝者</p>
-      {% endif %}
-    </div>
-
-    <div style="margin-top:18px; border-top:1px solid var(--border); padding-top:18px;">
-      <div style="font-size:13px; color:var(--gold-bright); margin-bottom:8px;">
-        🏛️ {{ character.name }}國庫：{{ own_treasury }} 諸神幣
-      </div>
-      <p class="hint" style="margin:0 0 8px;">捐獻金額須為 1000 的倍數</p>
-      <p class="hint" style="margin:0 0 8px;">今日已捐 {{ donated_today_display }} / 上限 {{ donate_cap }} 諸神幣</p>
-      <form method="post" action="{{ url_for('game.game_treasury_donate') }}" style="display:flex; gap:8px; align-items:center;">
-        <input type="text" inputmode="numeric" name="amount" placeholder="1000的倍數" class="turn-action-control" style="width:120px;">
-        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">捐獻</button>
-      </form>
-    </div>
+    {% else %}
+    <p class="hint" style="margin:0;">目前還沒有重大事件</p>
     {% endif %}
   </div>
 

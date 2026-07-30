@@ -65,7 +65,8 @@ def _create_character(db, country_id, character_name):
 
     try:
         db.execute(
-            "INSERT INTO characters (user_id, country_id, current_tile_id, name) VALUES (?, ?, ?, ?)",
+            """INSERT INTO characters (user_id, country_id, current_tile_id, name, tutorial_seen)
+               VALUES (?, ?, ?, ?, 0)""",
             (session["user_id"], country["id"], fortress["id"], character_name),
         )
         db.commit()
@@ -132,6 +133,32 @@ def character_create():
     session.pop("pending_character_name", None)
     session["character_name"] = character_name
     flash(f"歡迎來到{country['name']}，{character_name}！")
+    return redirect(url_for("game.game"))
+
+
+@character_bp.route("/character/tutorial")
+@character_required
+def character_tutorial():
+    """New-character onboarding: an accept/skip prompt, then (if accepted) a
+    client-side-only slideshow -- no per-step server round trip, only the
+    final "skip" or "開始遊戲" action ever POSTs. Gated by game.game() which
+    redirects here whenever the character's own tutorial_seen is still 0;
+    this view itself doesn't need to re-check that (harmless to visit again
+    even after it's been marked seen)."""
+    return render_template("tutorial.html")
+
+
+@character_bp.route("/character/tutorial/dismiss", methods=["POST"])
+@character_required
+def character_tutorial_dismiss():
+    db = get_db()
+    db.execute("UPDATE characters SET tutorial_seen = 1 WHERE user_id = ?", (session["user_id"],))
+    log_activity(
+        db, session["user_id"], session["username"], "tutorial_dismissed",
+        ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
     return redirect(url_for("game.game"))
 
 
@@ -319,6 +346,102 @@ def character_page():
         current_avatar_key=session.get("avatar_key"),
         next_avatar_change_cost=(character["avatar_change_count"] + 1) * settings["avatar_change_base_cost"],
         custom_avatar_format_hint=CUSTOM_AVATAR_FORMAT_HINT,
+    )
+
+
+def _escape_like_pattern(value):
+    """Escapes %, _ and the escape character itself so a player's search text
+    is matched literally by LIKE rather than as a wildcard pattern."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+@character_bp.route("/character/lookup")
+@character_required
+def character_lookup():
+    query = request.args.get("q", "").strip()
+    results = []
+    if query:
+        db = get_db()
+        results = db.execute(
+            """SELECT characters.id AS character_id, characters.name AS character_name,
+                      characters.level, characters.job_class, characters.rebirth_count,
+                      countries.name AS country_name
+               FROM characters JOIN countries ON countries.id = characters.country_id
+               WHERE lower(characters.name) LIKE lower(?) ESCAPE '\\'
+               ORDER BY characters.name
+               LIMIT 50""",
+            (f"%{_escape_like_pattern(query)}%",),
+        ).fetchall()
+        db.close()
+    return render_template("character_lookup.html", query=query, results=results)
+
+
+@character_bp.route("/character/view/<int:character_id>")
+@character_required
+def character_view(character_id):
+    db = get_db()
+    character = db.execute(
+        """SELECT characters.id AS character_id, characters.user_id, characters.level,
+                  characters.name AS character_name, characters.job_class, characters.job_tier,
+                  characters.rebirth_count, characters.battles_count, characters.wins_count,
+                  characters.pvp_battles_count, characters.pvp_wins_count,
+                  characters.stat_floor_hp, characters.stat_floor_mp, characters.stat_floor_str,
+                  characters.stat_floor_def, characters.stat_floor_agi, characters.stat_floor_luk,
+                  characters.level_bonus_hp, characters.level_bonus_mp, characters.level_bonus_str,
+                  characters.level_bonus_def, characters.level_bonus_agi, characters.level_bonus_luk,
+                  characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id,
+                  countries.*
+           FROM characters JOIN countries ON countries.id = characters.country_id
+           WHERE characters.id = ?""",
+        (character_id,),
+    ).fetchone()
+    if character is None:
+        db.close()
+        flash("找不到這個角色")
+        return redirect(url_for("character.character_lookup"))
+
+    profile_user = db.execute(
+        "SELECT avatar_key, avatar_custom_filename FROM users WHERE id = ?", (character["user_id"],)
+    ).fetchone()
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+    equipped_items = _fetch_equipped_items(db, character)
+
+    equipped_slots = []
+    for shop_type, label in SLOT_LABELS.items():
+        item_id = character[EQUIP_SLOT_COLUMNS[shop_type]]
+        item = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone() if item_id else None
+        equipped_slots.append({"slot": shop_type, "label": label, "item": item})
+
+    db.close()
+
+    # Same king-war-defense / morale-buff gotcha as character_page: this is a
+    # read-only view of ANOTHER character, so re-derive both flags for the
+    # VIEWED character (not the caller) exactly the same way character_page
+    # does for the logged-in player -- otherwise the shown stats would be
+    # wrong for anyone looking up a reigning king mid-war or a buffed country.
+    is_reigning_king = character["character_id"] == character["king_character_id"]
+    king_war_defense_bonus = is_reigning_king and _in_any_war_window(settings)
+    morale_buff_active = _morale_buff_active(character)
+    stats = character_final_stats(character, equipped_items, settings, king_war_defense_bonus, morale_buff_active)
+
+    win_rate = (
+        round(character["wins_count"] / character["battles_count"] * 100, 1)
+        if character["battles_count"] else None
+    )
+    pvp_win_rate = (
+        round(character["pvp_wins_count"] / character["pvp_battles_count"] * 100, 1)
+        if character["pvp_battles_count"] else None
+    )
+
+    return render_template(
+        "character_view.html",
+        character=character,
+        stats=stats,
+        win_rate=win_rate,
+        pvp_win_rate=pvp_win_rate,
+        job_tier_label=JOB_TIER_LABELS.get(character["job_tier"], ""),
+        equipped_slots=equipped_slots,
+        profile_avatar_url=avatar_url(profile_user["avatar_key"], profile_user["avatar_custom_filename"]),
     )
 
 

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ character.character_name }} - 角色查詢 - 五行爭鋒{% endblock %}
+
+{% block content %}
+  <div class="panel" style="margin-bottom:20px;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      {% if profile_avatar_url %}<img src="{{ profile_avatar_url }}" alt="頭像" style="width:56px; height:56px; border-radius:50%; border:2px solid var(--border);">{% endif %}
+      <h2 style="margin:0 0 4px; color:var(--gold-bright);">{{ character.character_name }}</h2>
+    </div>
+    <div class="element" style="font-size:13px;">屬性：{{ character.element }}　|　所屬國家：{{ character.name }}　|　職業：{{ character.job_class }}（{{ job_tier_label }}）</div>
+
+    <div style="margin-top:18px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+      <span style="color:var(--gold-bright); font-weight:700;">Lv.{{ character.level }}</span>
+      <span style="font-size:13px; color:var(--text-dim);">轉生次數 {{ character.rebirth_count }}</span>
+    </div>
+
+    <div style="display:flex; gap:14px; font-size:13px; color:var(--text-dim); margin-top:18px; flex-wrap:wrap;">
+      <span>HP {{ stats.hp }}</span>
+      <span>MP {{ stats.mp }}</span>
+      <span>力量 {{ stats.str }}</span>
+      <span>防禦 {{ stats.def }}</span>
+      <span>敏捷 {{ stats.agi }}</span>
+      <span>幸運 {{ stats.luk }}</span>
+    </div>
+
+    <div style="display:flex; gap:14px; font-size:13px; color:var(--text-dim); margin-top:10px; flex-wrap:wrap;">
+      <span>戰鬥次數 {{ character.battles_count }}</span>
+      <span>戰勝次數 {{ character.wins_count }}</span>
+      <span>勝率 {{ "%.1f"|format(win_rate) ~ "%" if win_rate is not none else "尚無紀錄" }}</span>
+    </div>
+
+    <div style="display:flex; gap:14px; font-size:13px; color:var(--text-dim); margin-top:10px; flex-wrap:wrap;">
+      <span>⚔️ PvP 戰績：{{ character.pvp_battles_count }} 戰</span>
+      <span>{{ character.pvp_wins_count }} 勝</span>
+      <span>勝率 {{ "%.1f"|format(pvp_win_rate) ~ "%" if pvp_win_rate is not none else "尚無紀錄" }}</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">目前裝備</h3>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      {% for s in equipped_slots %}
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <span style="font-size:13px; color:var(--text-dim); min-width:40px;">{{ s.label }}</span>
+        {% if s.item %}
+        <span style="font-size:13px;">{{ s.item.name }}（{{ s.item.stat }}+{{ s.item.stat_bonus }}）</span>
+        {% else %}
+        <span class="hint" style="margin:0;">尚未裝備</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <p style="margin-top:20px;">
+    <a href="{{ url_for('character.character_lookup') }}" class="btn">← 返回角色查詢</a>
+    <a href="{{ url_for('game.game') }}" class="btn" style="margin-left:10px;">返回主畫面</a>
+  </p>
+{% endblock %}

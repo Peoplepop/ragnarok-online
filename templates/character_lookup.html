@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}角色查詢 - 五行爭鋒{% endblock %}
+
+{% block content %}
+  <div class="panel" style="margin-bottom:20px;">
+    <h2 style="margin:0 0 12px; color:var(--gold-bright);">角色查詢</h2>
+    <p class="hint" style="margin:0 0 14px;">輸入角色名稱的一部分即可搜尋（不分大小寫）</p>
+    <form method="get" action="{{ url_for('character.character_lookup') }}" style="display:flex; gap:10px; align-items:flex-start; flex-wrap:wrap;">
+      <input type="text" name="q" value="{{ query }}" placeholder="角色名稱" style="max-width:260px; margin-bottom:0;">
+      <button type="submit">搜尋</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    {% if not query %}
+    <p class="hint" style="margin:0;">請輸入角色名稱開始搜尋</p>
+    {% elif results %}
+    <p class="hint" style="margin:0 0 12px;">找到 {{ results|length }} 個角色</p>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      {% for r in results %}
+      <a href="{{ url_for('character.character_view', character_id=r.character_id) }}"
+         style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;
+                background:var(--panel-2); border:1px solid var(--border); border-radius:8px;
+                padding:12px 16px; text-decoration:none; color:var(--text);">
+        <span style="color:var(--gold-bright); font-weight:700;">{{ r.character_name }}</span>
+        <span style="font-size:13px; color:var(--text-dim);">
+          Lv.{{ r.level }}　{{ r.job_class }}{% if r.rebirth_count %}（轉生 {{ r.rebirth_count }} 次）{% endif %}　{{ r.country_name }}
+        </span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="hint" style="margin:0;">找不到符合「{{ query }}」的角色</p>
+    {% endif %}
+  </div>
+
+  <p style="margin-top:20px;"><a href="{{ url_for('game.game') }}" class="btn">← 返回主畫面</a></p>
+{% endblock %}

@@ -575,6 +575,13 @@ def _ensure_character_columns(conn):
         conn.execute("ALTER TABLE characters ADD COLUMN rename_count INTEGER NOT NULL DEFAULT 0")
     if "avatar_change_count" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN avatar_change_count INTEGER NOT NULL DEFAULT 0")
+    if "tutorial_seen" not in cols:
+        # DEFAULT 1 backfills every EXISTING character as already-seen (an
+        # established veteran shouldn't suddenly get nagged with the
+        # tutorial prompt after this migration runs) -- _create_character()
+        # explicitly passes tutorial_seen=0 on INSERT so only genuinely new
+        # characters get prompted.
+        conn.execute("ALTER TABLE characters ADD COLUMN tutorial_seen INTEGER NOT NULL DEFAULT 1")
     if "name" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN name TEXT")
         conn.execute(
