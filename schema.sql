@@ -394,3 +394,20 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     FOREIGN KEY (country_id) REFERENCES countries(id)
 );
 CREATE INDEX IF NOT EXISTS idx_chat_messages_feed ON chat_messages(channel, country_id, id);
+
+-- 玩家意見箱: visible only to its own submitter (scoped by user_id, never a
+-- public feed) and to admins, who are the only ones who can change status.
+-- character_name is a denormalized snapshot at submit time (same convention
+-- as chat_messages/tournament_registrations) -- a later rename doesn't
+-- rewrite history here either.
+CREATE TABLE IF NOT EXISTS feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    character_name TEXT NOT NULL,
+    message TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_user ON feedback(user_id, id);

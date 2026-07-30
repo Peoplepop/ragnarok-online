@@ -6,7 +6,10 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 
 from db import get_db, LEVEL_CAP
 from web_helpers import admin_required, _parse_dt, _valid_war_time, _format_duration
-from game_data.constants import STAT_FIELDS, IDLE_THRESHOLD_MINUTES, ACTION_LABELS, GOVERNMENT_ROLES
+from game_data.constants import (
+    STAT_FIELDS, IDLE_THRESHOLD_MINUTES, ACTION_LABELS, GOVERNMENT_ROLES,
+    FEEDBACK_STATUSES, FEEDBACK_STATUS_LABELS,
+)
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -103,6 +106,37 @@ def admin_clear_logs():
     db.close()
     flash("系統紀錄已清空")
     return redirect(url_for("admin.admin_logs"))
+
+
+@admin_bp.route("/admin/feedback")
+@admin_required
+def admin_feedback():
+    db = get_db()
+    rows = db.execute("SELECT * FROM feedback ORDER BY id DESC").fetchall()
+    db.close()
+    return render_template(
+        "admin_feedback.html", feedback_list=rows, status_labels=FEEDBACK_STATUS_LABELS,
+        statuses=FEEDBACK_STATUSES, active_tab="feedback",
+    )
+
+
+@admin_bp.route("/admin/feedback/<int:feedback_id>/status", methods=["POST"])
+@admin_required
+def admin_update_feedback_status(feedback_id):
+    status = request.form.get("status", "")
+    if status not in FEEDBACK_STATUSES:
+        flash("無效的處理狀態")
+        return redirect(url_for("admin.admin_feedback"))
+
+    db = get_db()
+    db.execute(
+        "UPDATE feedback SET status = ?, updated_at = datetime('now') WHERE id = ?",
+        (status, feedback_id),
+    )
+    db.commit()
+    db.close()
+    flash("已更新處理狀態")
+    return redirect(url_for("admin.admin_feedback"))
 
 
 @admin_bp.route("/admin/countries/<int:country_id>", methods=["POST"])

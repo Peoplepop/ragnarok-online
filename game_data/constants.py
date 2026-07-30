@@ -4,6 +4,13 @@ MAX_PASSWORD_LEN = 12
 MIN_CHARACTER_NAME_LEN = 2
 MAX_CHARACTER_NAME_LEN = 20
 CHAT_MESSAGE_MAX_LEN = 200
+FEEDBACK_MESSAGE_MAX_LEN = 500
+FEEDBACK_STATUSES = ("pending", "in_progress", "done")
+FEEDBACK_STATUS_LABELS = {
+    "pending": "待處理",
+    "in_progress": "處理中",
+    "done": "處理完成",
+}
 STAT_FIELDS = ["hp_bonus", "mp_bonus", "str_bonus", "def_bonus", "agi_bonus", "luk_bonus"]
 IDLE_THRESHOLD_MINUTES = 15
 ACTION_LABELS = {
@@ -34,6 +41,7 @@ ACTION_LABELS = {
     "skill_book_drop": "掉落技能書",
     "hidden_loot_drop": "秘境掉寶",
     "tournament_champion": "天下武道大會優勝",
+    "feedback_submit": "提交意見箱建議",
     "debug_reset": "（除錯）重置角色",
     "trade_invite": "發起交易邀請",
     "trade_accept": "接受交易邀請",

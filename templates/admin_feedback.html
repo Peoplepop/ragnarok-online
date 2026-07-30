@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}玩家意見 - 五行爭鋒{% endblock %}
+
+{% block content %}
+  {% include "_admin_nav.html" %}
+  <h2 style="color: var(--gold-bright); font-size: 18px; margin-top:0;">玩家意見箱</h2>
+  <p class="hint" style="margin-top:-8px;">只有管理者看得到全部玩家的意見；玩家自己只看得到自己送出的內容</p>
+
+  <div class="panel">
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <thead>
+        <tr style="text-align:left; color:var(--text-dim); border-bottom:1px solid var(--border);">
+          <th style="padding:8px 6px;">時間</th>
+          <th style="padding:8px 6px;">角色</th>
+          <th style="padding:8px 6px;">內容</th>
+          <th style="padding:8px 6px;">狀態</th>
+          <th style="padding:8px 6px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in feedback_list %}
+        <tr style="border-bottom:1px solid rgba(212,175,55,0.1); vertical-align:top;">
+          <td style="padding:8px 6px; color:var(--text-dim); white-space:nowrap;">{{ f.created_at }}</td>
+          <td style="padding:8px 6px; white-space:nowrap;">{{ f.character_name }}</td>
+          <td style="padding:8px 6px; max-width:420px; white-space:pre-wrap;">{{ f.message }}</td>
+          <td style="padding:8px 6px; white-space:nowrap;">{{ status_labels.get(f.status, f.status) }}</td>
+          <td style="padding:8px 6px;">
+            <form method="post" action="{{ url_for('admin.admin_update_feedback_status', feedback_id=f.id) }}" style="display:flex; gap:6px; align-items:center;">
+              <select name="status">
+                {% for s in statuses %}
+                <option value="{{ s }}" {{ 'selected' if s == f.status }}>{{ status_labels[s] }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" style="padding:6px 12px; font-size:12px;">更新</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" style="padding:12px 6px; color:var(--text-dim);">目前沒有玩家意見</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}
