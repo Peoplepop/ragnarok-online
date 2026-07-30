@@ -11,7 +11,7 @@ from flask import redirect, url_for, session, flash
 
 from db import get_db
 from game_data.constants import (
-    MIN_PASSWORD_LEN, MAX_PASSWORD_LEN, MIN_CHARACTER_NAME_LEN, MAX_CHARACTER_NAME_LEN,
+    MIN_USERNAME_LEN, MIN_PASSWORD_LEN, MAX_PASSWORD_LEN, MIN_CHARACTER_NAME_LEN, MAX_CHARACTER_NAME_LEN,
 )
 
 
@@ -284,6 +284,17 @@ def character_required(view):
             return redirect(url_for("character.character_create"))
         return view(*args, **kwargs)
     return wrapped
+
+
+USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
+
+
+def _validate_username(username):
+    if len(username) < MIN_USERNAME_LEN:
+        return f"帳號至少需要 {MIN_USERNAME_LEN} 個字元"
+    if not USERNAME_PATTERN.match(username):
+        return "帳號僅能使用英文字母、數字或底線"
+    return None
 
 
 PASSWORD_COMPLEXITY_PATTERN = re.compile(r"^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z]).+$")

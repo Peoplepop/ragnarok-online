@@ -5,8 +5,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from db import get_db, log_activity
-from web_helpers import _validate_password, _validate_character_name
-from game_data.constants import MIN_USERNAME_LEN
+from web_helpers import _validate_username, _validate_password, _validate_character_name
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -52,9 +51,10 @@ def register():
     db = get_db()
     country = _selected_country(db, country_id)
 
-    if len(username) < MIN_USERNAME_LEN:
+    username_error = _validate_username(username)
+    if username_error:
         db.close()
-        flash(f"帳號至少需要 {MIN_USERNAME_LEN} 個字元")
+        flash(username_error)
         return render_template("register.html", country=country)
     password_error = _validate_password(password)
     if password_error:

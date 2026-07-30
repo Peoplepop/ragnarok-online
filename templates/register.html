@@ -11,8 +11,8 @@
     {% endif %}
     <form method="post" action="{{ url_for('auth.register') }}">
       <input type="hidden" name="country_id" value="{{ country.id if country else '' }}">
-      <label for="username">帳號</label>
-      <input type="text" id="username" name="username" required minlength="3" autofocus>
+      <label for="username">帳號（僅限英文字母、數字、底線）</label>
+      <input type="text" id="username" name="username" required minlength="3" pattern="[A-Za-z0-9_]+" title="僅限英文字母、數字、底線" autofocus>
 
       <label for="password">密碼</label>
       <div class="password-field">
