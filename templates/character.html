@@ -3,7 +3,10 @@
 
 {% block content %}
   <div class="panel" style="margin-bottom:20px;">
-    <h2 style="margin:0 0 4px; color:var(--gold-bright);">{{ character.character_name }}</h2>
+    <div style="display:flex; align-items:center; gap:12px;">
+      {% if nav_avatar_url %}<img src="{{ nav_avatar_url }}" alt="頭像" style="width:56px; height:56px; border-radius:50%; border:2px solid var(--border);">{% endif %}
+      <h2 style="margin:0 0 4px; color:var(--gold-bright);">{{ character.character_name }}</h2>
+    </div>
     <div class="element" style="font-size:13px;">屬性：{{ character.element }}　|　所屬國家：{{ character.name }}　|　職業：{{ character.job_class }}（{{ job_tier_label }}）</div>
     <p style="margin:6px 0 0; color:var(--text-dim); font-size:13px;">{{ character.description }}</p>
     {% if character.job_tier == 4 %}
@@ -13,6 +16,29 @@
     </form>
     {% else %}
     <p class="hint" style="margin:8px 0 0;">需先四轉才能改名</p>
+    {% endif %}
+
+    {% if character.job_tier == 4 %}
+    <details style="margin-top:10px;">
+      <summary style="cursor:pointer; color:var(--gold); font-size:13px;">更換頭像（{{ next_avatar_change_cost }} 諸神幣）</summary>
+      <form method="post" action="{{ url_for('character.character_change_avatar') }}" enctype="multipart/form-data" style="margin-top:10px;">
+        <label>選擇內建頭像</label>
+        <div class="avatar-grid">
+          {% for avatar in built_in_avatars %}
+          <label class="avatar-option" title="{{ avatar.label }}">
+            <input type="radio" name="avatar_key" value="{{ avatar.key }}" {% if avatar.key == current_avatar_key %}checked{% endif %}>
+            <img src="{{ url_for('static', filename='avatars/built_in/' ~ avatar.key ~ '.svg') }}" alt="{{ avatar.label }}">
+          </label>
+          {% endfor %}
+        </div>
+        <label for="avatar_file">或上傳自訂頭像</label>
+        <input type="file" id="avatar_file" name="avatar_file" accept="image/png,image/jpeg,image/gif">
+        <p class="hint" style="margin:4px 0 14px; font-size:12px;">{{ custom_avatar_format_hint }}</p>
+        <button type="submit">更換頭像（{{ next_avatar_change_cost }} 諸神幣）</button>
+      </form>
+    </details>
+    {% else %}
+    <p class="hint" style="margin:8px 0 0;">需先四轉才能更換頭像</p>
     {% endif %}
     {% if overcomes or overcome_by %}
     <p style="margin:6px 0 0; color:var(--text-dim); font-size:12px;">

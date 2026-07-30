@@ -1,16 +1,24 @@
 """Character creation, the character sheet, promotions, rebirth and skills."""
+import io
+import os
 import sqlite3
+import uuid
 
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
+from PIL import Image, UnidentifiedImageError
 
 from db import get_db, log_activity, LEVEL_CAP, ELEMENT_OVERCOMES
 from web_helpers import (
     login_required, admin_required, character_required, _cooldown_remaining_seconds,
-    _validate_character_name, _in_any_war_window, _morale_buff_active,
+    _validate_character_name, _in_any_war_window, _morale_buff_active, avatar_url,
 )
 from game_data.constants import (
     SHOP_TYPE_LABELS, SLOT_LABELS, EQUIP_SLOT_COLUMNS, LEVEL_STAT_GROWTH, STAT_LABELS,
     RENAME_MAX_CHARACTER_NAME_LEN,
+)
+from game_data.avatars import (
+    BUILT_IN_AVATARS, BUILT_IN_AVATAR_KEYS, CUSTOM_AVATAR_MAX_BYTES, CUSTOM_AVATAR_ALLOWED_FORMATS,
+    CUSTOM_AVATAR_DIMENSION, CUSTOM_AVATAR_FORMAT_HINT, CUSTOM_AVATAR_UPLOAD_DIR,
 )
 from game_data.jobs import (
     TIER1_JOBS, TIER2_JOBS, TIER2_CHILDREN_BY_FAMILY, TIER3_JOBS, TIER3_CHILDREN_BY_PARENT,
@@ -145,7 +153,7 @@ def character_page():
                   characters.equipped_accessory_id, characters.battles_count,
                   characters.wins_count, characters.pvp_battles_count, characters.pvp_wins_count,
                   characters.equipped_skill_1, characters.equipped_skill_2,
-                  characters.rename_count, characters.contribution,
+                  characters.rename_count, characters.contribution, characters.avatar_change_count,
                   countries.*
            FROM characters JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
@@ -307,6 +315,10 @@ def character_page():
         stat_reroll_cost=settings["stat_reroll_cost"],
         next_rename_cost=(character["rename_count"] + 1) * 1000,
         rename_max_len=RENAME_MAX_CHARACTER_NAME_LEN,
+        built_in_avatars=BUILT_IN_AVATARS,
+        current_avatar_key=session.get("avatar_key"),
+        next_avatar_change_cost=(character["avatar_change_count"] + 1) * settings["avatar_change_base_cost"],
+        custom_avatar_format_hint=CUSTOM_AVATAR_FORMAT_HINT,
     )
 
 
@@ -328,7 +340,7 @@ def _character_for_promotion(db):
                   characters.level_bonus_hp, characters.level_bonus_mp, characters.level_bonus_str,
                   characters.level_bonus_def, characters.level_bonus_agi, characters.level_bonus_luk,
                   characters.country_id AS char_country_id, characters.name AS character_name,
-                  characters.rename_count,
+                  characters.rename_count, characters.avatar_change_count, characters.user_id,
                   countries.*
            FROM characters JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
@@ -526,6 +538,128 @@ def character_rename():
 
     session["character_name"] = new_name
     flash(f"角色名稱已改為「{new_name}」")
+    return redirect(url_for("character.character_page"))
+
+
+def _process_avatar_upload(file_storage):
+    """Validates and re-encodes an uploaded avatar into a fixed-size square
+    PNG under a random filename -- the uploaded bytes/extension are NEVER
+    trusted or stored as-is, only what Pillow can actually decode as a real
+    image (and re-encode from scratch) ends up on disk. Returns
+    (new_filename, error_message), exactly one of which is None."""
+    data = file_storage.read()
+    if not data:
+        return None, "請選擇一個圖片檔案"
+    if len(data) > CUSTOM_AVATAR_MAX_BYTES:
+        return None, f"檔案大小超過 {CUSTOM_AVATAR_MAX_BYTES // (1024 * 1024)}MB 上限"
+
+    try:
+        probe = Image.open(io.BytesIO(data))
+        probe.verify()
+        img = Image.open(io.BytesIO(data))  # verify() consumes the first handle
+        img.load()
+    except Exception:
+        # Pillow can raise many different exception types for a malformed or
+        # disguised file (OSError/ValueError/SyntaxError/DecompressionBombError/
+        # UnidentifiedImageError...) -- catching broadly here is deliberate,
+        # since any failure to decode means "reject the upload", not a bug.
+        return None, f"無法辨識這個圖片檔案。{CUSTOM_AVATAR_FORMAT_HINT}"
+
+    if img.format not in CUSTOM_AVATAR_ALLOWED_FORMATS:
+        return None, CUSTOM_AVATAR_FORMAT_HINT
+
+    img = img.convert("RGBA")
+    width, height = img.size
+    side = min(width, height)
+    left = (width - side) // 2
+    top = (height - side) // 2
+    img = img.crop((left, top, left + side, top + side))
+    img = img.resize((CUSTOM_AVATAR_DIMENSION, CUSTOM_AVATAR_DIMENSION), Image.LANCZOS)
+
+    os.makedirs(CUSTOM_AVATAR_UPLOAD_DIR, exist_ok=True)
+    filename = f"{uuid.uuid4().hex}.png"
+    img.save(os.path.join(CUSTOM_AVATAR_UPLOAD_DIR, filename), format="PNG")
+    return filename, None
+
+
+@character_bp.route("/character/change_avatar", methods=["POST"])
+@character_required
+def character_change_avatar():
+    db = get_db()
+    character = _character_for_promotion(db)
+
+    if character["job_tier"] != 4:
+        db.close()
+        flash("需先四轉才能更換頭像")
+        return redirect(url_for("character.character_page"))
+
+    settings = db.execute("SELECT avatar_change_base_cost FROM game_settings WHERE id = 1").fetchone()
+    cost = (character["avatar_change_count"] + 1) * settings["avatar_change_base_cost"]
+    if character["currency"] < cost:
+        db.close()
+        flash(f"諸神幣不足，更換頭像需要 {cost} 諸神幣")
+        return redirect(url_for("character.character_page"))
+
+    upload = request.files.get("avatar_file")
+    avatar_key_choice = request.form.get("avatar_key", "")
+
+    new_avatar_key = None
+    new_custom_filename = None
+    if upload is not None and upload.filename:
+        new_custom_filename, error = _process_avatar_upload(upload)
+        if error:
+            db.close()
+            flash(error)
+            return redirect(url_for("character.character_page"))
+    elif avatar_key_choice in BUILT_IN_AVATAR_KEYS:
+        new_avatar_key = avatar_key_choice
+    else:
+        db.close()
+        flash("請選擇一個內建頭像，或上傳一張圖片")
+        return redirect(url_for("character.character_page"))
+
+    old_user = db.execute(
+        "SELECT avatar_custom_filename FROM users WHERE id = ?", (character["user_id"],)
+    ).fetchone()
+    old_custom_filename = old_user["avatar_custom_filename"]
+
+    if new_custom_filename:
+        db.execute(
+            "UPDATE users SET avatar_custom_filename = ? WHERE id = ?",
+            (new_custom_filename, character["user_id"]),
+        )
+    else:
+        db.execute(
+            "UPDATE users SET avatar_key = ?, avatar_custom_filename = NULL WHERE id = ?",
+            (new_avatar_key, character["user_id"]),
+        )
+    db.execute(
+        "UPDATE characters SET currency = currency - ?, avatar_change_count = avatar_change_count + 1 WHERE id = ?",
+        (cost, character["character_id"]),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "change_avatar",
+        detail="上傳自訂頭像" if new_custom_filename else new_avatar_key,
+        ip_address=request.remote_addr,
+    )
+    db.commit()
+
+    # An old uploaded file no longer referenced by this account is deleted
+    # only after the DB commit succeeds, so a mid-request failure never
+    # leaves the account pointing at a file that's already been removed.
+    if old_custom_filename and old_custom_filename != new_custom_filename:
+        old_path = os.path.join(CUSTOM_AVATAR_UPLOAD_DIR, old_custom_filename)
+        if os.path.exists(old_path):
+            os.remove(old_path)
+
+    updated_user = db.execute(
+        "SELECT avatar_key, avatar_custom_filename FROM users WHERE id = ?", (character["user_id"],)
+    ).fetchone()
+    db.close()
+
+    session["avatar_key"] = updated_user["avatar_key"]
+    session["avatar_custom_filename"] = updated_user["avatar_custom_filename"]
+    flash("頭像已更新！")
     return redirect(url_for("character.character_page"))
 
 

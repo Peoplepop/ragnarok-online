@@ -8,7 +8,7 @@ every other action in this app which redirects back to a full-page render.
 from flask import Blueprint, jsonify, request, session
 
 from db import get_db
-from web_helpers import character_required, _activity_log_time_label
+from web_helpers import character_required, _activity_log_time_label, avatar_url
 from game_data.constants import CHAT_MESSAGE_MAX_LEN
 
 chat_bp = Blueprint("chat", __name__)
@@ -67,18 +67,33 @@ def chat_messages():
 
     db = get_db()
     character = _character_for_chat(db)
+    # Avatar is looked up LIVE via this join (character_id -> users), unlike
+    # character_name/country_name which are denormalized snapshots taken at
+    # send-time -- an old message shows whatever avatar its poster wears
+    # RIGHT NOW, matching how ordinary chat apps behave, rather than freezing
+    # a picture that may since have been changed (post-四轉 avatar change).
     if channel == "country":
         rows = db.execute(
-            """SELECT character_name, country_name, message, created_at FROM chat_messages
-               WHERE channel = 'country' AND country_id = ?
-               ORDER BY id DESC LIMIT 50""",
+            """SELECT chat_messages.character_name, chat_messages.country_name,
+                      chat_messages.message, chat_messages.created_at,
+                      users.avatar_key, users.avatar_custom_filename
+               FROM chat_messages
+               JOIN characters ON characters.id = chat_messages.character_id
+               JOIN users ON users.id = characters.user_id
+               WHERE chat_messages.channel = 'country' AND chat_messages.country_id = ?
+               ORDER BY chat_messages.id DESC LIMIT 50""",
             (character["country_id"],),
         ).fetchall()
     else:
         rows = db.execute(
-            """SELECT character_name, country_name, message, created_at FROM chat_messages
-               WHERE channel = 'public'
-               ORDER BY id DESC LIMIT 50"""
+            """SELECT chat_messages.character_name, chat_messages.country_name,
+                      chat_messages.message, chat_messages.created_at,
+                      users.avatar_key, users.avatar_custom_filename
+               FROM chat_messages
+               JOIN characters ON characters.id = chat_messages.character_id
+               JOIN users ON users.id = characters.user_id
+               WHERE chat_messages.channel = 'public'
+               ORDER BY chat_messages.id DESC LIMIT 50"""
         ).fetchall()
     db.close()
 
@@ -88,6 +103,7 @@ def chat_messages():
             "country_name": r["country_name"],
             "message": r["message"],
             "time_label": _activity_log_time_label(r["created_at"]),
+            "avatar_url": avatar_url(r["avatar_key"], r["avatar_custom_filename"]),
         }
         for r in reversed(rows)  # oldest first, newest at the bottom
     ]

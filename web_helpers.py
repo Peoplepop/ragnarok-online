@@ -13,6 +13,7 @@ from db import get_db
 from game_data.constants import (
     MIN_USERNAME_LEN, MIN_PASSWORD_LEN, MAX_PASSWORD_LEN, MIN_CHARACTER_NAME_LEN, MAX_CHARACTER_NAME_LEN,
 )
+from game_data.avatars import BUILT_IN_AVATAR_KEYS, DEFAULT_AVATAR_KEY
 
 
 def _parse_dt(value):
@@ -244,6 +245,17 @@ def _remove_from_inventory(db, character_id, item_id, quantity=1):
             (remaining, character_id, item_id),
         )
     return True
+
+
+def avatar_url(avatar_key, avatar_custom_filename):
+    """A custom upload always wins over the built-in key once one exists
+    (see character.character_change_avatar) -- avatar_key is kept around as a
+    fallback identity rather than cleared, so nothing breaks if the uploaded
+    file is ever manually removed from disk."""
+    if avatar_custom_filename:
+        return url_for("static", filename=f"avatars/uploads/{avatar_custom_filename}")
+    key = avatar_key if avatar_key in BUILT_IN_AVATAR_KEYS else DEFAULT_AVATAR_KEY
+    return url_for("static", filename=f"avatars/built_in/{key}.svg")
 
 
 def login_required(view):

@@ -2,7 +2,7 @@
 {% block title %}註冊 - 五行爭鋒{% endblock %}
 
 {% block content %}
-  <div class="panel" style="max-width: 360px; margin: 0 auto;">
+  <div class="panel" style="max-width: 480px; margin: 0 auto;">
     <h2 style="margin-top:0; color: var(--gold-bright); font-size: 18px;">建立帳號</h2>
     {% if country %}
     <p class="hint" style="margin-top:-6px;">
@@ -13,6 +13,16 @@
       <input type="hidden" name="country_id" value="{{ country.id if country else '' }}">
       <label for="username">帳號（僅限英文字母、數字、底線）</label>
       <input type="text" id="username" name="username" required minlength="3" pattern="[A-Za-z0-9_]+" title="僅限英文字母、數字、底線" autofocus>
+
+      <label>選擇頭像</label>
+      <div class="avatar-grid">
+        {% for avatar in built_in_avatars %}
+        <label class="avatar-option" title="{{ avatar.label }}">
+          <input type="radio" name="avatar_key" value="{{ avatar.key }}" {% if avatar.key == selected_avatar_key %}checked{% endif %} required>
+          <img src="{{ url_for('static', filename='avatars/built_in/' ~ avatar.key ~ '.svg') }}" alt="{{ avatar.label }}">
+        </label>
+        {% endfor %}
+      </div>
 
       <label for="password">密碼</label>
       <div class="password-field">

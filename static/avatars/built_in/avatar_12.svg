@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+
+  <defs>
+    <radialGradient id="bg0" cx="50%" cy="42%" r="65%">
+      <stop offset="0%" stop-color="#8ab8e8"/>
+      <stop offset="55%" stop-color="#3b7dc4"/>
+      <stop offset="100%" stop-color="#1f4570"/>
+    </radialGradient>
+    <radialGradient id="glow0" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#e6f2ff" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#e6f2ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="100" cy="100" r="98" fill="url(#bg0)"/>
+  <circle cx="100" cy="100" r="98" fill="none" stroke="#122a45" stroke-width="4"/>
+  
+
+  <circle cx="100" cy="80" r="46" fill="none" stroke="#8ab8e8" stroke-width="2" opacity="0.8"/>
+  <circle cx="100" cy="80" r="46" fill="none" stroke="#e6f2ff" stroke-width="1" stroke-dasharray="4 6" opacity="0.9"/>
+<circle cx="146.0" cy="80.0" r="3.2" fill="#e6f2ff"/><circle cx="132.5" cy="112.5" r="3.2" fill="#e6f2ff"/><circle cx="100.0" cy="126.0" r="3.2" fill="#e6f2ff"/><circle cx="67.5" cy="112.5" r="3.2" fill="#e6f2ff"/><circle cx="54.0" cy="80.0" r="3.2" fill="#e6f2ff"/><circle cx="67.5" cy="47.5" r="3.2" fill="#e6f2ff"/><circle cx="100.0" cy="34.0" r="3.2" fill="#e6f2ff"/><circle cx="132.5" cy="47.5" r="3.2" fill="#e6f2ff"/>
+  <path d="M42,192 Q48,144 78,128 L100,142 L122,128 Q152,144 158,192 Z" fill="#20242b"/>
+  
+  <rect x="146" y="110" width="6" height="70" rx="2" fill="#1f4570"/>
+  <circle cx="149" cy="106" r="10" fill="#8ab8e8"/>
+  <circle cx="149" cy="106" r="10" fill="url(#glow0)"/>
+<circle cx="100" cy="95" r="34" fill="#20242b"/>
+  <path d="M70,94 Q66,52 100,48 Q134,52 130,94 Q126,66 100,64 Q74,66 70,94 Z" fill="#1f4570"/>
+  <path d="M84,100 Q100,110 116,100" stroke="#122a45" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <circle cx="100" cy="86" r="7" fill="#e6f2ff"/>
+  <circle cx="100" cy="86" r="12" fill="none" stroke="#e6f2ff" stroke-width="1.5" opacity="0.7"/>
+<path d="M126,56 Q134,48 130,38 Q120,42 120,52 Q122,56 126,56 Z" fill="#8ab8e8" opacity="0.9"/>
+</svg>

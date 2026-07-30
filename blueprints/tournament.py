@@ -23,7 +23,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 from db import get_db, log_activity
 from web_helpers import (
     character_required, _next_weekly_instant_at, _taipei_time_label,
-    _tournament_registration_open, ACTION_DT_FORMAT,
+    _tournament_registration_open, ACTION_DT_FORMAT, avatar_url,
 )
 from game_data.equipment import _fetch_equipped_items, character_special_effects
 from game_data.skills import _equipped_combat_skills, _learned_skill_keys
@@ -317,8 +317,10 @@ def _registration_character(db):
                   characters.stat_floor_def, characters.stat_floor_agi, characters.stat_floor_luk,
                   characters.level_bonus_hp, characters.level_bonus_mp, characters.level_bonus_str,
                   characters.level_bonus_def, characters.level_bonus_agi, characters.level_bonus_luk,
+                  users.avatar_key, users.avatar_custom_filename,
                   map_tiles.tile_type, countries.*
            FROM characters
+           JOIN users ON users.id = characters.user_id
            JOIN map_tiles ON map_tiles.id = characters.current_tile_id
            JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
@@ -382,8 +384,9 @@ def tournament_register():
                (tournament_id, character_id, character_name, country_id, country_name, fee_paid,
                 snap_hp, snap_mp, snap_str, snap_def, snap_agi, snap_luk, snap_element,
                 snap_job_class, snap_job_tier, snap_equipped_skill_1, snap_equipped_skill_2,
-                snap_learned_skill_keys, snap_independent_damage_percent)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                snap_learned_skill_keys, snap_independent_damage_percent,
+                snap_avatar_key, snap_avatar_custom_filename)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 tournament["id"], character["character_id"], character["character_name"],
                 # character["name"] is the COUNTRY's name here (bare
@@ -394,6 +397,11 @@ def tournament_register():
                 character["element"], character["job_class"], character["job_tier"],
                 character["equipped_skill_1"], character["equipped_skill_2"], learned_keys,
                 character_special_effects(equipped_items).get("independent_damage", 0),
+                # Frozen at signup like every other snap_* column -- a later
+                # avatar change (or an as-yet-nonexistent character never
+                # reaching job_tier 4) never rewrites an already-registered
+                # entrant's look mid-cycle.
+                character["avatar_key"], character["avatar_custom_filename"],
             ),
         )
     except sqlite3.IntegrityError:
@@ -426,7 +434,9 @@ def _bracket_rounds(db, tournament_id):
                   tournament_matches.game_number, tournament_matches.is_bye,
                   tournament_matches.timed_out, tournament_matches.battle_log,
                   ra.character_name AS a_name, ra.country_name AS a_country,
+                  ra.snap_avatar_key AS a_avatar_key, ra.snap_avatar_custom_filename AS a_avatar_custom_filename,
                   rb.character_name AS b_name, rb.country_name AS b_country,
+                  rb.snap_avatar_key AS b_avatar_key, rb.snap_avatar_custom_filename AS b_avatar_custom_filename,
                   rw.character_name AS winner_name
            FROM tournament_matches
            JOIN tournament_registrations AS ra ON ra.id = tournament_matches.registration_a_id
@@ -458,6 +468,11 @@ def _bracket_rounds(db, tournament_id):
                 "match_index": row["match_index"], "a_name": row["a_name"],
                 "a_country": row["a_country"], "b_name": row["b_name"],
                 "b_country": row["b_country"], "is_bye": row["is_bye"], "games": [],
+                "a_avatar_url": avatar_url(row["a_avatar_key"], row["a_avatar_custom_filename"]),
+                "b_avatar_url": (
+                    avatar_url(row["b_avatar_key"], row["b_avatar_custom_filename"])
+                    if row["b_name"] is not None else None
+                ),
             })
         matches[-1]["games"].append({
             "game_number": row["game_number"], "winner_name": row["winner_name"],
@@ -480,11 +495,19 @@ def tournament_page():
     registrants = []
     already_registered = False
     if tournament is not None:
-        registrants = db.execute(
-            """SELECT character_name, country_name FROM tournament_registrations
+        registrant_rows = db.execute(
+            """SELECT character_name, country_name, snap_avatar_key, snap_avatar_custom_filename
+               FROM tournament_registrations
                WHERE tournament_id = ? ORDER BY id""",
             (tournament["id"],),
         ).fetchall()
+        registrants = [
+            {
+                "character_name": r["character_name"], "country_name": r["country_name"],
+                "avatar_url": avatar_url(r["snap_avatar_key"], r["snap_avatar_custom_filename"]),
+            }
+            for r in registrant_rows
+        ]
         if character is not None:
             already_registered = db.execute(
                 "SELECT id FROM tournament_registrations WHERE tournament_id = ? AND character_id = ?",

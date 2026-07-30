@@ -304,11 +304,14 @@
         if (!list) return;
         var wasAtBottom = list.scrollTop + list.clientHeight >= list.scrollHeight - 10;
         list.innerHTML = messages.map(function (m) {
-          return '<div style="margin-bottom:4px;">' +
-            '<span style="color:var(--text-dim);">' + escapeHtml(m.time_label) + '</span> ' +
-            '<span style="color:var(--gold-bright);">' + escapeHtml(m.character_name) + '</span>' +
-            '<span style="color:var(--text-dim);">：</span>' +
-            '<span>' + escapeHtml(m.message) + '</span>' +
+          return '<div style="margin-bottom:4px; display:flex; align-items:flex-start; gap:6px;">' +
+            '<img src="' + escapeHtml(m.avatar_url) + '" alt="" style="width:20px; height:20px; border-radius:50%; flex-shrink:0; margin-top:2px;">' +
+            '<span>' +
+              '<span style="color:var(--text-dim);">' + escapeHtml(m.time_label) + '</span> ' +
+              '<span style="color:var(--gold-bright);">' + escapeHtml(m.character_name) + '</span>' +
+              '<span style="color:var(--text-dim);">：</span>' +
+              '<span>' + escapeHtml(m.message) + '</span>' +
+            '</span>' +
           '</div>';
         }).join("") || '<span class="hint">還沒有人說話</span>';
         if (wasAtBottom) list.scrollTop = list.scrollHeight;

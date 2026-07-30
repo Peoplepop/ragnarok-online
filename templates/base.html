@@ -98,6 +98,22 @@
     }
     .password-toggle:hover { color: var(--gold); }
 
+    .avatar-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 8px 0 16px; }
+    .avatar-option { display: block; cursor: pointer; }
+    .avatar-option input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .avatar-option img {
+      width: 100%; aspect-ratio: 1; border-radius: 50%; display: block;
+      border: 2px solid var(--border);
+      transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+    }
+    .avatar-option:hover img { transform: translateY(-2px); }
+    .avatar-option input:checked + img { border-color: var(--gold); box-shadow: 0 0 10px rgba(212, 175, 55, 0.5); }
+
+    .nav-avatar {
+      width: 26px; height: 26px; border-radius: 50%; object-fit: cover;
+      vertical-align: middle; margin-right: 6px; border: 1px solid var(--border);
+    }
+
     button, .btn {
       background: linear-gradient(135deg, var(--gold), #9c6b1f);
       color: #1a1408;
@@ -163,6 +179,7 @@
     <h1 style="margin:0; font-size:18px; letter-spacing:2px;">五行爭鋒</h1>
     <div class="links">
       {% if session.get('username') %}
+        {% if nav_avatar_url %}<img class="nav-avatar" src="{{ nav_avatar_url }}" alt="頭像">{% endif %}
         <span class="user">{{ nav_display_name }}</span>
         {% if session.get('is_admin') %}
         <a href="{{ url_for('admin.admin') }}">管理後台</a>

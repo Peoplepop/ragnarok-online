@@ -507,6 +507,14 @@ def _ensure_session_columns(conn):
         conn.execute("ALTER TABLE users ADD COLUMN is_online INTEGER NOT NULL DEFAULT 0")
 
 
+def _ensure_user_avatar_columns(conn):
+    cols = [row["name"] for row in conn.execute("PRAGMA table_info(users)")]
+    if "avatar_key" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN avatar_key TEXT NOT NULL DEFAULT 'avatar_01'")
+    if "avatar_custom_filename" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN avatar_custom_filename TEXT")
+
+
 def _ensure_character_columns(conn):
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(characters)")]
     if "current_tile_id" not in cols:
@@ -563,6 +571,8 @@ def _ensure_character_columns(conn):
         conn.execute("ALTER TABLE characters ADD COLUMN is_npc INTEGER NOT NULL DEFAULT 0")
     if "rename_count" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN rename_count INTEGER NOT NULL DEFAULT 0")
+    if "avatar_change_count" not in cols:
+        conn.execute("ALTER TABLE characters ADD COLUMN avatar_change_count INTEGER NOT NULL DEFAULT 0")
     if "name" not in cols:
         conn.execute("ALTER TABLE characters ADD COLUMN name TEXT")
         conn.execute(
@@ -653,6 +663,14 @@ def _ensure_tournament_registration_columns(conn):
         conn.execute(
             "ALTER TABLE tournament_registrations "
             "ADD COLUMN snap_independent_damage_percent INTEGER NOT NULL DEFAULT 0"
+        )
+    if "snap_avatar_key" not in cols:
+        conn.execute(
+            "ALTER TABLE tournament_registrations ADD COLUMN snap_avatar_key TEXT NOT NULL DEFAULT 'avatar_01'"
+        )
+    if "snap_avatar_custom_filename" not in cols:
+        conn.execute(
+            "ALTER TABLE tournament_registrations ADD COLUMN snap_avatar_custom_filename TEXT"
         )
 
 
@@ -969,6 +987,10 @@ def _ensure_game_settings_columns(conn):
         conn.execute(
             "ALTER TABLE game_settings ADD COLUMN hidden_wuji_drop_percent REAL NOT NULL DEFAULT 30"
         )
+    if "avatar_change_base_cost" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN avatar_change_base_cost INTEGER NOT NULL DEFAULT 5000"
+        )
 
 
 def init_db():
@@ -977,6 +999,7 @@ def init_db():
         conn.executescript(f.read())
     _ensure_is_admin_column(conn)
     _ensure_session_columns(conn)
+    _ensure_user_avatar_columns(conn)
     _ensure_character_columns(conn)
     _ensure_country_columns(conn)
     _ensure_monster_columns(conn)

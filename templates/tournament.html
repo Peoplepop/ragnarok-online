@@ -22,7 +22,8 @@
     {% if registrants %}
     <div style="display:flex; gap:10px; flex-wrap:wrap; font-size:13px; margin-bottom:12px;">
       {% for r in registrants %}
-      <span style="border:1px solid var(--border); border-radius:6px; padding:2px 10px;">
+      <span style="display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border); border-radius:6px; padding:2px 10px 2px 4px;">
+        <img src="{{ r.avatar_url }}" alt="" style="width:20px; height:20px; border-radius:50%;">
         {{ r.character_name }}<span style="color:var(--text-dim);">（{{ r.country_name }}）</span>
       </span>
       {% endfor %}
@@ -70,14 +71,17 @@
       {% for m in r.matches %}
       <div style="border:1px solid var(--border); border-radius:6px; padding:10px 12px; font-size:13px;">
         {% if m.is_bye %}
-        <div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <img src="{{ m.a_avatar_url }}" alt="" style="width:20px; height:20px; border-radius:50%;">
           {{ m.a_name }}<span style="color:var(--text-dim);">（{{ m.a_country }}）</span>
           <span style="color:var(--text-dim);">輪空晉級</span>
         </div>
         {% else %}
-        <div>
+        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+          <img src="{{ m.a_avatar_url }}" alt="" style="width:20px; height:20px; border-radius:50%;">
           {{ m.a_name }}<span style="color:var(--text-dim);">（{{ m.a_country }}）</span>
           <span style="color:var(--text-dim);"> vs </span>
+          <img src="{{ m.b_avatar_url }}" alt="" style="width:20px; height:20px; border-radius:50%;">
           {{ m.b_name }}<span style="color:var(--text-dim);">（{{ m.b_country }}）</span>
           　→　<span style="color:var(--gold-bright);">{{ m.winner_name }} 勝</span>
           {% if m.any_timed_out %}

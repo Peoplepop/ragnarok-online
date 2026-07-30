@@ -1,0 +1,102 @@
+[
+  {
+    "key": "avatar_01",
+    "label": "鋒鋼劍修",
+    "element": "金"
+  },
+  {
+    "key": "avatar_02",
+    "label": "流金尊者",
+    "element": "金"
+  },
+  {
+    "key": "avatar_03",
+    "label": "銳金游俠",
+    "element": "金"
+  },
+  {
+    "key": "avatar_04",
+    "label": "金符陣師",
+    "element": "金"
+  },
+  {
+    "key": "avatar_05",
+    "label": "青木劍修",
+    "element": "木"
+  },
+  {
+    "key": "avatar_06",
+    "label": "青木道尊",
+    "element": "木"
+  },
+  {
+    "key": "avatar_07",
+    "label": "林間游俠",
+    "element": "木"
+  },
+  {
+    "key": "avatar_08",
+    "label": "森羅陣師",
+    "element": "木"
+  },
+  {
+    "key": "avatar_09",
+    "label": "凝水劍修",
+    "element": "水"
+  },
+  {
+    "key": "avatar_10",
+    "label": "流水劍尊",
+    "element": "水"
+  },
+  {
+    "key": "avatar_11",
+    "label": "逐浪游俠",
+    "element": "水"
+  },
+  {
+    "key": "avatar_12",
+    "label": "潮汐陣師",
+    "element": "水"
+  },
+  {
+    "key": "avatar_13",
+    "label": "烈焰劍修",
+    "element": "火"
+  },
+  {
+    "key": "avatar_14",
+    "label": "業火尊者",
+    "element": "火"
+  },
+  {
+    "key": "avatar_15",
+    "label": "赤炎游俠",
+    "element": "火"
+  },
+  {
+    "key": "avatar_16",
+    "label": "焚天陣師",
+    "element": "火"
+  },
+  {
+    "key": "avatar_17",
+    "label": "厚土劍修",
+    "element": "土"
+  },
+  {
+    "key": "avatar_18",
+    "label": "厚土真尊",
+    "element": "土"
+  },
+  {
+    "key": "avatar_19",
+    "label": "岩野游俠",
+    "element": "土"
+  },
+  {
+    "key": "avatar_20",
+    "label": "磐石陣師",
+    "element": "土"
+  }
+]

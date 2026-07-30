@@ -39,6 +39,7 @@ ACTION_LABELS = {
     "promote_tier3": "三轉",
     "promote_tier4": "四轉",
     "rebirth": "轉生",
+    "change_avatar": "更換頭像",
     "learn_skill": "學習技能",
     "skill_book_drop": "掉落技能書",
     "hidden_loot_drop": "秘境掉寶",

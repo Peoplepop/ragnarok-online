@@ -7,7 +7,15 @@ CREATE TABLE IF NOT EXISTS users (
     last_login_at TEXT,
     last_seen_at TEXT,
     is_online INTEGER NOT NULL DEFAULT 0,
-    is_npc INTEGER NOT NULL DEFAULT 0
+    is_npc INTEGER NOT NULL DEFAULT 0,
+    -- avatar_key is one of the 20 built-in avatars (see game_data/avatars.py)
+    -- unless avatar_custom_filename is set, in which case the uploaded file
+    -- (under static/avatars/uploads/) takes precedence -- see
+    -- web_helpers.avatar_url(). avatar_custom_filename is NULL until a
+    -- job_tier==4 character spends currency to upload one (character.py's
+    -- character_change_avatar).
+    avatar_key TEXT NOT NULL DEFAULT 'avatar_01',
+    avatar_custom_filename TEXT
 );
 
 CREATE TABLE IF NOT EXISTS activity_log (
@@ -82,6 +90,7 @@ CREATE TABLE IF NOT EXISTS characters (
     equipped_skill_2 TEXT,
     is_npc INTEGER NOT NULL DEFAULT 0,
     rename_count INTEGER NOT NULL DEFAULT 0,
+    avatar_change_count INTEGER NOT NULL DEFAULT 0,
     contribution INTEGER NOT NULL DEFAULT 0,
     donated_today INTEGER NOT NULL DEFAULT 0,
     donated_today_date TEXT,
@@ -159,7 +168,8 @@ CREATE TABLE IF NOT EXISTS game_settings (
     hidden_taiji_trigger_percent REAL NOT NULL DEFAULT 0.05,
     hidden_wuji_trigger_percent REAL NOT NULL DEFAULT 0.02,
     hidden_taiji_drop_percent REAL NOT NULL DEFAULT 50,
-    hidden_wuji_drop_percent REAL NOT NULL DEFAULT 30
+    hidden_wuji_drop_percent REAL NOT NULL DEFAULT 30,
+    avatar_change_base_cost INTEGER NOT NULL DEFAULT 5000
 );
 
 CREATE TABLE IF NOT EXISTS site_visits (
@@ -337,6 +347,8 @@ CREATE TABLE IF NOT EXISTS tournament_registrations (
     -- later off snapshots alone, so this follows the same freeze-everything
     -- rule as every other snap_* column rather than re-reading live gear.
     snap_independent_damage_percent INTEGER NOT NULL DEFAULT 0,
+    snap_avatar_key TEXT NOT NULL DEFAULT 'avatar_01',
+    snap_avatar_custom_filename TEXT,
     registered_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (tournament_id) REFERENCES tournaments(id),
     FOREIGN KEY (character_id) REFERENCES characters(id),

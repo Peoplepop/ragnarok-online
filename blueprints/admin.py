@@ -274,6 +274,7 @@ def admin_update_game_settings():
         ).strip()
         tournament_start_weekday = int(request.form.get("tournament_start_weekday", ""))
         tournament_start_time = request.form.get("tournament_start_time", "").strip()
+        avatar_change_base_cost = int(request.form.get("avatar_change_base_cost", ""))
     except ValueError:
         flash("設定值格式不正確")
         return redirect(url_for("admin.admin_settings"))
@@ -378,6 +379,10 @@ def admin_update_game_settings():
         flash("天下武道大會的時間格式須為 HH:MM（24 小時制）")
         return redirect(url_for("admin.admin_settings"))
 
+    if avatar_change_base_cost < 0:
+        flash("頭像更換基礎費用不可為負數")
+        return redirect(url_for("admin.admin_settings"))
+
     db = get_db()
     db.execute(
         """UPDATE game_settings
@@ -400,7 +405,8 @@ def admin_update_game_settings():
                tournament_registration_deadline_weekday = ?, tournament_registration_deadline_time = ?,
                tournament_start_weekday = ?, tournament_start_time = ?,
                hidden_taiji_trigger_percent = ?, hidden_wuji_trigger_percent = ?,
-               hidden_taiji_drop_percent = ?, hidden_wuji_drop_percent = ?
+               hidden_taiji_drop_percent = ?, hidden_wuji_drop_percent = ?,
+               avatar_change_base_cost = ?
            WHERE id = 1""",
         (
             turn_wait_seconds, exp_base, exp_growth_novice_percent,
@@ -423,6 +429,7 @@ def admin_update_game_settings():
             tournament_start_weekday, tournament_start_time,
             hidden_taiji_trigger_percent, hidden_wuji_trigger_percent,
             hidden_taiji_drop_percent, hidden_wuji_drop_percent,
+            avatar_change_base_cost,
         ),
     )
     db.commit()

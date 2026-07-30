@@ -243,6 +243,17 @@
         冠軍可獲得「報名費總和 × (100 - 國庫抽成%)」，其餘進入冠軍所屬國家的國庫；報名人數不足 2 人時本屆流局並全額退費。
         時間格式須為 HH:MM（24 小時制），並請將開賽時間設定在報名截止之後
       </p>
+
+      <h3 style="color: var(--gold-bright); font-size: 15px; margin-bottom:8px;">頭像設定</h3>
+      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom:16px;">
+        <div>
+          <label>更換頭像基礎費用 (諸神幣)</label>
+          <input type="text" inputmode="numeric" name="avatar_change_base_cost" value="{{ settings.avatar_change_base_cost }}">
+        </div>
+      </div>
+      <p class="hint" style="margin-bottom:16px;">
+        四轉角色可更換頭像（內建圖庫或自行上傳），費用為「基礎費用 × 第幾次更換」（累進，同改名的計費方式）
+      </p>
       <button type="submit">儲存設定</button>
     </form>
   </div>
