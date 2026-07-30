@@ -13,11 +13,11 @@
 
   <div class="countries">
     {% for c in countries %}
-    <div class="country">
+    <a class="country" href="{{ url_for('auth.register', country_id=c.id) }}">
       <div class="element">屬性：{{ c.element }}</div>
       <h3>{{ c.name }}</h3>
       <p>{{ c.description }}</p>
-    </div>
+    </a>
     {% endfor %}
   </div>
 {% endblock %}

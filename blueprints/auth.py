@@ -29,33 +29,48 @@ def index():
     return render_template("index.html", countries=countries)
 
 
+def _selected_country(db, country_id):
+    if not country_id:
+        return None
+    return db.execute("SELECT * FROM countries WHERE id = ?", (country_id,)).fetchone()
+
+
 @auth_bp.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "GET":
-        return render_template("register.html")
+        db = get_db()
+        country = _selected_country(db, request.args.get("country_id", ""))
+        db.close()
+        return render_template("register.html", country=country)
 
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
     confirm = request.form.get("confirm", "")
     character_name = request.form.get("character_name", "").strip()
-
-    if len(username) < MIN_USERNAME_LEN:
-        flash(f"帳號至少需要 {MIN_USERNAME_LEN} 個字元")
-        return render_template("register.html")
-    password_error = _validate_password(password)
-    if password_error:
-        flash(password_error)
-        return render_template("register.html")
-    if password != confirm:
-        flash("兩次輸入的密碼不一致")
-        return render_template("register.html")
+    country_id = request.form.get("country_id", "")
 
     db = get_db()
+    country = _selected_country(db, country_id)
+
+    if len(username) < MIN_USERNAME_LEN:
+        db.close()
+        flash(f"帳號至少需要 {MIN_USERNAME_LEN} 個字元")
+        return render_template("register.html", country=country)
+    password_error = _validate_password(password)
+    if password_error:
+        db.close()
+        flash(password_error)
+        return render_template("register.html", country=country)
+    if password != confirm:
+        db.close()
+        flash("兩次輸入的密碼不一致")
+        return render_template("register.html", country=country)
+
     name_error = _validate_character_name(db, character_name, username)
     if name_error:
         db.close()
         flash(name_error)
-        return render_template("register.html")
+        return render_template("register.html", country=country)
 
     try:
         cur = db.execute(
@@ -65,12 +80,15 @@ def register():
         log_activity(db, cur.lastrowid, username, "register", ip_address=request.remote_addr)
         db.commit()
     except sqlite3.IntegrityError:
+        db.close()
         flash("這個帳號已經被註冊了")
-        return render_template("register.html")
+        return render_template("register.html", country=country)
     finally:
         db.close()
 
     session["pending_character_name"] = character_name
+    if country is not None:
+        session["pending_country_id"] = country["id"]
     flash("註冊成功，請登入")
     return redirect(url_for("auth.login"))
 

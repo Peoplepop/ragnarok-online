@@ -32,6 +32,45 @@ from game_data.combat import ELEMENT_OVERCOME_BONUS, ELEMENT_OVERCOME_PENALTY, d
 character_bp = Blueprint("character", __name__)
 
 
+def _create_character(db, country_id, character_name):
+    """Insert a new character row. Returns (country_row, error_message)."""
+    country = db.execute(
+        "SELECT * FROM countries WHERE id = ?", (country_id,)
+    ).fetchone()
+    if country is None:
+        return None, "請選擇一個有效的國家"
+
+    fortress = db.execute(
+        "SELECT id FROM map_tiles WHERE country_id = ? AND tile_type = 'fortress'",
+        (country["id"],),
+    ).fetchone()
+    if fortress is None:
+        # Fortress may have been conquered away -- fall back to any tile the
+        # country still owns (a town). If it owns nothing at all, it has no
+        # territory left to spawn characters on.
+        fortress = db.execute(
+            "SELECT id FROM map_tiles WHERE country_id = ? LIMIT 1", (country["id"],)
+        ).fetchone()
+    if fortress is None:
+        return None, f"{country['name']}目前沒有任何據點，暫時無法在此建立角色"
+
+    try:
+        db.execute(
+            "INSERT INTO characters (user_id, country_id, current_tile_id, name) VALUES (?, ?, ?, ?)",
+            (session["user_id"], country["id"], fortress["id"], character_name),
+        )
+        db.commit()
+    except sqlite3.IntegrityError:
+        return None, "這個角色名稱剛好被用掉了，請重新整理再試一次"
+
+    log_activity(
+        db, session["user_id"], session["username"], "character_create",
+        detail=f"{character_name}（{country['name']}）", ip_address=request.remote_addr,
+    )
+    db.commit()
+    return country, None
+
+
 @character_bp.route("/character/create", methods=["GET", "POST"])
 @login_required
 def character_create():
@@ -53,53 +92,34 @@ def character_create():
             character_name = f"{session['username']}的角色{suffix}"
             suffix += 1
 
+    # A player who picked their country on the landing page before registering
+    # already made this choice -- don't ask again, just create the character.
+    pending_country_id = session.get("pending_country_id")
+    if pending_country_id is not None:
+        country, error = _create_character(db, pending_country_id, character_name)
+        session.pop("pending_country_id", None)
+        if error:
+            db.close()
+            flash(error)
+            return redirect(url_for("character.character_create"))
+        db.close()
+        session.pop("pending_character_name", None)
+        session["character_name"] = character_name
+        flash(f"歡迎來到{country['name']}，{character_name}！")
+        return redirect(url_for("game.game"))
+
     if request.method == "GET":
         countries = db.execute("SELECT * FROM countries ORDER BY id").fetchall()
         db.close()
         return render_template("character_create.html", countries=countries, character_name=character_name)
 
-    country = db.execute(
-        "SELECT * FROM countries WHERE id = ?", (request.form.get("country_id", ""),)
-    ).fetchone()
-    if country is None:
+    country, error = _create_character(db, request.form.get("country_id", ""), character_name)
+    if error:
         db.close()
-        flash("請選擇一個有效的國家")
+        flash(error)
         return redirect(url_for("character.character_create"))
 
-    fortress = db.execute(
-        "SELECT id FROM map_tiles WHERE country_id = ? AND tile_type = 'fortress'",
-        (country["id"],),
-    ).fetchone()
-    if fortress is None:
-        # Fortress may have been conquered away -- fall back to any tile the
-        # country still owns (a town). If it owns nothing at all, it has no
-        # territory left to spawn characters on.
-        fortress = db.execute(
-            "SELECT id FROM map_tiles WHERE country_id = ? LIMIT 1", (country["id"],)
-        ).fetchone()
-    if fortress is None:
-        db.close()
-        flash(f"{country['name']}目前沒有任何據點，暫時無法在此建立角色")
-        return redirect(url_for("character.character_create"))
-
-    try:
-        db.execute(
-            "INSERT INTO characters (user_id, country_id, current_tile_id, name) VALUES (?, ?, ?, ?)",
-            (session["user_id"], country["id"], fortress["id"], character_name),
-        )
-        db.commit()
-    except sqlite3.IntegrityError:
-        db.close()
-        flash("這個角色名稱剛好被用掉了，請重新整理再試一次")
-        return redirect(url_for("character.character_create"))
-
-    log_activity(
-        db, session["user_id"], session["username"], "character_create",
-        detail=f"{character_name}（{country['name']}）", ip_address=request.remote_addr,
-    )
-    db.commit()
     db.close()
-
     session.pop("pending_character_name", None)
     session["character_name"] = character_name
     flash(f"歡迎來到{country['name']}，{character_name}！")
