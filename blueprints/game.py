@@ -250,7 +250,7 @@ def _render_game(**extra):
     major_event_rows = db.execute(
         """SELECT action, detail, username, created_at FROM activity_log
            WHERE action IN ('character_create', 'hidden_loot_drop', 'tournament_champion')
-           ORDER BY created_at DESC LIMIT 20"""
+           ORDER BY created_at DESC LIMIT 100"""
     ).fetchall()
     major_events = _major_event_feed(major_event_rows)
     db.close()

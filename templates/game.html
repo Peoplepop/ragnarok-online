@@ -79,19 +79,80 @@
       </div>
     </div>
 
-    <div class="panel" style="flex:1 1 260px; min-width:240px;">
-      <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">📜 重大事件</h3>
-      {% if major_events %}
-      <div style="display:flex; flex-direction:column; gap:10px; max-height:480px; overflow-y:auto;">
-        {% for e in major_events %}
-        <div style="font-size:12px; line-height:1.6;">
-          <span style="color:var(--text-dim);">{{ e.time_label }}</span>
-          <span style="margin-left:6px;">{{ e.message }}</span>
+    <div style="flex:1 1 260px; min-width:240px; display:flex; flex-direction:column; gap:14px;">
+      <div class="panel">
+        <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">📜 重大事件</h3>
+        {% if major_events %}
+        <div id="major-events-list" style="display:flex; flex-direction:column; gap:10px; min-height:100px;"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+          <button type="button" id="major-events-prev" class="btn" style="padding:4px 10px; font-size:12px;">← 上一頁</button>
+          <span id="major-events-page-label" style="font-size:11px; color:var(--text-dim);"></span>
+          <button type="button" id="major-events-next" class="btn" style="padding:4px 10px; font-size:12px;">下一頁 →</button>
         </div>
-        {% endfor %}
+        {% else %}
+        <p class="hint" style="margin:0;">目前還沒有重大事件</p>
+        {% endif %}
       </div>
-      {% else %}
-      <p class="hint" style="margin:0;">目前還沒有重大事件</p>
+
+      <div class="panel">
+        <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">⚔️ 戰鬥</h3>
+        <div style="font-size:13px; color:var(--text-dim); margin-bottom:8px;">前往打怪</div>
+        {% if current_hp <= 0 %}
+        <p class="hint" style="margin:0; color:var(--danger);">HP 已耗盡，無法戰鬥，請回到要塞選擇「回復」</p>
+        {% elif current_tile.tile_type == 'fortress' %}
+        <p class="hint" style="margin:0;">要塞內只有商店，沒有打怪地點，請先移動到要塞外</p>
+        {% else %}
+        <form method="post" action="{{ url_for('game.game_hunt') }}" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <select name="ground_id" class="turn-action-control">
+            {% for g in hunting_grounds %}
+            <option value="{{ g.id }}">{{ g.name }}（Lv.{{ g.min_level }}-{{ g.max_level }}）</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">前往打怪</button>
+        </form>
+        {% if session.is_admin %}
+        <form method="post" action="{{ url_for('game.game_hunt') }}" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px;">
+          <select name="monster_id" class="turn-action-control">
+            {% for m in admin_monsters %}
+            <option value="{{ m.id }}">[{{ m.ground_name }}] {{ m.name }}（{{ m.level_label }}）</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">🛠️ 指定怪物測試</button>
+        </form>
+        {% endif %}
+        {% endif %}
+      </div>
+
+      {% if current_tile.tile_type == 'fortress' %}
+      <div class="panel">
+        <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">🏪 商店與回復</h3>
+        <div style="display:flex; flex-direction:column; gap:10px; align-items:flex-start;">
+          <a href="{{ url_for('game.game_shop') }}" class="btn" style="padding:8px 18px; font-size:13px;">🏪 前往要塞商店</a>
+          <a href="{{ url_for('trade.trade_home') }}" class="btn" style="padding:8px 18px; font-size:13px;">🤝 交易</a>
+          {% if current_hp < stats.hp or current_mp < stats.mp %}
+          <form method="post" action="{{ url_for('game.game_recover') }}" style="display:flex; flex-direction:column; gap:6px;">
+            <button type="submit" class="turn-action-control" style="padding:8px 18px; font-size:13px;">✨ 回復 HP／MP（{{ recover_cost }} 諸神幣）</button>
+            <span class="hint" style="margin:0;">費用將計入「{{ current_tile.country_name }}」國庫</span>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">🏦 銀行</h3>
+        <p class="hint" style="margin:0 0 8px;">存款 {{ character.bank_balance }} 諸神幣</p>
+        <p class="hint" style="margin:0 0 8px;">存入／提領金額須為 1000 的倍數</p>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <form method="post" action="{{ url_for('game.game_bank_deposit') }}" style="display:flex; gap:8px; align-items:center;">
+            <input type="text" inputmode="numeric" name="amount" placeholder="1000的倍數" class="turn-action-control" style="width:120px;">
+            <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">存入</button>
+          </form>
+          <form method="post" action="{{ url_for('game.game_bank_withdraw') }}" style="display:flex; gap:8px; align-items:center;">
+            <input type="text" inputmode="numeric" name="amount" placeholder="1000的倍數" class="turn-action-control" style="width:120px;">
+            <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">提領</button>
+          </form>
+        </div>
+      </div>
       {% endif %}
     </div>
   </div>
@@ -182,47 +243,8 @@
     </div>
     {% endif %}
 
-    <div style="margin-top:18px;">
-      <div style="font-size:13px; color:var(--text-dim); margin-bottom:8px;">前往打怪</div>
-      {% if current_hp <= 0 %}
-      <p class="hint" style="margin:0; color:var(--danger);">HP 已耗盡，無法戰鬥，請回到要塞選擇「回復」</p>
-      {% elif current_tile.tile_type == 'fortress' %}
-      <p class="hint" style="margin:0;">要塞內只有商店，沒有打怪地點，請先移動到要塞外</p>
-      {% else %}
-      <form method="post" action="{{ url_for('game.game_hunt') }}" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-        <select name="ground_id" class="turn-action-control">
-          {% for g in hunting_grounds %}
-          <option value="{{ g.id }}">{{ g.name }}（Lv.{{ g.min_level }}-{{ g.max_level }}）</option>
-          {% endfor %}
-        </select>
-        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">前往打怪</button>
-      </form>
-      {% if session.is_admin %}
-      <form method="post" action="{{ url_for('game.game_hunt') }}" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px;">
-        <select name="monster_id" class="turn-action-control">
-          {% for m in admin_monsters %}
-          <option value="{{ m.id }}">[{{ m.ground_name }}] {{ m.name }}（{{ m.level_label }}）</option>
-          {% endfor %}
-        </select>
-        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">🛠️ 指定怪物測試</button>
-      </form>
-      {% endif %}
-      {% endif %}
-    </div>
-
     {% if current_tile.tile_type == 'fortress' %}
-    <div style="margin-top:24px; border-top:1px solid var(--border); padding-top:18px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
-      <a href="{{ url_for('game.game_shop') }}" class="btn" style="padding:8px 18px; font-size:13px;">🏪 前往要塞商店</a>
-      <a href="{{ url_for('trade.trade_home') }}" class="btn" style="padding:8px 18px; font-size:13px;">🤝 交易</a>
-      {% if current_hp < stats.hp or current_mp < stats.mp %}
-      <form method="post" action="{{ url_for('game.game_recover') }}" style="display:flex; align-items:center; gap:8px;">
-        <button type="submit" class="turn-action-control" style="padding:8px 18px; font-size:13px;">✨ 回復 HP／MP（{{ recover_cost }} 諸神幣）</button>
-        <span class="hint" style="margin:0;">費用將計入「{{ current_tile.country_name }}」國庫</span>
-      </form>
-      {% endif %}
-    </div>
-
-    <div style="margin-top:18px; border-top:1px solid var(--border); padding-top:18px;">
+    <div style="margin-top:24px; border-top:1px solid var(--border); padding-top:18px;">
       <div style="font-size:13px; color:var(--gold-bright); margin-bottom:8px;">🏆 天下武道大會</div>
       {% if tournament_already_registered %}
       <p class="hint" style="margin:0;">你已經報名本屆天下武道大會，請於開賽後至 <a href="{{ url_for('tournament.tournament_page') }}">武道大會</a> 查看賽果</p>
@@ -236,21 +258,6 @@
       {% else %}
       <p class="hint" style="margin:0;">目前不是報名時間，請至 <a href="{{ url_for('tournament.tournament_page') }}">武道大會</a> 查看賽程與歷代優勝者</p>
       {% endif %}
-    </div>
-
-    <div style="margin-top:18px; border-top:1px solid var(--border); padding-top:18px;">
-      <div style="font-size:13px; color:var(--gold-bright); margin-bottom:8px;">🏦 銀行（存款 {{ character.bank_balance }} 諸神幣）</div>
-      <p class="hint" style="margin:0 0 8px;">存入／提領金額須為 1000 的倍數</p>
-      <div style="display:flex; gap:16px; flex-wrap:wrap;">
-        <form method="post" action="{{ url_for('game.game_bank_deposit') }}" style="display:flex; gap:8px; align-items:center;">
-          <input type="text" inputmode="numeric" name="amount" placeholder="1000的倍數" class="turn-action-control" style="width:120px;">
-          <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">存入</button>
-        </form>
-        <form method="post" action="{{ url_for('game.game_bank_withdraw') }}" style="display:flex; gap:8px; align-items:center;">
-          <input type="text" inputmode="numeric" name="amount" placeholder="1000的倍數" class="turn-action-control" style="width:120px;">
-          <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">提領</button>
-        </form>
-      </div>
     </div>
 
     <div style="margin-top:18px; border-top:1px solid var(--border); padding-top:18px;">
@@ -288,6 +295,60 @@
       </div>
     </div>
   </div>
+
+  <script>
+    (function () {
+      var majorEvents = {{ major_events | tojson }};
+      var pageSize = 10;
+      var totalPages = Math.max(1, Math.ceil(majorEvents.length / pageSize));
+      var currentPage = 0;
+
+      function escapeHtml(str) {
+        var div = document.createElement("div");
+        div.textContent = str;
+        return div.innerHTML;
+      }
+
+      function renderMajorEventsPage() {
+        var list = document.getElementById("major-events-list");
+        if (!list) return;
+        var label = document.getElementById("major-events-page-label");
+        var prevBtn = document.getElementById("major-events-prev");
+        var nextBtn = document.getElementById("major-events-next");
+        var start = currentPage * pageSize;
+        var pageItems = majorEvents.slice(start, start + pageSize);
+        list.innerHTML = pageItems.map(function (e) {
+          return '<div style="font-size:12px; line-height:1.6;">' +
+            '<span style="color:var(--text-dim);">' + escapeHtml(e.time_label) + '</span>' +
+            '<span style="margin-left:6px;">' + escapeHtml(e.message) + '</span>' +
+          '</div>';
+        }).join("") || '<span class="hint">這一頁沒有事件</span>';
+        if (label) label.textContent = (currentPage + 1) + " / " + totalPages;
+        if (prevBtn) prevBtn.disabled = currentPage === 0;
+        if (nextBtn) nextBtn.disabled = currentPage >= totalPages - 1;
+      }
+
+      var majorEventsPrev = document.getElementById("major-events-prev");
+      var majorEventsNext = document.getElementById("major-events-next");
+      if (majorEventsPrev) {
+        majorEventsPrev.addEventListener("click", function () {
+          if (currentPage > 0) {
+            currentPage -= 1;
+            renderMajorEventsPage();
+          }
+        });
+      }
+      if (majorEventsNext) {
+        majorEventsNext.addEventListener("click", function () {
+          if (currentPage < totalPages - 1) {
+            currentPage += 1;
+            renderMajorEventsPage();
+          }
+        });
+      }
+      if (majorEvents.length) renderMajorEventsPage();
+    })();
+  </script>
 
   <script>
     (function () {
