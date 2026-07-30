@@ -505,6 +505,8 @@ def _ensure_session_columns(conn):
         conn.execute("ALTER TABLE users ADD COLUMN last_seen_at TEXT")
     if "is_online" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN is_online INTEGER NOT NULL DEFAULT 0")
+    if "is_locked" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN is_locked INTEGER NOT NULL DEFAULT 0")
 
 
 def _ensure_user_avatar_columns(conn):

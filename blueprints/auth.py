@@ -127,6 +127,13 @@ def login():
         flash("帳號或密碼錯誤")
         return render_template("login.html")
 
+    if user["is_locked"]:
+        log_activity(db, user["id"], user["username"], "login_locked", ip_address=request.remote_addr)
+        db.commit()
+        db.close()
+        flash("此帳號已被管理員鎖定，暫時無法登入")
+        return render_template("login.html")
+
     db.execute(
         "UPDATE users SET last_login_at = datetime('now'), last_seen_at = datetime('now'), is_online = 1 WHERE id = ?",
         (user["id"],),

@@ -20,6 +20,7 @@
           <th style="padding:8px 6px;">最後活動</th>
           <th style="padding:8px 6px;">本次時長</th>
           <th style="padding:8px 6px;">閒置時間</th>
+          <th style="padding:8px 6px;">操作</th>
         </tr>
       </thead>
       <tbody>
@@ -28,15 +29,33 @@
           <td style="padding:8px 6px;">
             {{ r.username }}
             {% if r.is_admin %}<span style="color:var(--gold); font-size:11px;">管理員</span>{% endif %}
+            {% if r.is_locked %}<span style="color:var(--danger); font-size:11px;">🔒 已鎖定</span>{% endif %}
           </td>
           <td style="padding:8px 6px; color: {{ 'var(--gold-bright)' if r.status=='在線' else 'var(--text-dim)' }};">{{ r.status }}</td>
           <td style="padding:8px 6px; color:var(--text-dim);">{{ r.last_login_at or '-' }}</td>
           <td style="padding:8px 6px; color:var(--text-dim);">{{ r.last_seen_at or '-' }}</td>
           <td style="padding:8px 6px;">{{ r.duration }}</td>
           <td style="padding:8px 6px;">{{ r.idle }}</td>
+          <td style="padding:8px 6px;">
+            {% if r.is_admin %}
+            <span class="hint" style="margin:0;">-</span>
+            {% else %}
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <form method="post" action="{{ url_for('admin.admin_toggle_user_lock', user_id=r.id) }}">
+                <button type="submit" class="btn" style="padding:4px 10px; font-size:12px;">
+                  {{ '🔓 解除鎖定' if r.is_locked else '🔒 鎖定帳號' }}
+                </button>
+              </form>
+              <form method="post" action="{{ url_for('admin.admin_delete_user', user_id=r.id) }}"
+                    onsubmit="return confirm('確定要刪除玩家「{{ r.username }}」嗎？角色、裝備、交易、聊天、活動紀錄等所有資料都會一併永久刪除，此動作無法復原。');">
+                <button type="submit" class="btn" style="padding:4px 10px; font-size:12px; border-color:var(--danger); color:var(--danger);">🗑️ 刪除玩家</button>
+              </form>
+            </div>
+            {% endif %}
+          </td>
         </tr>
         {% else %}
-        <tr><td colspan="6" style="padding:12px 6px; color:var(--text-dim);">目前沒有使用者資料</td></tr>
+        <tr><td colspan="7" style="padding:12px 6px; color:var(--text-dim);">目前沒有使用者資料</td></tr>
         {% endfor %}
       </tbody>
     </table>

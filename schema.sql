@@ -15,7 +15,10 @@ CREATE TABLE IF NOT EXISTS users (
     -- job_tier==4 character spends currency to upload one (character.py's
     -- character_change_avatar).
     avatar_key TEXT NOT NULL DEFAULT 'avatar_01',
-    avatar_custom_filename TEXT
+    avatar_custom_filename TEXT,
+    -- set by an admin via /admin/sessions to temporarily block login
+    -- (auth.login rejects it the same way it rejects a wrong password).
+    is_locked INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS activity_log (

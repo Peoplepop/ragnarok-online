@@ -2,9 +2,9 @@
 import sqlite3
 from datetime import datetime
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 
-from db import get_db, LEVEL_CAP
+from db import get_db, LEVEL_CAP, log_activity
 from web_helpers import admin_required, _parse_dt, _valid_war_time, _format_duration
 from game_data.constants import (
     STAT_FIELDS, IDLE_THRESHOLD_MINUTES, ACTION_LABELS, GOVERNMENT_ROLES,
@@ -40,7 +40,7 @@ def admin():
 def admin_sessions():
     db = get_db()
     users = db.execute(
-        "SELECT username, is_admin, is_online, last_login_at, last_seen_at "
+        "SELECT id, username, is_admin, is_online, is_locked, last_login_at, last_seen_at "
         "FROM users WHERE is_npc = 0 ORDER BY last_seen_at IS NULL, last_seen_at DESC"
     ).fetchall()
     db.close()
@@ -61,8 +61,10 @@ def admin_sessions():
             status = "在線"
 
         rows.append({
+            "id": u["id"],
             "username": u["username"],
             "is_admin": u["is_admin"],
+            "is_locked": u["is_locked"],
             "status": status,
             "last_login_at": u["last_login_at"],
             "last_seen_at": u["last_seen_at"],
@@ -73,6 +75,130 @@ def admin_sessions():
     return render_template(
         "admin_sessions.html", rows=rows, idle_threshold=IDLE_THRESHOLD_MINUTES, active_tab="sessions",
     )
+
+
+@admin_bp.route("/admin/users/<int:user_id>/toggle_lock", methods=["POST"])
+@admin_required
+def admin_toggle_user_lock(user_id):
+    db = get_db()
+    target = db.execute(
+        "SELECT id, username, is_npc, is_locked FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    if target is None or target["is_npc"]:
+        db.close()
+        flash("找不到這個玩家帳號")
+        return redirect(url_for("admin.admin_sessions"))
+    if target["id"] == session["user_id"]:
+        db.close()
+        flash("不能鎖定自己的帳號")
+        return redirect(url_for("admin.admin_sessions"))
+
+    new_locked = 0 if target["is_locked"] else 1
+    db.execute("UPDATE users SET is_locked = ? WHERE id = ?", (new_locked, target["id"]))
+    log_activity(
+        db, session["user_id"], session["username"],
+        "admin_lock_user" if new_locked else "admin_unlock_user",
+        detail=target["username"], ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+    flash(f"已{'鎖定' if new_locked else '解除鎖定'}帳號「{target['username']}」")
+    return redirect(url_for("admin.admin_sessions"))
+
+
+def _delete_player_and_records(db, user_id):
+    """Cascade-deletes a real (non-NPC) player's login account, character,
+    and every row anywhere in the schema that references that character or
+    user -- including their own activity_log entries, per the explicit
+    "玩家所有紀錄也都會被清空" requirement. Office seats and tile mayorship
+    are cleared (set to NULL) rather than left dangling; nothing else about
+    the country/tile/tournament-cycle rows themselves is touched. Caller is
+    responsible for the is_npc/self-delete guards -- this function trusts
+    user_id unconditionally."""
+    character = db.execute(
+        "SELECT id FROM characters WHERE user_id = ?", (user_id,)
+    ).fetchone()
+
+    if character is not None:
+        character_id = character["id"]
+        db.execute("DELETE FROM character_skills WHERE character_id = ?", (character_id,))
+        db.execute("DELETE FROM character_skill_books WHERE character_id = ?", (character_id,))
+        db.execute("DELETE FROM job_masteries WHERE character_id = ?", (character_id,))
+        db.execute("DELETE FROM garrisons WHERE character_id = ?", (character_id,))
+        db.execute("DELETE FROM inventory WHERE character_id = ?", (character_id,))
+        db.execute("DELETE FROM chat_messages WHERE character_id = ?", (character_id,))
+
+        trade_ids = [
+            row["id"] for row in db.execute(
+                "SELECT id FROM trades WHERE initiator_character_id = ? OR target_character_id = ?",
+                (character_id, character_id),
+            ).fetchall()
+        ]
+        for trade_id in trade_ids:
+            db.execute("DELETE FROM trade_items WHERE trade_id = ?", (trade_id,))
+        db.execute(
+            "DELETE FROM trades WHERE initiator_character_id = ? OR target_character_id = ?",
+            (character_id, character_id),
+        )
+
+        registration_ids = [
+            row["id"] for row in db.execute(
+                "SELECT id FROM tournament_registrations WHERE character_id = ?", (character_id,)
+            ).fetchall()
+        ]
+        for reg_id in registration_ids:
+            db.execute(
+                """DELETE FROM tournament_matches
+                   WHERE registration_a_id = ? OR registration_b_id = ? OR winner_registration_id = ?""",
+                (reg_id, reg_id, reg_id),
+            )
+        db.execute("DELETE FROM tournament_registrations WHERE character_id = ?", (character_id,))
+
+        db.execute(
+            "UPDATE map_tiles SET mayor_character_id = NULL WHERE mayor_character_id = ?", (character_id,)
+        )
+        db.execute(
+            "UPDATE countries SET king_character_id = NULL WHERE king_character_id = ?", (character_id,)
+        )
+        db.execute(
+            "UPDATE countries SET advisor_character_id = NULL WHERE advisor_character_id = ?", (character_id,)
+        )
+        db.execute(
+            "UPDATE countries SET general_character_id = NULL WHERE general_character_id = ?", (character_id,)
+        )
+
+        db.execute("DELETE FROM characters WHERE id = ?", (character_id,))
+
+    db.execute("DELETE FROM feedback WHERE user_id = ?", (user_id,))
+    db.execute("DELETE FROM activity_log WHERE user_id = ?", (user_id,))
+    db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+
+@admin_bp.route("/admin/users/<int:user_id>/delete", methods=["POST"])
+@admin_required
+def admin_delete_user(user_id):
+    db = get_db()
+    target = db.execute(
+        "SELECT id, username, is_npc FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    if target is None or target["is_npc"]:
+        db.close()
+        flash("找不到這個玩家帳號")
+        return redirect(url_for("admin.admin_sessions"))
+    if target["id"] == session["user_id"]:
+        db.close()
+        flash("不能刪除自己的帳號")
+        return redirect(url_for("admin.admin_sessions"))
+
+    _delete_player_and_records(db, target["id"])
+    log_activity(
+        db, session["user_id"], session["username"], "admin_delete_user",
+        detail=target["username"], ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+    flash(f"已刪除玩家「{target['username']}」及其所有紀錄")
+    return redirect(url_for("admin.admin_sessions"))
 
 
 @admin_bp.route("/admin/logs")
