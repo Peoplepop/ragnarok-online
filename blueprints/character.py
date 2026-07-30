@@ -10,6 +10,7 @@ from web_helpers import (
 )
 from game_data.constants import (
     SHOP_TYPE_LABELS, SLOT_LABELS, EQUIP_SLOT_COLUMNS, LEVEL_STAT_GROWTH, STAT_LABELS,
+    RENAME_MAX_CHARACTER_NAME_LEN,
 )
 from game_data.jobs import (
     TIER1_JOBS, TIER2_JOBS, TIER2_CHILDREN_BY_FAMILY, TIER3_JOBS, TIER3_CHILDREN_BY_PARENT,
@@ -305,6 +306,7 @@ def character_page():
         stat_labels=STAT_LABELS,
         stat_reroll_cost=settings["stat_reroll_cost"],
         next_rename_cost=(character["rename_count"] + 1) * 1000,
+        rename_max_len=RENAME_MAX_CHARACTER_NAME_LEN,
     )
 
 
@@ -478,6 +480,11 @@ def character_rename():
     db = get_db()
     character = _character_for_promotion(db)
 
+    if character["job_tier"] != 4:
+        db.close()
+        flash("需先四轉才能改名")
+        return redirect(url_for("character.character_page"))
+
     new_name = request.form.get("new_name", "").strip()
     old_name = character["character_name"]
 
@@ -486,7 +493,7 @@ def character_rename():
         flash("名稱沒有變更")
         return redirect(url_for("character.character_page"))
 
-    name_error = _validate_character_name(db, new_name, session["username"])
+    name_error = _validate_character_name(db, new_name, session["username"], max_len=RENAME_MAX_CHARACTER_NAME_LEN)
     if name_error:
         db.close()
         flash(name_error)

@@ -297,9 +297,9 @@ def _validate_password(password):
     return None
 
 
-def _validate_character_name(db, name, username):
-    if len(name) < MIN_CHARACTER_NAME_LEN or len(name) > MAX_CHARACTER_NAME_LEN:
-        return f"角色名稱需要 {MIN_CHARACTER_NAME_LEN}～{MAX_CHARACTER_NAME_LEN} 個字元"
+def _validate_character_name(db, name, username, max_len=MAX_CHARACTER_NAME_LEN):
+    if len(name) < MIN_CHARACTER_NAME_LEN or len(name) > max_len:
+        return f"角色名稱需要 {MIN_CHARACTER_NAME_LEN}～{max_len} 個字元"
     if name.lower() == username.lower():
         return "角色名稱不能跟帳號相同"
     taken = db.execute(
