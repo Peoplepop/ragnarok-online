@@ -364,6 +364,7 @@ def admin_update_game_settings():
         rebirth_stat_bonus_percent = float(request.form.get("rebirth_stat_bonus_percent", ""))
         sell_back_percent = float(request.form.get("sell_back_percent", ""))
         guardian_encounter_percent = float(request.form.get("guardian_encounter_percent", ""))
+        same_bracket_encounter_percent = float(request.form.get("same_bracket_encounter_percent", ""))
         hidden_taiji_trigger_percent = float(request.form.get("hidden_taiji_trigger_percent", ""))
         hidden_wuji_trigger_percent = float(request.form.get("hidden_wuji_trigger_percent", ""))
         hidden_taiji_drop_percent = float(request.form.get("hidden_taiji_drop_percent", ""))
@@ -429,6 +430,10 @@ def admin_update_game_settings():
         or guardian_exp_multiplier < 1 or boss_exp_multiplier < 1
     ):
         flash("守衛怪遭遇機率須介於 0 到 100，經驗倍率須大於等於 1")
+        return redirect(url_for("admin.admin_settings"))
+
+    if same_bracket_encounter_percent < 0 or same_bracket_encounter_percent > 100:
+        flash("同等級怪物遭遇機率須介於 0 到 100 之間")
         return redirect(url_for("admin.admin_settings"))
 
     if min(
@@ -534,7 +539,7 @@ def admin_update_game_settings():
                tournament_start_weekday = ?, tournament_start_time = ?,
                hidden_taiji_trigger_percent = ?, hidden_wuji_trigger_percent = ?,
                hidden_taiji_drop_percent = ?, hidden_wuji_drop_percent = ?,
-               avatar_change_base_cost = ?
+               avatar_change_base_cost = ?, same_bracket_encounter_percent = ?
            WHERE id = 1""",
         (
             turn_wait_seconds, exp_base, exp_growth_novice_percent,
@@ -557,7 +562,7 @@ def admin_update_game_settings():
             tournament_start_weekday, tournament_start_time,
             hidden_taiji_trigger_percent, hidden_wuji_trigger_percent,
             hidden_taiji_drop_percent, hidden_wuji_drop_percent,
-            avatar_change_base_cost,
+            avatar_change_base_cost, same_bracket_encounter_percent,
         ),
     )
     db.commit()

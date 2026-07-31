@@ -4,13 +4,30 @@
   <div style="font-size:14px; color:var(--text); margin-bottom:8px;">你目前在「{{ current_tile.display_name }}」</div>
 
   {% if garrison %}
+  <div style="font-size:13px; color:var(--gold-bright); margin-bottom:8px;">
+    🛡️ 你目前駐防於「{{ garrison_tile.display_name if garrison_tile else "未知地點" }}」
+  </div>
   <form method="post" action="{{ url_for('game.game_garrison_withdraw') }}" style="margin-bottom:12px;">
-    <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">🛡️ 撤離駐防</button>
+    <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">撤離駐防</button>
   </form>
-  {% elif can_station_here %}
-  <form method="post" action="{{ url_for('game.game_garrison_station') }}" style="margin-bottom:12px;">
-    <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">🛡️ 駐防此地</button>
-  </form>
+  {% endif %}
+
+  {% if can_station_here and (not garrison or garrison.tile_id != current_tile.tile_id) %}
+    {% if pending_garrison_conflict_tile_name %}
+    <div style="padding:10px 12px; background:var(--panel-2); border-radius:6px; border:1px solid var(--danger); margin-bottom:12px;">
+      <p class="hint" style="margin:0 0 8px; color:var(--danger);">
+        你已經在「{{ pending_garrison_conflict_tile_name }}」駐防中，是否要撤離該駐防並改駐防於此地？
+      </p>
+      <form method="post" action="{{ url_for('game.game_garrison_station') }}">
+        <input type="hidden" name="confirm_withdraw_garrison" value="1">
+        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">確認撤離並駐防此地</button>
+      </form>
+    </div>
+    {% else %}
+    <form method="post" action="{{ url_for('game.game_garrison_station') }}" style="margin-bottom:12px;">
+      <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">🛡️ 駐防此地</button>
+    </form>
+    {% endif %}
   {% endif %}
 
   <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:12px;">
@@ -26,18 +43,6 @@
     </form>
     {% else %}
     <p class="hint" style="margin:0;">附近沒有可以移動的地點</p>
-    {% endif %}
-    {% if pending_move_tile_id %}
-    <div style="margin-top:10px; padding:10px 12px; background:var(--panel-2); border-radius:6px; border:1px solid var(--danger);">
-      <p class="hint" style="margin:0 0 8px; color:var(--danger);">
-        你目前正在駐防中，移動到「{{ pending_move_tile_name }}」將會變更或解除駐防狀態，請確認是否繼續
-      </p>
-      <form method="post" action="{{ url_for('game.game_move') }}">
-        <input type="hidden" name="tile_id" value="{{ pending_move_tile_id }}">
-        <input type="hidden" name="confirm_garrison_move" value="1">
-        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">確認移動</button>
-      </form>
-    </div>
     {% endif %}
   </div>
 

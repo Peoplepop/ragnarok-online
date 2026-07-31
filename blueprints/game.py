@@ -30,33 +30,6 @@ from game_data.combat import gold_luk_bonus_pct, run_battle
 game_bp = Blueprint("game", __name__)
 
 
-def _relocate_or_clear_garrison(db, character_id, new_tile):
-    """If character_id currently has a garrison row, relocate it to new_tile
-    (refreshing stationed_at so a genuine relocation counts as a fresh "most
-    recent" stationing) when new_tile is a valid own-country fortress/town;
-    otherwise the destination isn't a legal garrison location, so the garrison
-    row is deleted entirely."""
-    garrison = db.execute(
-        "SELECT id FROM garrisons WHERE character_id = ?", (character_id,)
-    ).fetchone()
-    if garrison is None:
-        return
-    character = db.execute(
-        "SELECT country_id FROM characters WHERE id = ?", (character_id,)
-    ).fetchone()
-    valid = (
-        new_tile["tile_type"] in ("fortress", "town")
-        and new_tile["country_id"] == character["country_id"]
-    )
-    if valid:
-        db.execute(
-            "UPDATE garrisons SET tile_id = ?, stationed_at = datetime('now') WHERE character_id = ?",
-            (new_tile["id"], character_id),
-        )
-    else:
-        db.execute("DELETE FROM garrisons WHERE character_id = ?", (character_id,))
-
-
 def _roll_hidden_encounter(db, settings):
     """The 秘境 interrupt roll, made once per ordinary /game/hunt action
     (never for conquest, garrison duels, the tournament, the bandit lord or
@@ -471,24 +444,17 @@ def game_move():
 
     target_name = tile_display_name(target_tile["name"], target_tile["tile_type"])
 
-    garrison = db.execute(
-        "SELECT id FROM garrisons WHERE character_id = ?", (character["id"],)
-    ).fetchone()
-    if garrison is not None and request.form.get("confirm_garrison_move") != "1":
-        db.close()
-        flash(f"你目前正在駐防中，移動到「{target_name}」將會變更或解除駐防狀態，請確認是否繼續移動")
-        return _render_game(
-            pending_move_tile_id=target_tile["id"],
-            pending_move_tile_name=target_name,
-        )
-
+    # Moving no longer touches garrison state at all -- a garrison stays put
+    # at whatever tile it was stationed on, independent of where the
+    # character currently walks. It's only ever created/withdrawn via the
+    # explicit 駐防/撤離駐防 actions (see game_garrison_station), which is
+    # also where a "you're already garrisoned elsewhere" conflict now gets
+    # surfaced, instead of move forcing a confirm dialog on every trip.
     settings = db.execute("SELECT turn_wait_seconds FROM game_settings WHERE id = 1").fetchone()
     db.execute(
         "UPDATE characters SET current_tile_id = ?, next_action_at = ?, pending_boss_monster_id = NULL WHERE id = ?",
         (target_tile["id"], _next_action_at(settings["turn_wait_seconds"]), character["id"]),
     )
-    if garrison is not None:
-        _relocate_or_clear_garrison(db, character["id"], target_tile)
     log_activity(
         db, session["user_id"], session["username"], "move",
         detail=target_name, ip_address=request.remote_addr,
@@ -604,14 +570,32 @@ def game_hunt():
             and m["level_min"] is not None and m["level_min"] <= character["level"] <= m["level_max"]
         ]
         regulars_any = [m for m in monsters if not m["is_boss"] and not m["is_guardian"]]
+        # Every other bracket in this hunting ground -- an encounter that
+        # isn't in the character's own level bracket picks uniformly from
+        # this, not just adjacent brackets, so a low-level character in a
+        # ground can occasionally run into its toughest regular monster.
+        regulars_other_brackets = [m for m in regulars_any if m not in regulars_in_bracket]
         guardian = next((m for m in monsters if m["is_guardian"]), None)
-        regular_pool = regulars_in_bracket or regulars_any
-        if not regular_pool and not guardian:
+        if not regulars_any and not guardian:
             db.close()
             flash("這個打怪場目前還沒有設定怪物")
             return redirect(url_for("game.game"))
         is_guardian_fight = bool(guardian) and random.random() * 100 < settings["guardian_encounter_percent"]
-        monster = guardian if is_guardian_fight else random.choice(regular_pool)
+        if is_guardian_fight:
+            monster = guardian
+        elif regulars_in_bracket and regulars_other_brackets:
+            # Own-level bracket wins same_bracket_encounter_percent% of the
+            # time; every other bracket in the ground splits the rest.
+            if random.random() * 100 < settings["same_bracket_encounter_percent"]:
+                monster = random.choice(regulars_in_bracket)
+            else:
+                monster = random.choice(regulars_other_brackets)
+        else:
+            # No monster matches the character's own level (e.g. character
+            # far outleveled this ground) or there's only one bracket total
+            # (the 秘境 hidden grounds) -- nothing to weight between, so fall
+            # back to a flat pick across whatever regulars exist.
+            monster = random.choice(regulars_in_bracket or regulars_any)
 
     # 怪物弱化: the monster actually fought is a scaled-down copy; every
     # reward below still reads the ORIGINAL row's currency_reward/exp_reward,
@@ -1444,17 +1428,6 @@ def game_garrison_station():
         flash(f"防守失敗後需要等待才能重新駐防，還需 {_format_duration(remaining_cooldown)}")
         return redirect(url_for("game.game"))
 
-    existing = db.execute(
-        "SELECT id, tile_id FROM garrisons WHERE character_id = ?", (character["id"],)
-    ).fetchone()
-    if existing is not None:
-        db.close()
-        if existing["tile_id"] == character["current_tile_id"]:
-            flash("你已經駐防在這裡了")
-        else:
-            flash("你已經在別處駐防中，請先撤離駐防")
-        return redirect(url_for("game.game"))
-
     tile = db.execute(
         "SELECT id, tile_type, country_id, name FROM map_tiles WHERE id = ?",
         (character["current_tile_id"],),
@@ -1467,6 +1440,31 @@ def game_garrison_station():
         db.close()
         flash("只能在自己國家的要塞或城鎮駐防")
         return redirect(url_for("game.game"))
+
+    existing = db.execute(
+        "SELECT id, tile_id FROM garrisons WHERE character_id = ?", (character["id"],)
+    ).fetchone()
+    if existing is not None and existing["tile_id"] == tile["id"]:
+        db.close()
+        flash("你已經駐防在這裡了")
+        return redirect(url_for("game.game"))
+
+    # Already garrisoned somewhere else: don't silently move it and don't
+    # hard-block either -- surface a one-click confirm (mirrors the existing
+    # pending_conquer_confirm pattern for "attack while garrisoned") so the
+    # player can decide, instead of forcing them to go find the withdraw
+    # button first.
+    if existing is not None and request.form.get("confirm_withdraw_garrison") != "1":
+        old_tile = db.execute(
+            "SELECT name, tile_type FROM map_tiles WHERE id = ?", (existing["tile_id"],)
+        ).fetchone()
+        old_tile_name = tile_display_name(old_tile["name"], old_tile["tile_type"]) if old_tile else "未知地點"
+        db.close()
+        flash(f"你已經在「{old_tile_name}」駐防中，請確認是否撤離該駐防並改駐防於此地")
+        return _render_game(pending_garrison_conflict_tile_name=old_tile_name)
+
+    if existing is not None:
+        db.execute("DELETE FROM garrisons WHERE character_id = ?", (character["id"],))
 
     db.execute(
         "INSERT INTO garrisons (character_id, tile_id) VALUES (?, ?)",

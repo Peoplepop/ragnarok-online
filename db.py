@@ -1002,6 +1002,13 @@ def _ensure_game_settings_columns(conn):
         conn.execute("ALTER TABLE game_settings ADD COLUMN boss_room_trigger_percent REAL NOT NULL DEFAULT 50")
     if "guardian_exp_multiplier" not in cols:
         conn.execute("ALTER TABLE game_settings ADD COLUMN guardian_exp_multiplier REAL NOT NULL DEFAULT 2")
+    if "same_bracket_encounter_percent" not in cols:
+        # Chance a regular (non-guardian/boss) hunt encounter comes from the
+        # monster level-bracket matching the character's own level, vs. any
+        # other bracket in the same hunting ground -- see game_hunt.
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN same_bracket_encounter_percent REAL NOT NULL DEFAULT 60"
+        )
     if "stat_reroll_cost" not in cols:
         conn.execute("ALTER TABLE game_settings ADD COLUMN stat_reroll_cost INTEGER NOT NULL DEFAULT 100000")
     if "war_town_weekday" not in cols:
