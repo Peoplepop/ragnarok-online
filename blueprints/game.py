@@ -12,6 +12,7 @@ from web_helpers import (
     _remove_from_inventory, _in_any_war_window, _taipei_now, _parse_dt,
     _current_war_window_end, _morale_buff_active, _tournament_registration_open,
     _taipei_time_label, ACTION_DT_FORMAT, _major_event_feed, _sanitized_action_block_order,
+    avatar_url,
 )
 from game_data.constants import (
     SHOP_TYPE_LABELS, SLOT_LABELS, EQUIP_SLOT_COLUMNS, GOVERNMENT_ROLES, tile_display_name,
@@ -757,6 +758,8 @@ def game_hunt():
         player_stats=stats,
         stats_after=stats_after,
         stat_labels=STAT_LABELS,
+        player_level=character["level"],
+        player_avatar_url=avatar_url(session.get("avatar_key"), session.get("avatar_custom_filename")),
     )
 
 
@@ -907,6 +910,8 @@ def game_hunt_boss_room():
         player_stats=stats,
         stats_after=stats_after,
         stat_labels=STAT_LABELS,
+        player_level=character["level"],
+        player_avatar_url=avatar_url(session.get("avatar_key"), session.get("avatar_custom_filename")),
     )
 
 
@@ -1021,6 +1026,8 @@ def _resolve_bandit_conquest(
         player_stats=stats,
         bandit_hp_remaining=max(0, bandit_hp_after),
         bandit_hp_max=bandit_hp_max,
+        player_level=character["level"],
+        player_avatar_url=avatar_url(session.get("avatar_key"), session.get("avatar_custom_filename")),
     )
 
 
@@ -1208,6 +1215,7 @@ def game_conquer():
             "hp": defender_stats["hp"], "atk": defender_stats["str"],
             "def": defender_stats["def"], "agi": defender_stats["agi"],
             "element": defender_row["element"],
+            "level": defender_row["level"],
         }
 
         result = run_battle(
@@ -1326,6 +1334,8 @@ def game_conquer():
             player_mp=result["player_mp"],
             max_mp=stats["mp"],
             player_stats=stats,
+            player_level=character["level"],
+            player_avatar_url=avatar_url(session.get("avatar_key"), session.get("avatar_custom_filename")),
         )
 
     # No PvP defender remains at this tile -- proceed exactly as the
@@ -1410,6 +1420,8 @@ def game_conquer():
         player_mp=result["player_mp"],
         max_mp=stats["mp"],
         player_stats=stats,
+        player_level=character["level"],
+        player_avatar_url=avatar_url(session.get("avatar_key"), session.get("avatar_custom_filename")),
     )
 
 

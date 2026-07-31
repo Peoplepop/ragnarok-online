@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="65%">
+      <stop offset="0%" stop-color="#fbe27a"/>
+      <stop offset="55%" stop-color="#f0c419"/>
+      <stop offset="100%" stop-color="#7a5e08"/>
+    </radialGradient>
+  </defs>
+  <circle cx="100" cy="100" r="98" fill="url(#bg)"/>
+  <circle cx="100" cy="100" r="98" fill="none" stroke="#4a3805" stroke-width="4"/>
+  <polygon points="64,52 50,20 78,46" fill="#7a5e08"/>
+  <polygon points="136,52 150,20 122,46" fill="#7a5e08"/>
+  <path d="M56,130 Q52,80 100,66 Q148,80 144,130 L128,116 Q116,128 100,128 Q84,128 72,116 Z" fill="#7a5e08"/>
+  <polygon points="100,128 82,160 100,150 118,160" fill="#7a5e08"/>
+  <circle cx="82" cy="94" r="7" fill="#20242b"/>
+  <circle cx="118" cy="94" r="7" fill="#20242b"/>
+  <path d="M70,108 Q100,120 130,108" stroke="#4a3805" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <polygon points="70,60 78,44 86,60" fill="#fbe27a"/>
+  <polygon points="92,54 100,36 108,54" fill="#fbe27a"/>
+  <polygon points="114,60 122,44 130,60" fill="#fbe27a"/>
+</svg>

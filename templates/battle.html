@@ -42,16 +42,29 @@
   </div>
 
   {% if player_stats %}
-  <div class="panel" style="margin-bottom:20px; display:flex; gap:32px; flex-wrap:wrap; font-size:13px;">
-    <div>
-      <div style="color:var(--gold-bright); margin-bottom:4px;">我方</div>
-      <div style="color:var(--text-dim);">HP {{ player_stats.hp }}　MP {{ player_stats.mp }}</div>
-      <div style="color:var(--text-dim);">力量 {{ player_stats.str }}　防禦 {{ player_stats.def }}　敏捷 {{ player_stats.agi }}　幸運 {{ player_stats.luk }}</div>
+  <div class="panel" style="margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; font-size:13px;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      {% if player_avatar_url %}
+      <img src="{{ player_avatar_url }}" alt="我方頭像" style="width:72px; height:72px; border-radius:50%; border:2px solid var(--border); flex-shrink:0; object-fit:cover;">
+      {% endif %}
+      <div>
+        <div style="color:var(--gold-bright); margin-bottom:4px;">我方{% if player_level %}　Lv.{{ player_level }}{% endif %}</div>
+        <div style="color:var(--text-dim);">HP {{ player_stats.hp }}　MP {{ player_stats.mp }}</div>
+        <div style="color:var(--text-dim);">力量 {{ player_stats.str }}　防禦 {{ player_stats.def }}　敏捷 {{ player_stats.agi }}　幸運 {{ player_stats.luk }}</div>
+      </div>
     </div>
-    <div>
-      <div style="color:var(--danger); margin-bottom:4px;">{% if bandit_fight %}山賊領主{% elif conquest %}守軍{% else %}敵方{% endif %}</div>
-      <div style="color:var(--text-dim);">HP {{ monster.hp }}{% if bandit_fight %}/{{ bandit_hp_max }}{% endif %}</div>
-      <div style="color:var(--text-dim);">攻擊 {{ monster.atk }}　防禦 {{ monster.def }}　敏捷 {{ monster.agi }}</div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div style="text-align:right;">
+        <div style="color:var(--danger); margin-bottom:4px;">
+          {% if bandit_fight %}山賊領主{% elif conquest %}守軍{% else %}敵方{% endif %}
+          {% if monster.level %}　Lv.{{ monster.level }}{% elif monster.level_min %}　Lv.{{ monster.level_min }}-{{ monster.level_max }}{% else %}　Lv.???{% endif %}
+        </div>
+        <div style="color:var(--text-dim);">HP {{ monster.hp }}{% if bandit_fight %}/{{ bandit_hp_max }}{% endif %}</div>
+        <div style="color:var(--text-dim);">攻擊 {{ monster.atk }}　防禦 {{ monster.def }}　敏捷 {{ monster.agi }}</div>
+      </div>
+      {% if monster.image_key %}
+      <img src="{{ url_for('static', filename='monsters/' + monster.image_key + '.svg') }}" alt="{{ monster.name }}" style="width:72px; height:72px; border-radius:50%; border:2px solid var(--border); flex-shrink:0; object-fit:cover;">
+      {% endif %}
     </div>
   </div>
   {% endif %}

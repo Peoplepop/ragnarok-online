@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="65%">
+      <stop offset="0%" stop-color="#4a3a72"/>
+      <stop offset="55%" stop-color="#150f28"/>
+      <stop offset="100%" stop-color="#020103"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#b8a8e8" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#b8a8e8" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="100" cy="100" r="98" fill="url(#bg)"/>
+  <circle cx="100" cy="100" r="98" fill="none" stroke="#000000" stroke-width="4"/>
+  <circle cx="100" cy="100" r="93" fill="none" stroke="#a99bd6" stroke-width="2" opacity="0.5"/>
+  <circle cx="100" cy="100" r="86" fill="none" stroke="#a99bd6" stroke-width="1" opacity="0.35"/>
+  <circle cx="100" cy="100" r="79" fill="none" stroke="#a99bd6" stroke-width="1" opacity="0.25"/>
+  <g><line x1="144.0" y1="78.0" x2="176.0" y2="78.0" stroke="#d8ccf5" stroke-width="4" stroke-linecap="round" opacity="0.85"/><line x1="137.3" y1="102.0" x2="164.0" y2="118.0" stroke="#d8ccf5" stroke-width="4" stroke-linecap="round" opacity="0.85"/><line x1="119.0" y1="119.3" x2="135.0" y2="146.0" stroke="#d8ccf5" stroke-width="4" stroke-linecap="round" opacity="0.85"/><line x1="100.0" y1="126.0" x2="100.0" y2="158.0" stroke="#d8ccf5" stroke-width="4" stroke-linecap="round" opacity="0.85"/><line x1="81.0" y1="119.3" x2="65.0" y2="146.0" stroke="#d8ccf5" stroke-width="4" stroke-linecap="round" opacity="0.85"/><line x1="62.7" y1="102.0" x2="36.0" y2="118.0" stroke="#d8ccf5" stroke-width="4" stroke-linecap="round" opacity="0.85"/><line x1="56.0" y1="78.0" x2="24.0" y2="78.0" stroke="#d8ccf5" stroke-width="4" stroke-linecap="round" opacity="0.85"/><line x1="62.7" y1="54.0" x2="36.0" y2="38.0" stroke="#d8ccf5" stroke-width="4" stroke-linecap="round" opacity="0.85"/><line x1="81.0" y1="36.7" x2="65.0" y2="10.0" stroke="#d8ccf5" stroke-width="4" stroke-linecap="round" opacity="0.85"/><line x1="100.0" y1="30.0" x2="100.0" y2="-2.0" stroke="#d8ccf5" stroke-width="4" stroke-linecap="round" opacity="0.85"/><line x1="119.0" y1="36.7" x2="135.0" y2="10.0" stroke="#d8ccf5" stroke-width="4" stroke-linecap="round" opacity="0.85"/><line x1="137.3" y1="54.0" x2="164.0" y2="38.0" stroke="#d8ccf5" stroke-width="4" stroke-linecap="round" opacity="0.85"/></g>
+  <circle cx="100" cy="100" r="56" fill="url(#glow)"/>
+  <path d="M36,188 Q42,116 100,98 L100,98 Q158,116 164,188 Z" fill="#020103"/>
+  <circle cx="100" cy="86" r="42" fill="#000000"/>
+  <path d="M100,44 A42,42 0 0 1 100,128 A21,21 0 0 1 100,86 A21,21 0 0 0 100,44 Z" fill="#d8ccf5"/>
+  <circle cx="100" cy="65" r="7" fill="#000000"/>
+  <circle cx="100" cy="107" r="7" fill="#d8ccf5"/>
+  <circle cx="100" cy="86" r="44" fill="none" stroke="#a99bd6" stroke-width="2"/>
+  <circle cx="100" cy="86" r="50" fill="none" stroke="#a99bd6" stroke-width="1" opacity="0.6"/>
+</svg>

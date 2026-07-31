@@ -108,6 +108,7 @@ def defense_tower_stats(country, tile_type, settings, defense_reduction_percent=
         "name": f"{country['name']}守軍",
         "hp": s["hp"], "atk": s["str"], "def": s["def"], "agi": s["agi"],
         "element": country["element"],
+        "image_key": "defender", "level": effective_level,
     }
 
 
@@ -156,6 +157,7 @@ def _bandit_lord_stats(settings=None):
         "hp": s["hp"] * BANDIT_HP_MULTIPLIER,
         "atk": s["str"], "def": s["def"], "agi": s["agi"],
         "element": "",
+        "image_key": "bandit_lord", "level": LEVEL_CAP,
     }
 
 

@@ -348,40 +348,40 @@ _MONSTER_TIER_CONFIG = [
         "tier": "beginner", "min_level": 1, "max_level": 30, "brackets": 6,
         "low": {"hp": 70, "atk": 14, "def": 6, "agi": 10, "currency_reward": 15, "exp_reward": 9},
         "high": {"hp": 220, "atk": 24, "def": 10, "agi": 18, "currency_reward": 70, "exp_reward": 15},
-        "species": [("野狼", "木"), ("山豬", "土")],
+        "species": [("野狼", "木", "wolf"), ("山豬", "土", "boar")],
         "adjectives": ["弱小", "普通", "精壯", "兇猛", "兇暴", "狂暴"],
-        "guardian": {"name": "荒野守衛犀", "element": "土"},
-        "boss": {"name": "荒原狼王", "element": "木"},
+        "guardian": {"name": "荒野守衛犀", "element": "土", "image_key": "guardian_rhino"},
+        "boss": {"name": "荒原狼王", "element": "木", "image_key": "boss_wolfking"},
     },
     {
         "tier": "intermediate", "min_level": 31, "max_level": 70, "brackets": 8,
         "low": {"hp": 170, "atk": 27, "def": 14, "agi": 19, "currency_reward": 38, "exp_reward": 18},
         "high": {"hp": 480, "atk": 42, "def": 22, "agi": 30, "currency_reward": 160, "exp_reward": 28},
-        "species": [("蜥蜴", "火"), ("遊魂", "水")],
+        "species": [("蜥蜴", "火", "lizard"), ("遊魂", "水", "wraith")],
         "adjectives": ["幼年", "普通", "精壯", "兇猛", "猛烈", "兇暴", "狂暴", "嗜血"],
-        "guardian": {"name": "熔岩守衛犬", "element": "火"},
-        "boss": {"name": "熔岩巨蠍王", "element": "火"},
+        "guardian": {"name": "熔岩守衛犬", "element": "火", "image_key": "guardian_hound"},
+        "boss": {"name": "熔岩巨蠍王", "element": "火", "image_key": "boss_scorpionking"},
     },
     {
         "tier": "advanced", "min_level": 71, "max_level": 120, "brackets": 10,
         "low": {"hp": 320, "atk": 50, "def": 25, "agi": 30, "currency_reward": 75, "exp_reward": 36},
         "high": {"hp": 800, "atk": 75, "def": 38, "agi": 48, "currency_reward": 320, "exp_reward": 54},
-        "species": [("巨魔", "金"), ("劍靈", "水")],
+        "species": [("巨魔", "金", "ogre"), ("劍靈", "水", "sword_spirit")],
         "adjectives": ["幼年", "普通", "精壯", "兇猛", "猛烈", "兇暴", "狂暴", "嗜血", "煞氣", "修羅化"],
-        "guardian": {"name": "幽冥守衛靈", "element": "水"},
-        "boss": {"name": "深淵魔狼王", "element": "水"},
+        "guardian": {"name": "幽冥守衛靈", "element": "水", "image_key": "guardian_spirit"},
+        "boss": {"name": "深淵魔狼王", "element": "水", "image_key": "boss_abysswolf"},
     },
     {
         "tier": "ultimate", "min_level": 121, "max_level": LEVEL_CAP, "brackets": 16,
         "low": {"hp": 620, "atk": 85, "def": 42, "agi": 48, "currency_reward": 160, "exp_reward": 72},
         "high": {"hp": 1400, "atk": 130, "def": 65, "agi": 75, "currency_reward": 650, "exp_reward": 104},
-        "species": [("巨龍裔", "金"), ("石像鬼", "土")],
+        "species": [("巨龍裔", "金", "dragonkin"), ("石像鬼", "土", "gargoyle")],
         "adjectives": [
             "幼年", "普通", "精壯", "兇猛", "猛烈", "兇暴", "狂暴", "嗜血",
             "煞氣", "修羅化", "半神化", "神威", "天怒", "滅世", "混沌", "終焉",
         ],
-        "guardian": {"name": "虛空守衛神", "element": "土"},
-        "boss": {"name": "終焉魔神", "element": "火"},
+        "guardian": {"name": "虛空守衛神", "element": "土", "image_key": "guardian_deity"},
+        "boss": {"name": "終焉魔神", "element": "火", "image_key": "boss_demongod"},
     },
 ]
 
@@ -404,12 +404,13 @@ def _build_default_monsters():
             exp = round(low["exp_reward"] + (high["exp_reward"] - low["exp_reward"]) * t)
             level_min = cfg["min_level"] + i * 5
             level_max = level_min + 4
-            for species, element in cfg["species"]:
+            for species, element, image_key in cfg["species"]:
                 monsters.append({
                     "tier": cfg["tier"], "name": f"{adjective}{species}", "is_boss": 0, "is_guardian": 0,
                     "level_min": level_min, "level_max": level_max,
                     "hp": stats["hp"], "atk": stats["atk"], "def": stats["def"], "agi": stats["agi"],
                     "currency_reward": currency, "exp_reward": exp, "element": element,
+                    "image_key": image_key,
                 })
         guardian_stats = {k: round(high[k] * GUARDIAN_STAT_MULT) for k in _STAT_KEYS}
         monsters.append({
@@ -420,6 +421,7 @@ def _build_default_monsters():
             "currency_reward": round(high["currency_reward"] * GUARDIAN_CURRENCY_MULT),
             "exp_reward": high["exp_reward"],
             "element": cfg["guardian"]["element"],
+            "image_key": cfg["guardian"]["image_key"],
         })
         boss_stats = {k: round(high[k] * BOSS_STAT_MULT) for k in _STAT_KEYS}
         monsters.append({
@@ -430,6 +432,7 @@ def _build_default_monsters():
             "currency_reward": round(high["currency_reward"] * BOSS_CURRENCY_MULT),
             "exp_reward": high["exp_reward"],
             "element": cfg["boss"]["element"],
+            "image_key": cfg["boss"]["image_key"],
         })
     return monsters
 
@@ -496,12 +499,14 @@ HIDDEN_MONSTERS = [
         "level_min": None, "level_max": None,
         "hp": 27000, "atk": 240, "def": 150, "agi": 90,
         "currency_reward": 20000, "exp_reward": 3000, "element": "",
+        "image_key": "taiji_sage",
     },
     {
         "tier": "wuji_hidden", "name": "混沌天尊", "is_boss": 0, "is_guardian": 0,
         "level_min": None, "level_max": None,
         "hp": 38000, "atk": 450, "def": 220, "agi": 130,
         "currency_reward": 33000, "exp_reward": 5000, "element": "",
+        "image_key": "wuji_sage",
     },
 ]
 
@@ -676,6 +681,8 @@ def _ensure_monster_columns(conn):
         conn.execute("ALTER TABLE monsters ADD COLUMN level_max INTEGER")
     if "exp_reward" not in cols:
         conn.execute("ALTER TABLE monsters ADD COLUMN exp_reward INTEGER NOT NULL DEFAULT 0")
+    if "image_key" not in cols:
+        conn.execute("ALTER TABLE monsters ADD COLUMN image_key TEXT")
 
 
 def _ensure_item_columns(conn):
@@ -907,15 +914,30 @@ def _seed_hidden_monsters(conn):
         conn.execute(
             """INSERT INTO monsters
                (hunting_ground_id, name, is_boss, is_guardian, level_min, level_max,
-                hp, atk, def, agi, currency_reward, exp_reward, element)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                hp, atk, def, agi, currency_reward, exp_reward, element, image_key)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 ground_ids[m["tier"]], m["name"], m["is_boss"], m["is_guardian"],
                 m["level_min"], m["level_max"],
                 m["hp"], m["atk"], m["def"], m["agi"],
-                m["currency_reward"], m["exp_reward"], m["element"],
+                m["currency_reward"], m["exp_reward"], m["element"], m["image_key"],
             ),
         )
+
+
+def _backfill_monster_image_keys(conn):
+    """Add-only backfill of monsters.image_key for rows seeded before this
+    column existed, matched by exact name against DEFAULT_MONSTERS/
+    HIDDEN_MONSTERS (the single source of truth for the key), so re-running
+    is always a no-op once every row has its key set. Must run AFTER both
+    _seed_hidden_monsters and _rebuild_monster_roster/the fresh-table seed
+    path in seed_defaults(), since it only backfills rows that already
+    exist in the table."""
+    image_keys_by_name = {m["name"]: m["image_key"] for m in DEFAULT_MONSTERS + HIDDEN_MONSTERS}
+    for row in conn.execute("SELECT id, name FROM monsters WHERE image_key IS NULL"):
+        key = image_keys_by_name.get(row["name"])
+        if key:
+            conn.execute("UPDATE monsters SET image_key = ? WHERE id = ?", (key, row["id"]))
 
 
 def _rebuild_monster_roster(conn):
@@ -949,12 +971,13 @@ def _rebuild_monster_roster(conn):
         conn.execute(
             """INSERT INTO monsters
                (hunting_ground_id, name, is_boss, is_guardian, level_min, level_max,
-                hp, atk, def, agi, currency_reward, exp_reward, element)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                hp, atk, def, agi, currency_reward, exp_reward, element, image_key)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 ground_ids[m["tier"]], m["name"], m["is_boss"], m["is_guardian"],
                 m["level_min"], m["level_max"],
                 m["hp"], m["atk"], m["def"], m["agi"], m["currency_reward"], m["exp_reward"], m["element"],
+                m["image_key"],
             ),
         )
 
@@ -1229,18 +1252,20 @@ def seed_defaults():
             conn.execute(
                 """INSERT INTO monsters
                    (hunting_ground_id, name, is_boss, is_guardian, level_min, level_max,
-                    hp, atk, def, agi, currency_reward, exp_reward, element)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    hp, atk, def, agi, currency_reward, exp_reward, element, image_key)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     ground_ids[m["tier"]], m["name"], m["is_boss"], m["is_guardian"],
                     m["level_min"], m["level_max"],
                     m["hp"], m["atk"], m["def"], m["agi"], m["currency_reward"], m["exp_reward"], m["element"],
+                    m["image_key"],
                 ),
             )
     else:
         _upgrade_monster_elements(conn)
         _rebuild_monster_roster(conn)
     _seed_hidden_monsters(conn)
+    _backfill_monster_image_keys(conn)
 
     conn.commit()
     conn.close()
