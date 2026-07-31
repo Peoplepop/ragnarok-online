@@ -70,8 +70,16 @@
           {% for item in shop_items[shop_type] %}
           <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
             <input type="checkbox" name="item_ids" value="{{ item.id }}" class="turn-action-control">
+            {% if item.consumable_effect %}
+            {{ item.name }}
+            {%- if item.consumable_effect == 'heal_hp' %}（恢復 {{ item.consumable_amount }} HP，{{ item.price }} 諸神幣）
+            {%- elif item.consumable_effect == 'heal_mp' %}（恢復 {{ item.consumable_amount }} MP，{{ item.price }} 諸神幣）
+            {%- elif item.consumable_effect == 'return_scroll' %}（傳送回該地點，{{ item.price }} 諸神幣）
+            {%- endif %}
+            {% else %}
             {% if item.set_country_name %}<span style="color:var(--gold-bright);">【{{ item.set_country_name }}套裝】</span>{% endif %}
             {{ item.name }}（{{ item.stat }}+{{ item.stat_bonus }}，{{ item.price }} 諸神幣）
+            {% endif %}
           </label>
           {% endfor %}
         </div>

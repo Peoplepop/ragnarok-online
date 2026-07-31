@@ -65,12 +65,14 @@ ACTION_LABELS = {
     "siege_attack": "發動攻城武器",
     "repair_defense": "修補防禦",
     "tournament_register": "報名天下武道大會",
+    "use_item": "使用道具",
 }
 
 SHOP_TYPE_LABELS = {
     "weapon": "武器店",
     "armor": "防具店",
     "accessory": "飾品店",
+    "consumable": "消耗品",
 }
 SLOT_LABELS = {
     "weapon": "武器",
@@ -132,6 +134,7 @@ STAT_LABELS = {"str": "力量", "def": "防禦", "agi": "敏捷", "luk": "幸運
 # action_block_order ALTER TABLE DEFAULT string (same keys, same order).
 GAME_LAYOUT_BLOCKS = {
     "action": "⚡ 行動",
+    "inventory": "🎒 背包",
     "conquer": "⚔️ 攻城／討伐",
     "tournament": "🏆 天下武道大會",
     "shop": "🏪 商店與交易",

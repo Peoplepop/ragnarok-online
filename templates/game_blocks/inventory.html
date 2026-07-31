@@ -1,0 +1,25 @@
+<div class="panel" style="flex:1 1 380px;">
+  <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">🎒 背包</h3>
+  {% if consumable_items %}
+  <div style="display:flex; flex-direction:column; gap:10px;">
+    {% for item in consumable_items %}
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+      <span style="font-size:13px;">
+        {{ item.name }}
+        {% if item.consumable_effect == 'heal_hp' %}（恢復 {{ item.consumable_amount }} HP）
+        {% elif item.consumable_effect == 'heal_mp' %}（恢復 {{ item.consumable_amount }} MP）
+        {% elif item.consumable_effect == 'return_scroll' %}（傳送回該地點）
+        {% endif %}
+        持有 {{ item.quantity }} 件
+      </span>
+      <form method="post" action="{{ url_for('game.game_inventory_use') }}">
+        <input type="hidden" name="item_id" value="{{ item.id }}">
+        <button type="submit" style="padding:6px 14px; font-size:13px;">使用</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="hint" style="margin:0;">背包裡沒有消耗品</p>
+  {% endif %}
+</div>

@@ -253,6 +253,19 @@ def _render_game(**extra):
            ORDER BY created_at DESC LIMIT 100"""
     ).fetchall()
     major_events = _major_event_feed(major_event_rows)
+
+    # 🎒 背包 block: the character's owned consumables (potions + return
+    # scrolls), reachable from anywhere -- unlike shop/bank/treasury this is
+    # not fortress-gated, so it's queried unconditionally here rather than
+    # only when current_tile.tile_type == 'fortress'.
+    consumable_items = db.execute(
+        """SELECT items.id, items.name, items.consumable_effect, items.consumable_amount,
+                  inventory.quantity AS quantity
+           FROM inventory JOIN items ON items.id = inventory.item_id
+           WHERE inventory.character_id = ? AND items.consumable_effect IS NOT NULL
+           ORDER BY items.consumable_effect, items.name""",
+        (character["character_id"],),
+    ).fetchall()
     db.close()
 
     # King war-defense bonus: character["character_id"] is the character's
@@ -405,6 +418,7 @@ def _render_game(**extra):
         major_events=major_events,
         chat_message_max_len=CHAT_MESSAGE_MAX_LEN,
         action_block_order=_sanitized_action_block_order(settings["action_block_order"]),
+        consumable_items=consumable_items,
     )
     context.update(extra)
     return render_template("game.html", **context)
@@ -1567,6 +1581,115 @@ def game_recover():
     db.close()
 
     flash(f"HP／MP 已完全回復，花費 {cost} 諸神幣")
+    return redirect(url_for("game.game"))
+
+
+@game_bp.route("/game/inventory/use", methods=["POST"])
+@character_required
+def game_inventory_use():
+    """Use a 消耗品 (potion or return scroll) from the character's inventory.
+    Unlike game_recover this is NOT fortress-gated -- reachable from
+    anywhere, per the whole point of adding potions (no more walking back to
+    a fortress just to top off HP/MP mid-hunt). Still gated on the shared
+    per-character cooldown and still refreshes next_action_at on success,
+    matching every sibling world-action route in this file."""
+    db = get_db()
+    character = db.execute(
+        """SELECT characters.id, characters.next_action_at, characters.current_hp, characters.current_mp,
+                  characters.level, characters.equipped_weapon_id, characters.equipped_armor_id,
+                  characters.equipped_accessory_id, characters.job_class, characters.job_tier,
+                  characters.rebirth_count, characters.stat_floor_hp, characters.stat_floor_mp,
+                  characters.stat_floor_str, characters.stat_floor_def, characters.stat_floor_agi,
+                  characters.stat_floor_luk, characters.level_bonus_hp, characters.level_bonus_mp,
+                  characters.level_bonus_str, characters.level_bonus_def, characters.level_bonus_agi,
+                  characters.level_bonus_luk, countries.*
+           FROM characters JOIN countries ON countries.id = characters.country_id
+           WHERE characters.user_id = ?""",
+        (session["user_id"],),
+    ).fetchone()
+
+    if _cooldown_remaining_seconds(character["next_action_at"]) > 0:
+        db.close()
+        flash("還在冷卻中，請稍候再行動")
+        return redirect(url_for("game.game"))
+
+    item = db.execute(
+        "SELECT * FROM items WHERE id = ?", (request.form.get("item_id", ""),)
+    ).fetchone()
+    if item is None or item["consumable_effect"] is None:
+        db.close()
+        flash("找不到可以使用的道具")
+        return redirect(url_for("game.game"))
+
+    owned = db.execute(
+        "SELECT quantity FROM inventory WHERE character_id = ? AND item_id = ?",
+        (character["id"], item["id"]),
+    ).fetchone()
+    if owned is None or owned["quantity"] < 1:
+        db.close()
+        flash("背包裡沒有這個道具")
+        return redirect(url_for("game.game"))
+
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+
+    if item["consumable_effect"] == "return_scroll":
+        # Garrison interaction kept deliberately simple: block rather than
+        # replicate game_move's full pending-confirm relocate/clear dance
+        # (that rework is a separate, already-flagged TODO) -- a garrisoned
+        # character must explicitly withdraw first.
+        garrison = db.execute(
+            "SELECT id FROM garrisons WHERE character_id = ?", (character["id"],)
+        ).fetchone()
+        if garrison is not None:
+            db.close()
+            flash("請先撤離駐防才能使用回城石")
+            return redirect(url_for("game.game"))
+        _remove_from_inventory(db, character["id"], item["id"], 1)
+        db.execute(
+            """UPDATE characters SET current_tile_id = ?, next_action_at = ?,
+                   pending_boss_monster_id = NULL WHERE id = ?""",
+            (item["return_tile_id"], _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+        )
+        log_activity(
+            db, session["user_id"], session["username"], "use_item",
+            detail=f"使用{item['name']}", ip_address=request.remote_addr,
+        )
+        db.commit()
+        db.close()
+        flash(f"使用了「{item['name']}」，已傳送過去")
+        return redirect(url_for("game.game"))
+
+    if item["consumable_effect"] in ("heal_hp", "heal_mp"):
+        equipped_items = _fetch_equipped_items(db, character)
+        stats = character_final_stats(character, equipped_items, settings)
+        current_hp, current_mp = _current_hp_mp(character, stats)
+        if item["consumable_effect"] == "heal_hp":
+            new_hp = min(stats["hp"], current_hp + item["consumable_amount"])
+            db.execute(
+                "UPDATE characters SET current_hp = ?, next_action_at = ? WHERE id = ?",
+                (new_hp, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+            )
+        else:
+            new_mp = min(stats["mp"], current_mp + item["consumable_amount"])
+            db.execute(
+                "UPDATE characters SET current_mp = ?, next_action_at = ? WHERE id = ?",
+                (new_mp, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+            )
+        _remove_from_inventory(db, character["id"], item["id"], 1)
+        log_activity(
+            db, session["user_id"], session["username"], "use_item",
+            detail=f"使用{item['name']}", ip_address=request.remote_addr,
+        )
+        db.commit()
+        db.close()
+        flash(f"使用了「{item['name']}」")
+        return redirect(url_for("game.game"))
+
+    # Defensive fallback: an items row with an unrecognized consumable_effect
+    # value should never exist, but fail closed with a clean flash rather
+    # than a 500 if one somehow does.
+    db.close()
+    flash("這個道具無法使用")
     return redirect(url_for("game.game"))
 
 
