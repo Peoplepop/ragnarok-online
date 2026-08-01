@@ -8,7 +8,7 @@
 
   <div class="panel" style="margin-bottom: 18px;">
     <form method="post" action="{{ url_for('admin.admin_update_game_settings') }}">
-      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+      <div class="admin-grid" style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
         <div>
           <label>每回合等待秒數</label>
           <input type="text" inputmode="numeric" name="turn_wait_seconds" value="{{ settings.turn_wait_seconds }}">
@@ -105,7 +105,7 @@
       </p>
 
       <h3 style="color: var(--gold-bright); font-size: 15px; margin-bottom:8px;">國戰時段設定（台灣時間）</h3>
-      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom:16px;">
+      <div class="admin-grid" style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom:16px;">
         <div>
           <label>城鎮／荒地國戰星期</label>
           <select name="war_town_weekday">
@@ -144,7 +144,7 @@
       </p>
 
       <h3 style="color: var(--gold-bright); font-size: 15px; margin-bottom:8px;">篡位／官職挑戰／國庫分潤設定</h3>
-      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom:16px;">
+      <div class="admin-grid" style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom:16px;">
         <div>
           <label>國王每週分潤 (%)</label>
           <input type="text" inputmode="numeric" name="king_weekly_income_percent" value="{{ settings.king_weekly_income_percent }}">
@@ -169,7 +169,7 @@
       </p>
 
       <h3 style="color: var(--gold-bright); font-size: 15px; margin-bottom:8px;">國庫花費（士氣激勵／攻城武器／修補防禦）設定</h3>
-      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom:16px;">
+      <div class="admin-grid" style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom:16px;">
         <div>
           <label>士氣激勵費用 (諸神幣)</label>
           <input type="text" inputmode="numeric" name="morale_buff_cost" value="{{ settings.morale_buff_cost }}">
@@ -205,7 +205,7 @@
         國王／參謀／大將軍可花費「已削弱% × 每點費用」一次性將自己國家據點的防禦力完全修補回原始值
       </p>
       <h3 style="color: var(--gold-bright); font-size: 15px; margin-bottom:8px;">天下武道大會設定（台灣時間）</h3>
-      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom:16px;">
+      <div class="admin-grid" style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom:16px;">
         <div>
           <label>報名費 (諸神幣)</label>
           <input type="text" inputmode="numeric" name="tournament_registration_fee" value="{{ settings.tournament_registration_fee }}">
@@ -249,7 +249,7 @@
       </p>
 
       <h3 style="color: var(--gold-bright); font-size: 15px; margin-bottom:8px;">頭像設定</h3>
-      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom:16px;">
+      <div class="admin-grid" style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom:16px;">
         <div>
           <label>更換頭像基礎費用 (諸神幣)</label>
           <input type="text" inputmode="numeric" name="avatar_change_base_cost" value="{{ settings.avatar_change_base_cost }}">
@@ -314,7 +314,7 @@
   {% for g in hunting_grounds %}
   <div class="panel" style="margin-bottom: 18px;">
     <form method="post" action="{{ url_for('admin.admin_update_hunting_ground', ground_id=g.id) }}">
-      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+      <div class="admin-grid" style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
         <div>
           <label>名稱</label>
           <input type="text" name="name" value="{{ g.name }}" required>

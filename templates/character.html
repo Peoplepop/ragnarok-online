@@ -3,7 +3,7 @@
 
 {% block content %}
   <div class="panel" style="margin-bottom:20px;">
-    <div style="display:flex; align-items:center; gap:12px;">
+    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
       {% if nav_avatar_url %}<img src="{{ nav_avatar_url }}" alt="頭像" style="width:56px; height:56px; border-radius:50%; border:2px solid var(--border);">{% endif %}
       <h2 style="margin:0 0 4px; color:var(--gold-bright);">{{ character.character_name }}</h2>
     </div>
@@ -271,6 +271,7 @@
 
   <div class="panel" style="margin-bottom:20px;">
     <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">戰鬥數值</h3>
+    <div class="table-scroll">
     <table style="width:100%; border-collapse:collapse; font-size:13px;">
       <tbody>
         <tr style="border-bottom:1px solid var(--border);">
@@ -307,6 +308,7 @@
         </tr>
       </tbody>
     </table>
+    </div>
   </div>
 
   <p class="hint" id="cooldown-display" style="{% if cooldown_seconds <= 0 %}display:none;{% endif %}">

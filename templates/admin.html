@@ -22,7 +22,7 @@
   <div class="panel" style="margin-bottom: 18px;">
     <p class="hint" style="margin-top:0;">🏛️ 國庫：{{ c.treasury }} 諸神幣</p>
     <form method="post" action="{{ url_for('admin.admin_update_country', country_id=c.id) }}">
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+      <div class="admin-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <div>
           <label>國家名稱</label>
           <input type="text" name="name" value="{{ c.name }}" required>
@@ -36,7 +36,7 @@
       <label>介紹文字</label>
       <input type="text" name="description" value="{{ c.description }}">
 
-      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+      <div class="admin-grid" style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
         <div>
           <label>HP 加成 (%)</label>
           <input type="text" inputmode="numeric" name="hp_bonus" value="{{ c.hp_bonus }}">
@@ -63,7 +63,7 @@
         </div>
       </div>
 
-      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+      <div class="admin-grid" style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
         {% for role in roles %}
         <div>
           <label>{{ role.label }}</label>

@@ -3,7 +3,7 @@
 
 {% block content %}
   <div class="panel" style="margin-bottom:20px;">
-    <div style="display:flex; align-items:center; gap:12px;">
+    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
       {% if profile_avatar_url %}<img src="{{ profile_avatar_url }}" alt="頭像" style="width:56px; height:56px; border-radius:50%; border:2px solid var(--border);">{% endif %}
       <h2 style="margin:0 0 4px; color:var(--gold-bright);">{{ character.character_name }}</h2>
     </div>

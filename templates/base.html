@@ -2,6 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}五行爭鋒{% endblock %}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jf-openhuninn-1.1/jf-openhuninn-1.1.css">
   <style>
@@ -48,6 +49,8 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      flex-wrap: wrap;
+      row-gap: 8px;
       border-bottom: 1px solid var(--border);
       padding-bottom: 14px;
       margin-bottom: 24px;
@@ -145,6 +148,7 @@
       border-radius: 6px;
       font-size: 14px;
       font-family: inherit;
+      max-width: 100%;
     }
     select:focus { outline: none; border-color: var(--gold); }
     select:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -171,6 +175,32 @@
     .country p { margin: 0; font-size: 13px; color: var(--text-dim); }
     a.country { display: block; text-decoration: none; cursor: pointer; transition: border-color 0.15s, transform 0.15s; }
     a.country:hover { border-color: var(--gold); transform: translateY(-2px); }
+
+    .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .table-scroll table { min-width: 480px; }
+
+    @media (max-width: 640px) {
+      body { margin: 20px auto; padding: 0 14px; }
+      body.wide { max-width: 100%; }
+
+      h1 { font-size: 22px; }
+      .panel { padding: 16px; }
+
+      nav.topbar { padding-bottom: 10px; margin-bottom: 18px; }
+      nav.topbar .links a { margin-left: 10px; font-size: 13px; }
+
+      .avatar-grid { grid-template-columns: repeat(4, 1fr); }
+
+      button, .btn { padding: 9px 18px; }
+
+      .admin-grid { grid-template-columns: 1fr !important; }
+    }
+
+    @media (max-width: 400px) {
+      .avatar-grid { grid-template-columns: repeat(3, 1fr); }
+      nav.topbar h1 { font-size: 16px !important; }
+      nav.topbar .links a { margin-left: 8px; font-size: 12px; }
+    }
   </style>
   {% block extra_head %}{% endblock %}
 </head>

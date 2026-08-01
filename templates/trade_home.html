@@ -20,7 +20,7 @@
     {% for invite in invites %}
     <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; background:var(--panel-2); border-radius:6px; margin-bottom:10px; flex-wrap:wrap;">
       <span style="font-size:13px; color:var(--text);">{{ invite.initiator_name }} 邀請你進行交易</span>
-      <div style="display:flex; gap:8px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <form method="post" action="{{ url_for('trade.trade_accept', trade_id=invite.trade_id) }}">
           <button type="submit">接受</button>
         </form>

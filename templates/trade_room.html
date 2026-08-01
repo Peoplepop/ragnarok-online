@@ -28,7 +28,7 @@
         <button type="submit" style="background:linear-gradient(135deg, var(--danger), #7a2a2d);">取消邀請</button>
       </form>
       {% else %}
-      <div style="display:flex; gap:8px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <form method="post" action="{{ url_for('trade.trade_accept', trade_id=trade.trade_id) }}">
           <button type="submit">接受</button>
         </form>
@@ -76,7 +76,7 @@
       </div>
     </div>
 
-    <div style="margin-top:18px; display:flex; gap:12px;">
+    <div style="margin-top:18px; display:flex; gap:12px; flex-wrap:wrap;">
       <form method="post" action="{{ url_for('trade.trade_confirm', trade_id=trade.trade_id) }}">
         <button type="submit">確認交易</button>
       </form>

@@ -180,7 +180,7 @@
     {% else %}
     <div style="display:flex; flex-direction:column; gap:8px;">
       {% for t in damaged_own_tiles %}
-      <form method="post" action="{{ url_for('game.country_repair_defense') }}" style="display:flex; gap:10px; align-items:center; font-size:13px;">
+      <form method="post" action="{{ url_for('game.country_repair_defense') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px;">
         <input type="hidden" name="target_tile_id" value="{{ t.id }}">
         <span>{{ t.name }}（防禦已削弱 {{ t.defense_reduction_percent }}%，修補費用 {{ t.repair_cost }} 諸神幣）</span>
         <button type="submit" class="turn-action-control" style="padding:4px 10px; font-size:12px;">修補</button>
