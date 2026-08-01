@@ -1706,8 +1706,8 @@ def game_inventory_use():
 def _character_for_shop(db):
     return db.execute(
         """SELECT characters.id, characters.currency, characters.bank_balance,
-                  characters.next_action_at, characters.country_id, map_tiles.tile_type,
-                  map_tiles.country_id AS tile_country_id,
+                  characters.next_action_at, characters.country_id, characters.current_tile_id,
+                  map_tiles.tile_type, map_tiles.country_id AS tile_country_id,
                   characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id,
                   characters.contribution, characters.donated_today, characters.donated_today_date
            FROM characters JOIN map_tiles ON map_tiles.id = characters.current_tile_id
@@ -1736,13 +1736,24 @@ def game_shop():
     # other respect (they have to be, since shop_type doubles as the equip
     # slot key), so this single listing query is the one place that decides
     # what can be bought at all.
+    # 回城石 items don't use the country_id "sold everywhere vs. one
+    # country's fortress" rule at all -- every scroll has country_id NULL,
+    # so it's filtered on return_tile_id instead: only the scroll for the
+    # tile the character is currently standing on is offered, matching
+    # "在哪裡買，就只能買那裡的回城石" (buy here, get a scroll back to here).
     all_items = db.execute(
         """SELECT items.*, countries.name AS set_country_name
            FROM items LEFT JOIN countries ON countries.id = items.country_id
            WHERE items.hidden_set_key IS NULL
-             AND (items.country_id IS NULL OR items.country_id = ?)
+             AND (
+               (
+                 (items.consumable_effect IS NULL OR items.consumable_effect != 'return_scroll')
+                 AND (items.country_id IS NULL OR items.country_id = ?)
+               )
+               OR (items.consumable_effect = 'return_scroll' AND items.return_tile_id = ?)
+             )
            ORDER BY items.shop_type, items.price""",
-        (character["tile_country_id"],),
+        (character["tile_country_id"], character["current_tile_id"]),
     ).fetchall()
     shop_items = {shop_type: [] for shop_type in SHOP_TYPE_LABELS}
     for item in all_items:

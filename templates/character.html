@@ -10,7 +10,7 @@
     <div class="element" style="font-size:13px;">屬性：{{ character.element }}　|　所屬國家：{{ character.name }}　|　職業：{{ character.job_class }}（{{ job_tier_label }}）</div>
     <p style="margin:6px 0 0; color:var(--text-dim); font-size:13px;">{{ character.description }}</p>
     {% if character.job_tier == 4 %}
-    <form method="post" action="{{ url_for('character.character_rename') }}" style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+    <form method="post" action="{{ url_for('character.character_rename') }}" style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
       <input type="text" name="new_name" placeholder="新角色名稱（最長12個字）" maxlength="{{ rename_max_len }}" style="max-width:200px;">
       <button type="submit">改名（{{ next_rename_cost }} 諸神幣）</button>
     </form>
@@ -252,12 +252,12 @@
     <h3 style="margin:0 0 10px; color:var(--danger); font-size:15px;">🛠️ 管理者除錯工具</h3>
     <p class="hint" style="margin:0 0 10px;">僅供快速測試轉生數值變化，直接修改你自己角色的等級／轉生次數，不消耗冷卻時間</p>
     <div style="display:flex; gap:20px; flex-wrap:wrap;">
-      <form method="post" action="{{ url_for('character.character_debug_set_level') }}" style="display:flex; gap:8px; align-items:center;">
+      <form method="post" action="{{ url_for('character.character_debug_set_level') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
         <label style="margin:0; font-size:13px;">設定等級</label>
         <input type="text" inputmode="numeric" name="level" value="{{ character.level }}" style="width:80px; margin-bottom:0;">
         <button type="submit">套用</button>
       </form>
-      <form method="post" action="{{ url_for('character.character_debug_set_rebirth') }}" style="display:flex; gap:8px; align-items:center;">
+      <form method="post" action="{{ url_for('character.character_debug_set_rebirth') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
         <label style="margin:0; font-size:13px;">設定轉生次數</label>
         <input type="text" inputmode="numeric" name="rebirth_count" value="{{ character.rebirth_count }}" style="width:80px; margin-bottom:0;">
         <button type="submit">套用</button>
