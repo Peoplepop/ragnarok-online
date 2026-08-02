@@ -42,7 +42,7 @@
   </div>
 
   {% if player_stats %}
-  <div class="panel" style="margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; font-size:13px;">
+  <div class="panel" style="margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; font-size:14px;">
     <div style="display:flex; align-items:center; gap:12px;">
       {% if player_avatar_url %}
       <img src="{{ player_avatar_url }}" alt="我方頭像" style="width:72px; height:72px; border-radius:50%; border:2px solid var(--border); flex-shrink:0; object-fit:cover;">
@@ -70,7 +70,7 @@
   {% endif %}
 
   <div class="panel" style="margin-bottom:20px;">
-    <div id="battle-log" style="max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; font-size:13px;"></div>
+    <div id="battle-log" style="max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; font-size:15px;"></div>
   </div>
 
   <div class="panel" id="battle-result" style="margin-bottom:20px; display:none;">
@@ -161,8 +161,15 @@
           return;
         }
         var line = document.createElement("div");
-        line.textContent = log[i];
-        line.style.color = "var(--text-dim)";
+        var text = log[i];
+        line.textContent = text;
+        if (text.indexOf("會心一擊") !== -1) {
+          line.style.color = "var(--gold-bright)";
+          line.style.fontWeight = "bold";
+          line.style.fontSize = "17px";
+        } else {
+          line.style.color = "var(--text-dim)";
+        }
         container.appendChild(line);
         container.scrollTop = container.scrollHeight;
         i += 1;

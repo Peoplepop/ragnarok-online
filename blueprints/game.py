@@ -602,6 +602,13 @@ def game_hunt():
     # reward below still reads the ORIGINAL row's currency_reward/exp_reward,
     # so weakening a monster never also shrinks its payout.
     fought_monster = _debuffed_monster(monster, special_effects)
+    # A regular monster's row only carries a level_min/level_max bracket (it
+    # can be encountered by any character in that range) -- battle.html shows
+    # a single concrete level rather than the raw range, so roll one specific
+    # level within the bracket here. Guardians/bosses have no bracket
+    # (level_min is NULL) and keep showing "Lv.???", unchanged.
+    if fought_monster["level_min"] is not None:
+        fought_monster["level"] = random.randint(fought_monster["level_min"], fought_monster["level_max"])
 
     usable_skills = _character_usable_skills(db, character)
     result = run_battle(
