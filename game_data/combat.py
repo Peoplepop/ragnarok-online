@@ -128,9 +128,10 @@ def run_battle(
 ):
     """Resolves an entire fight in one shot. Turn order is driven purely by
     attack speed (AGI*SPEED_PER_AGI): whoever is faster always goes first each
-    round. Each side's own attack count per round is derived independently
-    from its OWN speed (not the speed lead over the opponent):
-    1 + own_speed // EXTRA_ATTACK_SPEED_STEP. The faster side fires its full
+    round. The faster side's attack count per round is based on the speed GAP
+    to its opponent: 1 + gap // EXTRA_ATTACK_SPEED_STEP (gap = own_speed -
+    opponent_speed). The slower side always gets exactly 1 attack per round,
+    regardless of how large the gap is. The faster side fires its full
     attack allotment first (checking for a death after every hit), then the
     slower side fires its own full allotment -- only after BOTH sides have
     completed their attacks does the round counter advance. Monsters have no
@@ -157,9 +158,8 @@ def run_battle(
         faster, slower = "player", "monster"
     else:
         faster, slower = "monster", "player"
-    player_attacks_per_round = 1 + player_speed // EXTRA_ATTACK_SPEED_STEP
-    monster_attacks_per_round = 1 + monster_speed // EXTRA_ATTACK_SPEED_STEP
-    attacks_per_round = {"player": player_attacks_per_round, "monster": monster_attacks_per_round}
+    speed_gap = abs(player_speed - monster_speed)
+    attacks_per_round = {faster: 1 + speed_gap // EXTRA_ATTACK_SPEED_STEP, slower: 1}
 
     def attack_once(attacker):
         nonlocal p_hp, m_hp, p_mp
@@ -240,6 +240,10 @@ def run_pvp_duel(
     timed_out is True; the caller applies the tournament's remaining-HP%
     tiebreak in that case.
 
+    Attack count per round follows run_battle's gap-based rule: the faster
+    side gets 1 + speed_gap // EXTRA_ATTACK_SPEED_STEP, the slower side
+    always gets exactly 1.
+
     Both sides get their own 獨立傷害 percent here (symmetric, like every
     other stat in this function) -- the tournament reads each registrant's
     frozen snap_independent_damage_percent rather than their live gear."""
@@ -253,10 +257,8 @@ def run_pvp_duel(
         faster, slower = "a", "b"
     else:
         faster, slower = "b", "a"
-    attacks_per_round = {
-        "a": 1 + a_speed // EXTRA_ATTACK_SPEED_STEP,
-        "b": 1 + b_speed // EXTRA_ATTACK_SPEED_STEP,
-    }
+    speed_gap = abs(a_speed - b_speed)
+    attacks_per_round = {faster: 1 + speed_gap // EXTRA_ATTACK_SPEED_STEP, slower: 1}
 
     def attack_once(attacker):
         nonlocal a_hp, b_hp, a_mp, b_mp
