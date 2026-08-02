@@ -16,10 +16,26 @@
       {% else %}
       <span style="font-size:12px; color:var(--text-dim);">已達最高等級 Lv.{{ level_cap }}</span>
       {% endif %}
-      <span style="font-size:13px; color:{{ 'var(--danger)' if current_hp <= 0 else 'var(--text-dim)' }};">HP {{ current_hp }}/{{ stats.hp }}　MP {{ current_mp }}/{{ stats.mp }}</span>
-      <span id="cooldown-display" class="hint" style="margin:0; {% if cooldown_seconds <= 0 %}display:none;{% endif %}">
-        ⏱ 冷卻中，還需 <span id="cooldown-seconds">{{ cooldown_seconds }}</span> 秒
-      </span>
+      <div style="display:flex; align-items:flex-end; gap:8px;">
+        <div style="width:100px;">
+          <div style="background:var(--panel-2); border:1px solid var(--border); border-radius:6px; height:8px; overflow:hidden;">
+            <div style="width:{{ ((current_hp / stats.hp * 100) if stats.hp else 0) | round(1) }}%; height:100%; background:linear-gradient(90deg, var(--danger), var(--danger-bright));"></div>
+          </div>
+          <div style="font-size:10px; margin-top:2px; {% if current_hp <= 0 %}color:var(--danger);{% else %}color:var(--text-dim);{% endif %}">HP {{ current_hp }}/{{ stats.hp }}</div>
+        </div>
+        <div style="width:100px;">
+          <div style="background:var(--panel-2); border:1px solid var(--border); border-radius:6px; height:8px; overflow:hidden;">
+            <div style="width:{{ ((current_mp / stats.mp * 100) if stats.mp else 0) | round(1) }}%; height:100%; background:linear-gradient(90deg, var(--mp), var(--mp-bright));"></div>
+          </div>
+          <div style="font-size:10px; color:var(--text-dim); margin-top:2px;">MP {{ current_mp }}/{{ stats.mp }}</div>
+        </div>
+      </div>
+      <div id="cooldown-display" class="hint" style="margin:0; {% if cooldown_seconds <= 0 %}display:none;{% endif %}">
+        <span>⏱ 冷卻中，還需 <span id="cooldown-seconds">{{ cooldown_seconds }}</span> 秒</span>
+        <div style="width:100px; background:var(--panel-2); border:1px solid var(--border); border-radius:6px; height:6px; overflow:hidden; margin-top:3px;">
+          <div id="cooldown-bar-fill" style="width:100%; height:100%; background:linear-gradient(90deg, var(--gold), var(--gold-bright));"></div>
+        </div>
+      </div>
     </div>
     <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
       <span style="color:var(--gold); font-size:14px;">💰 {{ character.currency }} 諸神幣</span>
@@ -254,7 +270,18 @@
       var remaining = {{ cooldown_seconds }};
       var display = document.getElementById("cooldown-display");
       var secondsSpan = document.getElementById("cooldown-seconds");
+      var cooldownBarFill = document.getElementById("cooldown-bar-fill");
       var controls = document.querySelectorAll(".turn-action-control");
+
+      if (cooldownBarFill && remaining > 0) {
+        cooldownBarFill.style.transition = "width " + remaining + "s linear";
+        cooldownBarFill.style.width = "100%";
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            cooldownBarFill.style.width = "0%";
+          });
+        });
+      }
 
       function setControlsDisabled(disabled) {
         controls.forEach(function (el) { el.disabled = disabled; });

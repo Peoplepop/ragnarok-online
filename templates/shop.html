@@ -11,9 +11,12 @@
     </div>
   </div>
 
-  <p class="hint" id="cooldown-display" style="margin-top:-10px; margin-bottom:16px; {% if cooldown_seconds <= 0 %}display:none;{% endif %}">
+  <div class="hint" id="cooldown-display" style="margin-top:-10px; margin-bottom:16px; {% if cooldown_seconds <= 0 %}display:none;{% endif %}">
     冷卻中，還需等待 <span id="cooldown-seconds">{{ cooldown_seconds }}</span> 秒才能行動
-  </p>
+    <div style="width:120px; background:var(--panel-2); border:1px solid var(--border); border-radius:6px; height:6px; overflow:hidden; margin-top:5px;">
+      <div id="cooldown-bar-fill" style="width:100%; height:100%; background:linear-gradient(90deg, var(--gold), var(--gold-bright));"></div>
+    </div>
+  </div>
 
   {% if suggestions %}
   <div class="panel" style="margin-bottom:20px; border-color: rgba(212, 175, 55, 0.5);">
@@ -141,7 +144,18 @@
       var remaining = {{ cooldown_seconds }};
       var display = document.getElementById("cooldown-display");
       var secondsSpan = document.getElementById("cooldown-seconds");
+      var cooldownBarFill = document.getElementById("cooldown-bar-fill");
       var controls = document.querySelectorAll(".turn-action-control");
+
+      if (cooldownBarFill && remaining > 0) {
+        cooldownBarFill.style.transition = "width " + remaining + "s linear";
+        cooldownBarFill.style.width = "100%";
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            cooldownBarFill.style.width = "0%";
+          });
+        });
+      }
 
       function setControlsDisabled(disabled) {
         controls.forEach(function (el) { el.disabled = disabled; });

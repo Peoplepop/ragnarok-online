@@ -62,9 +62,19 @@
       {% endif %}
     </div>
 
-    <div style="display:flex; gap:14px; font-size:13px; color:var(--text-dim); margin-top:18px; flex-wrap:wrap;">
-      <span style="{% if current_hp <= 0 %}color:var(--danger);{% endif %}">HP {{ current_hp }}/{{ stats.hp }}</span>
-      <span>MP {{ current_mp }}/{{ stats.mp }}</span>
+    <div style="display:flex; align-items:flex-end; gap:14px; font-size:13px; color:var(--text-dim); margin-top:18px; flex-wrap:wrap;">
+      <div style="width:110px;">
+        <div style="background:var(--panel-2); border:1px solid var(--border); border-radius:6px; height:8px; overflow:hidden;">
+          <div style="width:{{ ((current_hp / stats.hp * 100) if stats.hp else 0) | round(1) }}%; height:100%; background:linear-gradient(90deg, var(--danger), var(--danger-bright));"></div>
+        </div>
+        <div style="font-size:11px; margin-top:2px; {% if current_hp <= 0 %}color:var(--danger);{% else %}color:var(--text-dim);{% endif %}">HP {{ current_hp }}/{{ stats.hp }}</div>
+      </div>
+      <div style="width:110px;">
+        <div style="background:var(--panel-2); border:1px solid var(--border); border-radius:6px; height:8px; overflow:hidden;">
+          <div style="width:{{ ((current_mp / stats.mp * 100) if stats.mp else 0) | round(1) }}%; height:100%; background:linear-gradient(90deg, var(--mp), var(--mp-bright));"></div>
+        </div>
+        <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">MP {{ current_mp }}/{{ stats.mp }}</div>
+      </div>
       <span>力量 {{ stats.str }}</span>
       <span>防禦 {{ stats.def }}</span>
       <span>敏捷 {{ stats.agi }}</span>
@@ -311,9 +321,12 @@
     </div>
   </div>
 
-  <p class="hint" id="cooldown-display" style="{% if cooldown_seconds <= 0 %}display:none;{% endif %}">
+  <div class="hint" id="cooldown-display" style="{% if cooldown_seconds <= 0 %}display:none;{% endif %}">
     冷卻中，還需等待 <span id="cooldown-seconds">{{ cooldown_seconds }}</span> 秒才能行動
-  </p>
+    <div style="width:120px; background:var(--panel-2); border:1px solid var(--border); border-radius:6px; height:6px; overflow:hidden; margin-top:5px;">
+      <div id="cooldown-bar-fill" style="width:100%; height:100%; background:linear-gradient(90deg, var(--gold), var(--gold-bright));"></div>
+    </div>
+  </div>
 
   <div class="panel" style="margin-bottom:20px;">
     <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">目前裝備</h3>
@@ -371,7 +384,18 @@
       var remaining = {{ cooldown_seconds }};
       var display = document.getElementById("cooldown-display");
       var secondsSpan = document.getElementById("cooldown-seconds");
+      var cooldownBarFill = document.getElementById("cooldown-bar-fill");
       var controls = document.querySelectorAll(".turn-action-control");
+
+      if (cooldownBarFill && remaining > 0) {
+        cooldownBarFill.style.transition = "width " + remaining + "s linear";
+        cooldownBarFill.style.width = "100%";
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            cooldownBarFill.style.width = "0%";
+          });
+        });
+      }
 
       function setControlsDisabled(disabled) {
         controls.forEach(function (el) { el.disabled = disabled; });

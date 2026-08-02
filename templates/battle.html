@@ -1,6 +1,53 @@
 {% extends "base.html" %}
 {% block title %}{{ monster.name }} 戰鬥 - 五行爭鋒{% endblock %}
 
+{% block extra_head %}
+<style>
+  @keyframes battle-float-dmg {
+    0% { transform: translate(-50%, 0); opacity: 1; }
+    100% { transform: translate(-50%, -42px); opacity: 0; }
+  }
+  .dmg-float {
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    transform: translate(-50%, 0);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--danger);
+    text-shadow: 0 0 6px rgba(0, 0, 0, 0.7);
+    pointer-events: none;
+    white-space: nowrap;
+    animation: battle-float-dmg 0.8s ease-out forwards;
+  }
+  .dmg-float.crit { font-size: 24px; color: var(--gold-bright); }
+  .dmg-float.miss { font-size: 13px; font-weight: 400; color: var(--text-dim); }
+
+  @keyframes battle-result-reveal {
+    0% { opacity: 0; transform: scale(0.95); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  @keyframes battle-result-glow {
+    0%, 100% { box-shadow: 0 0 30px rgba(212, 175, 55, 0.06); }
+    50% { box-shadow: 0 0 44px rgba(242, 211, 116, 0.6); }
+  }
+  #battle-result.reveal { animation: battle-result-reveal 0.4s ease-out; }
+  #battle-result.reveal.won { animation: battle-result-reveal 0.4s ease-out, battle-result-glow 1.3s ease-out 0.4s; }
+
+  @keyframes levelup-reveal {
+    0% { opacity: 0; transform: translateY(16px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  .levelup-panel { animation: levelup-reveal 0.5s ease-out; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dmg-float, #battle-result.reveal, .levelup-panel {
+      animation: none !important;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
   <div class="panel" style="margin-bottom:20px;">
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
@@ -42,24 +89,36 @@
   </div>
 
   {% if player_stats %}
+  {% set enemy_hp_max = bandit_hp_max if bandit_fight else monster.hp %}
   <div class="panel" style="margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; font-size:14px;">
-    <div style="display:flex; align-items:center; gap:12px;">
+    <div id="player-side" style="display:flex; align-items:center; gap:12px; position:relative;">
       {% if player_avatar_url %}
       <img src="{{ player_avatar_url }}" alt="我方頭像" style="width:72px; height:72px; border-radius:50%; border:2px solid var(--border); flex-shrink:0; object-fit:cover;">
       {% endif %}
       <div>
         <div style="color:var(--gold-bright); margin-bottom:4px;">我方{% if player_level %}　Lv.{{ player_level }}{% endif %}</div>
-        <div style="color:var(--text-dim);">HP {{ player_stats.hp }}　MP {{ player_stats.mp }}</div>
+        <div style="width:120px; margin-bottom:4px;">
+          <div style="background:var(--panel-2); border:1px solid var(--border); border-radius:6px; height:8px; overflow:hidden;">
+            <div id="player-hp-fill" style="width:100%; height:100%; background:linear-gradient(90deg, var(--danger), var(--danger-bright)); transition: width 0.3s;"></div>
+          </div>
+          <div id="player-hp-label" style="font-size:11px; color:var(--text-dim); margin-top:2px;">HP {{ player_stats.hp }}/{{ player_stats.hp }}</div>
+        </div>
+        <div style="color:var(--text-dim);">MP {{ player_stats.mp }}</div>
         <div style="color:var(--text-dim);">力量 {{ player_stats.str }}　防禦 {{ player_stats.def }}　敏捷 {{ player_stats.agi }}　幸運 {{ player_stats.luk }}</div>
       </div>
     </div>
-    <div style="display:flex; align-items:center; gap:12px;">
+    <div id="enemy-side" style="display:flex; align-items:center; gap:12px; position:relative;">
       <div style="text-align:right;">
         <div style="color:var(--danger); margin-bottom:4px;">
           {% if bandit_fight %}山賊領主{% elif conquest %}守軍{% else %}敵方{% endif %}
           {% if monster.level %}　Lv.{{ monster.level }}{% elif monster.level_min %}　Lv.{{ monster.level_min }}-{{ monster.level_max }}{% else %}　Lv.???{% endif %}
         </div>
-        <div style="color:var(--text-dim);">HP {{ monster.hp }}{% if bandit_fight %}/{{ bandit_hp_max }}{% endif %}</div>
+        <div style="width:120px; margin-left:auto; margin-bottom:4px;">
+          <div style="background:var(--panel-2); border:1px solid var(--border); border-radius:6px; height:8px; overflow:hidden;">
+            <div id="enemy-hp-fill" style="width:{{ ((monster.hp / enemy_hp_max * 100) if enemy_hp_max else 0) | round(1) }}%; height:100%; background:linear-gradient(90deg, var(--danger), var(--danger-bright)); transition: width 0.3s;"></div>
+          </div>
+          <div id="enemy-hp-label" style="font-size:11px; color:var(--text-dim); margin-top:2px;">HP {{ monster.hp }}/{{ enemy_hp_max }}</div>
+        </div>
         <div style="color:var(--text-dim);">攻擊 {{ monster.atk }}　防禦 {{ monster.def }}　敏捷 {{ monster.agi }}　幸運 {{ monster.luk or 0 }}</div>
       </div>
       {% if monster.image_key %}
@@ -73,7 +132,7 @@
     <div id="battle-log" style="max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; font-size:15px;"></div>
   </div>
 
-  <div class="panel" id="battle-result" style="margin-bottom:20px; display:none;">
+  <div class="panel" id="battle-result" data-won="{{ 'true' if won else 'false' }}" style="margin-bottom:20px; display:none;">
     {% if won %}
       <h3 style="margin:0 0 8px; color:var(--gold-bright);">🎉 戰鬥勝利！</h3>
       <p style="margin:0; font-size:13px; color:var(--text-dim);">
@@ -136,7 +195,7 @@
   </div>
 
   {% if leveled_up and stats_after %}
-  <div class="panel" style="margin-bottom:20px;">
+  <div class="panel levelup-panel" style="margin-bottom:20px;">
     <h3 style="margin:0 0 10px; color:var(--gold-bright); font-size:15px;">🎉 升級了！Lv.{{ new_level }} 屬性異動</h3>
     <div style="display:flex; gap:20px; flex-wrap:wrap; font-size:13px; color:var(--text-dim);">
       <div>HP {{ player_stats.hp }} → {{ stats_after.hp }}（+{{ stats_after.hp - player_stats.hp }}）</div>
@@ -158,15 +217,48 @@
       var result = document.getElementById("battle-result");
       var i = 0;
 
+      var enemyName = {{ monster.name | tojson if monster else '""' }};
+      var playerHpFill = document.getElementById("player-hp-fill");
+      var playerHpLabel = document.getElementById("player-hp-label");
+      var playerHpMax = {{ player_stats.hp | default(0) }};
+      var enemyHpFill = document.getElementById("enemy-hp-fill");
+      var enemyHpLabel = document.getElementById("enemy-hp-label");
+      var enemyHpMax = {{ enemy_hp_max | default(0) }};
+      var playerSide = document.getElementById("player-side");
+      var enemySide = document.getElementById("enemy-side");
+
+      var hpRe = /（([^（]+) 剩餘 HP (\d+)）$/;
+      var dmgRe = /造成 (\d+) 點傷害/;
+
+      function updateHpBar(fillEl, labelEl, value, max) {
+        if (!fillEl || !max) return;
+        var pct = Math.max(0, Math.min(100, (value / max) * 100));
+        fillEl.style.width = pct + "%";
+        if (labelEl) labelEl.textContent = "HP " + value + "/" + max;
+      }
+
+      function spawnFloat(sideEl, text, cls) {
+        if (!sideEl) return;
+        var el = document.createElement("div");
+        el.className = "dmg-float" + (cls ? " " + cls : "");
+        el.textContent = text;
+        el.style.left = (40 + Math.random() * 20) + "%";
+        sideEl.appendChild(el);
+        setTimeout(function () { el.remove(); }, 900);
+      }
+
       function appendLine() {
         if (i >= log.length) {
           result.style.display = "";
+          result.classList.add("reveal");
+          if (result.dataset.won === "true") result.classList.add("won");
           return;
         }
         var line = document.createElement("div");
         var text = log[i];
         line.textContent = text;
-        if (text.indexOf("會心一擊") !== -1) {
+        var isCrit = text.indexOf("會心一擊") !== -1;
+        if (isCrit) {
           line.style.color = "var(--gold-bright)";
           line.style.fontWeight = "bold";
           line.style.fontSize = "17px";
@@ -175,6 +267,28 @@
         }
         container.appendChild(line);
         container.scrollTop = container.scrollHeight;
+
+        var hpMatch = text.match(hpRe);
+        if (hpMatch) {
+          var who = hpMatch[1];
+          var hpValue = parseInt(hpMatch[2], 10);
+          if (who === enemyName) {
+            updateHpBar(enemyHpFill, enemyHpLabel, hpValue, enemyHpMax);
+          } else {
+            updateHpBar(playerHpFill, playerHpLabel, hpValue, playerHpMax);
+          }
+
+          var targetSide = who === enemyName ? enemySide : playerSide;
+          var dmgMatch = text.match(dmgRe);
+          if (dmgMatch) {
+            spawnFloat(targetSide, dmgMatch[1], isCrit ? "crit" : "");
+          } else if (text.indexOf("閃避") !== -1) {
+            spawnFloat(targetSide, "閃避", "miss");
+          } else if (text.indexOf("沒有命中") !== -1) {
+            spawnFloat(targetSide, "MISS", "miss");
+          }
+        }
+
         i += 1;
         setTimeout(appendLine, 220);
       }
