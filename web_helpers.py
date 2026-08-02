@@ -3,18 +3,23 @@ character access decorators used by all of them).
 
 Import direction is strictly app.py -> blueprints/* -> web_helpers.py, so
 this module must never import from app.py or from any blueprint."""
+import io
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 
-from flask import redirect, url_for, session, flash
+from flask import redirect, url_for, session, flash, current_app
+from PIL import Image
 
 from db import get_db
 from game_data.constants import (
     MIN_USERNAME_LEN, MIN_PASSWORD_LEN, MAX_PASSWORD_LEN, MIN_CHARACTER_NAME_LEN, MAX_CHARACTER_NAME_LEN,
     GAME_LAYOUT_BLOCKS,
 )
-from game_data.avatars import BUILT_IN_AVATAR_KEYS, DEFAULT_AVATAR_KEY
+from game_data.avatars import (
+    BUILT_IN_AVATAR_KEYS, DEFAULT_AVATAR_KEY, CUSTOM_AVATAR_ALLOWED_FORMATS, CUSTOM_AVATAR_FORMAT_HINT,
+)
 
 
 def _parse_dt(value):
@@ -279,11 +284,79 @@ def avatar_url(avatar_key, avatar_custom_filename):
     """A custom upload always wins over the built-in key once one exists
     (see character.character_change_avatar) -- avatar_key is kept around as a
     fallback identity rather than cleared, so nothing breaks if the uploaded
-    file is ever manually removed from disk."""
+    file is ever manually removed from disk.
+
+    For the built-in-key fallback branch, an admin-uploaded replacement image
+    (see blueprints/admin.py's /admin/images routes) wins over the shipped
+    .svg if one exists on disk at static/avatars/built_in/custom/{key}.png --
+    checked with a real filesystem os.path.exists (not just a URL guess),
+    since there's no DB column tracking override existence in this app."""
     if avatar_custom_filename:
         return url_for("static", filename=f"avatars/uploads/{avatar_custom_filename}")
     key = avatar_key if avatar_key in BUILT_IN_AVATAR_KEYS else DEFAULT_AVATAR_KEY
+    override_path = os.path.join(current_app.static_folder, "avatars", "built_in", "custom", f"{key}.png")
+    if os.path.exists(override_path):
+        return url_for("static", filename=f"avatars/built_in/custom/{key}.png")
     return url_for("static", filename=f"avatars/built_in/{key}.svg")
+
+
+def monster_image_url(image_key):
+    """Resolves a monster's (or monster-shaped opponent's, e.g. the defense
+    tower / bandit lord -- see game_data/stats.py) art, same admin-override
+    pattern as avatar_url: static/monsters/custom/{image_key}.png wins over
+    the shipped static/monsters/{image_key}.svg if present on disk. Returns
+    None for a falsy image_key so callers (e.g. templates/battle.html) can
+    keep their existing "only render an <img> if monster.image_key" guard."""
+    if not image_key:
+        return None
+    override_path = os.path.join(current_app.static_folder, "monsters", "custom", f"{image_key}.png")
+    if os.path.exists(override_path):
+        return url_for("static", filename=f"monsters/custom/{image_key}.png")
+    return url_for("static", filename=f"monsters/{image_key}.svg")
+
+
+def _process_square_image_upload(file_storage, max_bytes, dimension):
+    """Validates and re-encodes an uploaded image into a fixed-size square
+    PNG, returned as raw bytes -- the uploaded bytes/extension are NEVER
+    trusted or stored as-is, only what Pillow can actually decode as a real
+    image (and re-encode from scratch) is returned. Shared by the player-
+    facing custom-avatar upload (blueprints/character.py's
+    _process_avatar_upload) and the admin monster/avatar image-override
+    upload (blueprints/admin.py) -- callers own writing the bytes to disk
+    under whatever filename/path convention they use. Returns
+    (png_bytes, error_message), exactly one of which is None."""
+    data = file_storage.read()
+    if not data:
+        return None, "請選擇一個圖片檔案"
+    if len(data) > max_bytes:
+        return None, f"檔案大小超過 {max_bytes // (1024 * 1024)}MB 上限"
+
+    try:
+        probe = Image.open(io.BytesIO(data))
+        probe.verify()
+        img = Image.open(io.BytesIO(data))  # verify() consumes the first handle
+        img.load()
+    except Exception:
+        # Pillow can raise many different exception types for a malformed or
+        # disguised file (OSError/ValueError/SyntaxError/DecompressionBombError/
+        # UnidentifiedImageError...) -- catching broadly here is deliberate,
+        # since any failure to decode means "reject the upload", not a bug.
+        return None, f"無法辨識這個圖片檔案。{CUSTOM_AVATAR_FORMAT_HINT}"
+
+    if img.format not in CUSTOM_AVATAR_ALLOWED_FORMATS:
+        return None, CUSTOM_AVATAR_FORMAT_HINT
+
+    img = img.convert("RGBA")
+    width, height = img.size
+    side = min(width, height)
+    left = (width - side) // 2
+    top = (height - side) // 2
+    img = img.crop((left, top, left + side, top + side))
+    img = img.resize((dimension, dimension), Image.LANCZOS)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue(), None
 
 
 def login_required(view):

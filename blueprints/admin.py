@@ -1,14 +1,22 @@
-"""Admin console: sessions, logs, country roles and game settings."""
+"""Admin console: sessions, logs, country roles, game settings and image
+overrides (monster art / built-in avatar picker, see /admin/images below)."""
+import os
 import sqlite3
 from datetime import datetime
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
 
-from db import get_db, LEVEL_CAP, log_activity
-from web_helpers import admin_required, _parse_dt, _valid_war_time, _format_duration, _sanitized_action_block_order
+from db import get_db, LEVEL_CAP, log_activity, DEFAULT_MONSTERS, HIDDEN_MONSTERS
+from web_helpers import (
+    admin_required, _parse_dt, _valid_war_time, _format_duration, _sanitized_action_block_order,
+    avatar_url, monster_image_url, _process_square_image_upload,
+)
 from game_data.constants import (
     STAT_FIELDS, IDLE_THRESHOLD_MINUTES, ACTION_LABELS, GOVERNMENT_ROLES,
     FEEDBACK_STATUSES, FEEDBACK_STATUS_LABELS, GAME_LAYOUT_BLOCKS,
+)
+from game_data.avatars import (
+    BUILT_IN_AVATARS, BUILT_IN_AVATAR_KEYS, CUSTOM_AVATAR_MAX_BYTES, CUSTOM_AVATAR_DIMENSION,
 )
 
 admin_bp = Blueprint("admin", __name__)
@@ -623,3 +631,195 @@ def admin_update_hunting_ground(ground_id):
 
     flash(f"已更新「{name}」")
     return redirect(url_for("admin.admin_settings"))
+
+
+# --- Image management (monster art + built-in avatar picker) --------------
+# No DB schema involved: an override is just a PNG file dropped under a
+# static/*/custom/ subfolder, checked with os.path.exists at request time
+# (see web_helpers.avatar_url / monster_image_url) -- consistent with this
+# app's existing no-cache, raw-sqlite3, low-traffic simplicity. Defaults
+# (the shipped .svg files) are never touched or overwritten, only shadowed.
+#
+# Two monster-shaped opponents outside the monsters table also carry an
+# image_key (see game_data/stats.py's defense_tower_stats / _bandit_lord_stats)
+# and must be included in the allow-list / admin UI even though no monsters
+# table row names them.
+_EXTRA_MONSTER_IMAGE_KEYS = {
+    "defender": "城鎮／要塞守軍（防禦塔）",
+    "bandit_lord": "山賊領主（中立地塊守衛）",
+}
+
+
+def _monster_image_catalog():
+    """Returns an ordered list of dicts, one per known monster image_key
+    (deduped from DEFAULT_MONSTERS + HIDDEN_MONSTERS, plus the two
+    non-monsters-table keys above), each with the monster name(s) that use
+    it for admin readability."""
+    names_by_key = {}
+    for m in DEFAULT_MONSTERS + HIDDEN_MONSTERS:
+        names_by_key.setdefault(m["image_key"], []).append(m["name"])
+
+    catalog = [
+        {"key": key, "names": names} for key, names in sorted(names_by_key.items())
+    ]
+    for key, label in _EXTRA_MONSTER_IMAGE_KEYS.items():
+        catalog.append({"key": key, "names": [label]})
+    return catalog
+
+
+def _known_monster_image_keys():
+    return {m["image_key"] for m in DEFAULT_MONSTERS + HIDDEN_MONSTERS} | set(_EXTRA_MONSTER_IMAGE_KEYS)
+
+
+def _monster_custom_dir():
+    return os.path.join(current_app.static_folder, "monsters", "custom")
+
+
+def _avatar_custom_dir():
+    return os.path.join(current_app.static_folder, "avatars", "built_in", "custom")
+
+
+@admin_bp.route("/admin/images")
+@admin_required
+def admin_images():
+    monster_dir = _monster_custom_dir()
+    monster_items = []
+    for entry in _monster_image_catalog():
+        key = entry["key"]
+        names = entry["names"]
+        if len(names) > 4:
+            names_display = "、".join(names[:3]) + f"…（共 {len(names)} 隻）"
+        else:
+            names_display = "、".join(names)
+        monster_items.append({
+            "key": key,
+            "names_display": names_display,
+            "has_override": os.path.isfile(os.path.join(monster_dir, f"{key}.png")),
+            "preview_url": monster_image_url(key),
+        })
+
+    avatar_dir = _avatar_custom_dir()
+    avatar_items = []
+    for entry in BUILT_IN_AVATARS:
+        key = entry["key"]
+        avatar_items.append({
+            "key": key,
+            "label": entry["label"],
+            "has_override": os.path.isfile(os.path.join(avatar_dir, f"{key}.png")),
+            "preview_url": avatar_url(key, None),
+        })
+
+    return render_template(
+        "admin_images.html", monster_items=monster_items, avatar_items=avatar_items, active_tab="images",
+    )
+
+
+@admin_bp.route("/admin/images/monster/<image_key>", methods=["POST"])
+@admin_required
+def admin_upload_monster_image(image_key):
+    # image_key becomes part of a filesystem path below -- validated against
+    # the known allow-list rather than sanitized, so there's no path-
+    # traversal surface at all (reject anything unknown outright).
+    if image_key not in _known_monster_image_keys():
+        flash("無效的怪物圖片代碼")
+        return redirect(url_for("admin.admin_images"))
+
+    upload = request.files.get("image_file")
+    if upload is None or not upload.filename:
+        flash("請選擇一個圖片檔案")
+        return redirect(url_for("admin.admin_images"))
+
+    png_bytes, error = _process_square_image_upload(upload, CUSTOM_AVATAR_MAX_BYTES, CUSTOM_AVATAR_DIMENSION)
+    if error:
+        flash(error)
+        return redirect(url_for("admin.admin_images"))
+
+    target_dir = _monster_custom_dir()
+    os.makedirs(target_dir, exist_ok=True)
+    with open(os.path.join(target_dir, f"{image_key}.png"), "wb") as f:
+        f.write(png_bytes)
+
+    flash(f"已更新怪物圖片「{image_key}」")
+    return redirect(url_for("admin.admin_images"))
+
+
+@admin_bp.route("/admin/images/monster/<image_key>/reset", methods=["POST"])
+@admin_required
+def admin_reset_monster_image(image_key):
+    if image_key not in _known_monster_image_keys():
+        flash("無效的怪物圖片代碼")
+        return redirect(url_for("admin.admin_images"))
+
+    path = os.path.join(_monster_custom_dir(), f"{image_key}.png")
+    if os.path.isfile(path):
+        os.remove(path)
+    flash(f"已將怪物圖片「{image_key}」重置為預設")
+    return redirect(url_for("admin.admin_images"))
+
+
+@admin_bp.route("/admin/images/monster/reset_all", methods=["POST"])
+@admin_required
+def admin_reset_all_monster_images():
+    target_dir = _monster_custom_dir()
+    if os.path.isdir(target_dir):
+        for name in os.listdir(target_dir):
+            path = os.path.join(target_dir, name)
+            if os.path.isfile(path):
+                os.remove(path)
+    flash("已將所有怪物圖片重置為預設")
+    return redirect(url_for("admin.admin_images"))
+
+
+@admin_bp.route("/admin/images/avatar/<avatar_key>", methods=["POST"])
+@admin_required
+def admin_upload_avatar_image(avatar_key):
+    # Same allow-list-only rule as the monster upload above -- avatar_key
+    # becomes part of a filesystem path.
+    if avatar_key not in BUILT_IN_AVATAR_KEYS:
+        flash("無效的頭像代碼")
+        return redirect(url_for("admin.admin_images"))
+
+    upload = request.files.get("image_file")
+    if upload is None or not upload.filename:
+        flash("請選擇一個圖片檔案")
+        return redirect(url_for("admin.admin_images"))
+
+    png_bytes, error = _process_square_image_upload(upload, CUSTOM_AVATAR_MAX_BYTES, CUSTOM_AVATAR_DIMENSION)
+    if error:
+        flash(error)
+        return redirect(url_for("admin.admin_images"))
+
+    target_dir = _avatar_custom_dir()
+    os.makedirs(target_dir, exist_ok=True)
+    with open(os.path.join(target_dir, f"{avatar_key}.png"), "wb") as f:
+        f.write(png_bytes)
+
+    flash(f"已更新頭像圖片「{avatar_key}」")
+    return redirect(url_for("admin.admin_images"))
+
+
+@admin_bp.route("/admin/images/avatar/<avatar_key>/reset", methods=["POST"])
+@admin_required
+def admin_reset_avatar_image(avatar_key):
+    if avatar_key not in BUILT_IN_AVATAR_KEYS:
+        flash("無效的頭像代碼")
+        return redirect(url_for("admin.admin_images"))
+
+    path = os.path.join(_avatar_custom_dir(), f"{avatar_key}.png")
+    if os.path.isfile(path):
+        os.remove(path)
+    flash(f"已將頭像圖片「{avatar_key}」重置為預設")
+    return redirect(url_for("admin.admin_images"))
+
+
+@admin_bp.route("/admin/images/avatar/reset_all", methods=["POST"])
+@admin_required
+def admin_reset_all_avatar_images():
+    target_dir = _avatar_custom_dir()
+    if os.path.isdir(target_dir):
+        for name in os.listdir(target_dir):
+            path = os.path.join(target_dir, name)
+            if os.path.isfile(path):
+                os.remove(path)
+    flash("已將所有頭像圖片重置為預設")
+    return redirect(url_for("admin.admin_images"))

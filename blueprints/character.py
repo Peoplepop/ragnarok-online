@@ -1,23 +1,22 @@
 """Character creation, the character sheet, promotions, rebirth and skills."""
-import io
 import os
 import sqlite3
 import uuid
 
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
-from PIL import Image, UnidentifiedImageError
 
 from db import get_db, log_activity, LEVEL_CAP, ELEMENT_OVERCOMES
 from web_helpers import (
     login_required, admin_required, character_required, _cooldown_remaining_seconds,
     _validate_character_name, _in_any_war_window, _morale_buff_active, avatar_url,
+    _process_square_image_upload,
 )
 from game_data.constants import (
     SHOP_TYPE_LABELS, SLOT_LABELS, EQUIP_SLOT_COLUMNS, LEVEL_STAT_GROWTH, STAT_LABELS,
     RENAME_MAX_CHARACTER_NAME_LEN,
 )
 from game_data.avatars import (
-    BUILT_IN_AVATARS, BUILT_IN_AVATAR_KEYS, CUSTOM_AVATAR_MAX_BYTES, CUSTOM_AVATAR_ALLOWED_FORMATS,
+    BUILT_IN_AVATARS, BUILT_IN_AVATAR_KEYS, CUSTOM_AVATAR_MAX_BYTES,
     CUSTOM_AVATAR_DIMENSION, CUSTOM_AVATAR_FORMAT_HINT, CUSTOM_AVATAR_UPLOAD_DIR,
 )
 from game_data.jobs import (
@@ -668,40 +667,22 @@ def _process_avatar_upload(file_storage):
     """Validates and re-encodes an uploaded avatar into a fixed-size square
     PNG under a random filename -- the uploaded bytes/extension are NEVER
     trusted or stored as-is, only what Pillow can actually decode as a real
-    image (and re-encode from scratch) ends up on disk. Returns
+    image (and re-encode from scratch) ends up on disk. The actual decode/
+    verify/reencode work is shared with the admin monster/avatar
+    image-override upload via web_helpers._process_square_image_upload;
+    this function only owns the player-upload-specific concern of picking a
+    random filename under CUSTOM_AVATAR_UPLOAD_DIR. Returns
     (new_filename, error_message), exactly one of which is None."""
-    data = file_storage.read()
-    if not data:
-        return None, "請選擇一個圖片檔案"
-    if len(data) > CUSTOM_AVATAR_MAX_BYTES:
-        return None, f"檔案大小超過 {CUSTOM_AVATAR_MAX_BYTES // (1024 * 1024)}MB 上限"
-
-    try:
-        probe = Image.open(io.BytesIO(data))
-        probe.verify()
-        img = Image.open(io.BytesIO(data))  # verify() consumes the first handle
-        img.load()
-    except Exception:
-        # Pillow can raise many different exception types for a malformed or
-        # disguised file (OSError/ValueError/SyntaxError/DecompressionBombError/
-        # UnidentifiedImageError...) -- catching broadly here is deliberate,
-        # since any failure to decode means "reject the upload", not a bug.
-        return None, f"無法辨識這個圖片檔案。{CUSTOM_AVATAR_FORMAT_HINT}"
-
-    if img.format not in CUSTOM_AVATAR_ALLOWED_FORMATS:
-        return None, CUSTOM_AVATAR_FORMAT_HINT
-
-    img = img.convert("RGBA")
-    width, height = img.size
-    side = min(width, height)
-    left = (width - side) // 2
-    top = (height - side) // 2
-    img = img.crop((left, top, left + side, top + side))
-    img = img.resize((CUSTOM_AVATAR_DIMENSION, CUSTOM_AVATAR_DIMENSION), Image.LANCZOS)
+    png_bytes, error = _process_square_image_upload(
+        file_storage, CUSTOM_AVATAR_MAX_BYTES, CUSTOM_AVATAR_DIMENSION,
+    )
+    if error:
+        return None, error
 
     os.makedirs(CUSTOM_AVATAR_UPLOAD_DIR, exist_ok=True)
     filename = f"{uuid.uuid4().hex}.png"
-    img.save(os.path.join(CUSTOM_AVATAR_UPLOAD_DIR, filename), format="PNG")
+    with open(os.path.join(CUSTOM_AVATAR_UPLOAD_DIR, filename), "wb") as f:
+        f.write(png_bytes)
     return filename, None
 
 

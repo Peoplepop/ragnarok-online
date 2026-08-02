@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}圖片管理 - 五行爭鋒{% endblock %}
+
+{% block content %}
+  {% include "_admin_nav.html" %}
+  <h2 style="color: var(--gold-bright); font-size: 18px; margin-top:0;">怪物圖片</h2>
+  <p class="hint" style="margin-top:-8px; margin-bottom:16px;">
+    上傳的圖片會覆蓋預設美術（僅顯示用，不影響戰鬥數值）。圖片格式限 JPG / PNG / GIF，檔案大小上限 2MB，
+    系統會自動置中裁切並縮放為正方形。
+  </p>
+
+  <div class="panel" style="margin-bottom:18px;">
+    <form method="post" action="{{ url_for('admin.admin_reset_all_monster_images') }}"
+          onsubmit="return confirm('確定要把全部怪物圖片重置為預設嗎？此動作無法復原。');">
+      <button type="submit" class="btn" style="border-color:var(--danger); color:var(--danger);">重置全部為預設</button>
+    </form>
+  </div>
+
+  <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:12px; margin-bottom:28px;">
+    {% for item in monster_items %}
+    <div class="panel" style="display:flex; flex-direction:column; gap:8px; align-items:center; text-align:center;">
+      <img src="{{ item.preview_url }}" alt="{{ item.key }}" style="width:64px; height:64px; border-radius:50%; border:2px solid var(--border); object-fit:cover;">
+      <div style="font-size:12px; color:var(--gold-bright); word-break:break-all;">{{ item.key }}</div>
+      <div style="font-size:11px; color:var(--text-dim);">{{ item.names_display }}</div>
+      {% if item.has_override %}<div style="font-size:11px; color:var(--gold);">已自訂</div>{% endif %}
+
+      <form method="post" action="{{ url_for('admin.admin_upload_monster_image', image_key=item.key) }}"
+            enctype="multipart/form-data" style="display:flex; flex-direction:column; gap:6px; width:100%;">
+        <input type="file" name="image_file" accept="image/png,image/jpeg,image/gif" style="font-size:11px;">
+        <button type="submit" style="padding:4px 10px; font-size:12px;">上傳</button>
+      </form>
+
+      {% if item.has_override %}
+      <form method="post" action="{{ url_for('admin.admin_reset_monster_image', image_key=item.key) }}"
+            onsubmit="return confirm('確定要把「{{ item.key }}」重置為預設嗎？');" style="width:100%;">
+        <button type="submit" class="btn" style="padding:4px 10px; font-size:12px; width:100%;">重置此項</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <h2 style="color: var(--gold-bright); font-size: 18px;">頭像圖片</h2>
+  <p class="hint" style="margin-top:-8px; margin-bottom:16px;">覆蓋內建頭像選擇器裡的圖片，玩家自行上傳的自訂頭像不受影響。</p>
+
+  <div class="panel" style="margin-bottom:18px;">
+    <form method="post" action="{{ url_for('admin.admin_reset_all_avatar_images') }}"
+          onsubmit="return confirm('確定要把全部頭像圖片重置為預設嗎？此動作無法復原。');">
+      <button type="submit" class="btn" style="border-color:var(--danger); color:var(--danger);">重置全部為預設</button>
+    </form>
+  </div>
+
+  <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:12px;">
+    {% for item in avatar_items %}
+    <div class="panel" style="display:flex; flex-direction:column; gap:8px; align-items:center; text-align:center;">
+      <img src="{{ item.preview_url }}" alt="{{ item.label }}" style="width:64px; height:64px; border-radius:50%; border:2px solid var(--border); object-fit:cover;">
+      <div style="font-size:12px; color:var(--gold-bright);">{{ item.label }}</div>
+      <div style="font-size:11px; color:var(--text-dim); word-break:break-all;">{{ item.key }}</div>
+      {% if item.has_override %}<div style="font-size:11px; color:var(--gold);">已自訂</div>{% endif %}
+
+      <form method="post" action="{{ url_for('admin.admin_upload_avatar_image', avatar_key=item.key) }}"
+            enctype="multipart/form-data" style="display:flex; flex-direction:column; gap:6px; width:100%;">
+        <input type="file" name="image_file" accept="image/png,image/jpeg,image/gif" style="font-size:11px;">
+        <button type="submit" style="padding:4px 10px; font-size:12px;">上傳</button>
+      </form>
+
+      {% if item.has_override %}
+      <form method="post" action="{{ url_for('admin.admin_reset_avatar_image', avatar_key=item.key) }}"
+            onsubmit="return confirm('確定要把「{{ item.label }}」重置為預設嗎？');" style="width:100%;">
+        <button type="submit" class="btn" style="padding:4px 10px; font-size:12px; width:100%;">重置此項</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+{% endblock %}

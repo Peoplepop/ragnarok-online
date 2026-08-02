@@ -8,7 +8,7 @@ from flask import Flask, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash
 
 from db import get_db, init_db, seed_defaults, log_activity
-from web_helpers import _parse_dt, avatar_url
+from web_helpers import _parse_dt, avatar_url, monster_image_url
 from game_data.constants import IDLE_THRESHOLD_MINUTES, LEVEL_STAT_GROWTH
 from game_data.skills import SKILL_CATALOG
 
@@ -308,6 +308,12 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(tournament_bp)
 app.register_blueprint(chat_bp)
 app.register_blueprint(feedback_bp)
+
+# Lets templates resolve avatar/monster art (including admin-uploaded
+# overrides, see blueprints/admin.py's /admin/images routes) directly without
+# every route threading the URL through render_template kwargs.
+app.jinja_env.globals["avatar_url"] = avatar_url
+app.jinja_env.globals["monster_image_url"] = monster_image_url
 
 
 if __name__ == "__main__":

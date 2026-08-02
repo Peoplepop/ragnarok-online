@@ -19,7 +19,7 @@
         {% for avatar in built_in_avatars %}
         <label class="avatar-option" title="{{ avatar.label }}">
           <input type="radio" name="avatar_key" value="{{ avatar.key }}" {% if avatar.key == selected_avatar_key %}checked{% endif %} required>
-          <img src="{{ url_for('static', filename='avatars/built_in/' ~ avatar.key ~ '.svg') }}" alt="{{ avatar.label }}">
+          <img src="{{ avatar_url(avatar.key, None) }}" alt="{{ avatar.label }}">
         </label>
         {% endfor %}
       </div>

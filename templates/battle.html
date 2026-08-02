@@ -63,7 +63,7 @@
         <div style="color:var(--text-dim);">攻擊 {{ monster.atk }}　防禦 {{ monster.def }}　敏捷 {{ monster.agi }}</div>
       </div>
       {% if monster.image_key %}
-      <img src="{{ url_for('static', filename='monsters/' + monster.image_key + '.svg') }}" alt="{{ monster.name }}" style="width:72px; height:72px; border-radius:50%; border:2px solid var(--border); flex-shrink:0; object-fit:cover;">
+      <img src="{{ monster_image_url(monster.image_key) }}" alt="{{ monster.name }}" style="width:72px; height:72px; border-radius:50%; border:2px solid var(--border); flex-shrink:0; object-fit:cover;">
       {% endif %}
     </div>
   </div>
