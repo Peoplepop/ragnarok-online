@@ -95,6 +95,29 @@ def _roll_hidden_loot(db, settings, hidden_key, character_id):
     return dropped
 
 
+def _roll_boss_set_loot(db, settings, boss, character_id):
+    """Post-WIN drop roll for a tier milestone boss fight (荒原狼王/熔岩巨蠍王/
+    深淵魔狼王/終焉魔神). On success picks ONE row uniformly at random from that
+    boss's OWN 3-piece set -- unlike _roll_hidden_loot, a boss's hidden_set_key
+    is just its own image_key (see db.py's _BOSS_SET_DEFS), so there is no
+    5-sets-at-once grouping table to look up here, just a direct WHERE -- and
+    puts it straight in the winner's inventory through the same
+    _add_to_inventory the shop and trade systems use.
+
+    Returns the dropped item row, or None when the roll failed (or, defensively,
+    when this boss somehow has no set seeded)."""
+    if random.random() * 100 >= settings["boss_set_drop_percent"]:
+        return None
+    pool = db.execute(
+        "SELECT * FROM items WHERE hidden_set_key = ? ORDER BY id", (boss["image_key"],),
+    ).fetchall()
+    if not pool:
+        return None
+    dropped = random.choice(pool)
+    _add_to_inventory(db, character_id, dropped["id"], 1)
+    return dropped
+
+
 def _debuffed_monster(monster, special_effects):
     """A plain-dict copy of a monster row with its hp/atk/def/agi/luk scaled
     down by the wearer's 怪物弱化 (enemy_debuff) percent, floored at 1 so a huge
@@ -227,7 +250,7 @@ def _render_game(**extra):
     # this character, so it's read here rather than filtered by user_id.
     major_event_rows = db.execute(
         """SELECT action, detail, username, created_at FROM activity_log
-           WHERE action IN ('character_create', 'hidden_loot_drop', 'tournament_champion')
+           WHERE action IN ('character_create', 'hidden_loot_drop', 'boss_set_drop', 'tournament_champion')
            ORDER BY created_at DESC LIMIT 100"""
     ).fetchall()
     major_events = _major_event_feed(major_event_rows)
@@ -630,6 +653,7 @@ def game_hunt():
     boss_room_available = False
     skill_book_dropped = None
     hidden_loot_dropped = None
+    boss_set_dropped = None
     if result["won"]:
         if is_guardian_fight:
             exp_multiplier = settings["guardian_exp_multiplier"]
@@ -647,6 +671,21 @@ def game_hunt():
             monster["currency_reward"]
             * (1 + gold_luk_bonus_pct(stats["luk"]) / 100 + special_effects.get("gold_rate", 0) / 100)
         )
+        # 魔王套裝 drop roll: only reached here through the admin "指定怪物測試"
+        # force-fight dropdown (a normal player only ever meets a boss via the
+        # 魔王房間 flow below, in game_hunt_boss_room), kept for consistency and
+        # testability. `monster` (not fought_monster) is used deliberately --
+        # both carry the same image_key, but this reads the un-debuffed
+        # original row, matching _roll_hidden_loot's own convention above.
+        if monster["is_boss"]:
+            boss_set_dropped = _roll_boss_set_loot(db, settings, monster, character["character_id"])
+            if boss_set_dropped is not None:
+                log_activity(
+                    db, session["user_id"], session["username"], "boss_set_drop",
+                    detail=f"擊敗{monster['name']}，獲得「{boss_set_dropped['name']}」"
+                           f"（{boss_set_dropped['hidden_set_name']}）",
+                    ip_address=request.remote_addr,
+                )
         new_level, new_exp, stat_gain = apply_exp(
             character["level"], character["exp"], exp_gain, settings,
             force_one=session.get("is_admin", False),
@@ -754,6 +793,7 @@ def game_hunt():
         hidden_loot_dropped=hidden_loot_dropped,
         boss_room_available=boss_room_available,
         skill_book_dropped=skill_book_dropped,
+        boss_set_dropped=boss_set_dropped,
         log=result["log"],
         won=result["won"],
         timed_out=result["timed_out"],
@@ -838,6 +878,7 @@ def game_hunt_boss_room():
     currency_lost = 0
     new_level, new_exp = character["level"], character["exp"]
     stat_gain = {key: 0 for key in LEVEL_UP_POINT_VALUE}
+    boss_set_dropped = None
     if result["won"]:
         exp_gain = round(
             boss["exp_reward"] * settings["boss_exp_multiplier"]
@@ -847,6 +888,18 @@ def game_hunt_boss_room():
             boss["currency_reward"]
             * (1 + gold_luk_bonus_pct(stats["luk"]) / 100 + special_effects.get("gold_rate", 0) / 100)
         )
+        # 魔王套裝 drop roll: this is the real path a normal player reaches a
+        # boss through (after clearing the tier's guardian) -- `boss` is the
+        # real monsters-table row, unlike fought_boss which is _debuffed_
+        # monster's dict copy.
+        boss_set_dropped = _roll_boss_set_loot(db, settings, boss, character["character_id"])
+        if boss_set_dropped is not None:
+            log_activity(
+                db, session["user_id"], session["username"], "boss_set_drop",
+                detail=f"擊敗{boss['name']}，獲得「{boss_set_dropped['name']}」"
+                       f"（{boss_set_dropped['hidden_set_name']}）",
+                ip_address=request.remote_addr,
+            )
         new_level, new_exp, stat_gain = apply_exp(
             character["level"], character["exp"], exp_gain, settings,
             force_one=session.get("is_admin", False),
@@ -906,6 +959,7 @@ def game_hunt_boss_room():
         ground=ground,
         monster=fought_boss,
         boss_room_challenge=True,
+        boss_set_dropped=boss_set_dropped,
         log=result["log"],
         won=result["won"],
         timed_out=result["timed_out"],

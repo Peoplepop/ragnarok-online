@@ -335,6 +335,70 @@ ITEM_HIDDEN_COLUMNS = (
     "hidden_set_key", "hidden_set_name", "special_effect_key", "special_effect_percent",
 )
 
+# --- 魔王套裝 (tier-boss equipment sets) -------------------------------------
+# One 3-piece set (weapon/armor/accessory) per tier milestone boss (荒原狼王/
+# 熔岩巨蠍王/深淵魔狼王/終焉魔神), reusing the exact same hidden_set_key/
+# hidden_set_name/special_effect_key/special_effect_percent mechanism as the
+# 秘境 legendary sets above -- character_special_effects and friends in
+# game_data/equipment.py are already fully generic over any hidden_set_key,
+# so wearing 2/3 or 3/3 of a boss set "just works" with zero further changes.
+#
+# Unlike a 秘境 map (which draws from 5 elemental sets at once, hence
+# HIDDEN_SET_KEYS_BY_MAP), a boss draws from exactly its own 1 set of 3
+# pieces -- so hidden_set_key is simply set to that boss's own image_key
+# (see _MONSTER_TIER_CONFIG's "boss" entries) and the drop roll is a trivial
+# WHERE hidden_set_key = boss['image_key'], no grouping table needed.
+#
+# Power intentionally scales with boss tier and sits BETWEEN the purchasable
+# 國王套裝 (KING_SET_ITEM_STAT_BONUS = 44) and the 秘境 太極/無極 legendary sets
+# (60/80, effect 8%/15%) -- these are common-ish repeatable-boss drops, not
+# the rarest end-game loot, so every value below stays under
+# TAIJI_SET_ITEM_STAT_BONUS/TAIJI_SPECIAL_EFFECT_PERCENT.
+BOSS_SET_ITEM_PRICE = 0
+
+# image_key -> (element, set_name, (weapon_name, armor_name, accessory_name), stat_bonus, effect_percent)
+_BOSS_SET_DEFS = [
+    ("boss_wolfking", "木", "狼王荒野套裝",
+     ("狼王荒野爪", "狼王荒野鬃甲", "狼王荒野獠牙墜"), 26, 4),
+    ("boss_scorpionking", "火", "蠍王熔岩套裝",
+     ("蠍王熔岩螯", "蠍王熔岩甲殼", "蠍王熔岩尾針墜"), 36, 6),
+    ("boss_abysswolf", "水", "魔狼深淵套裝",
+     ("魔狼深淵爪", "魔狼深淵鱗甲", "魔狼深淵靈眸墜"), 50, 9),
+    ("boss_demongod", "金", "魔神終焉套裝",
+     ("魔神終焉戮劍", "魔神終焉聖鎧", "魔神終焉權冠"), 65, 12),
+]
+
+
+def _build_boss_set_items():
+    items = []
+    for image_key, element, set_name, piece_names, stat_bonus, effect_percent in _BOSS_SET_DEFS:
+        signature_stat, effect_key = HIDDEN_SET_EFFECT_BY_ELEMENT[element]
+        for slot, piece_name in zip(_HIDDEN_SLOT_ORDER, piece_names):
+            items.append({
+                "shop_type": slot,
+                "name": piece_name,
+                "price": BOSS_SET_ITEM_PRICE,
+                "stat": signature_stat,
+                "stat_bonus": stat_bonus,
+                "country_name": None,
+                "hidden_set_key": image_key,
+                "hidden_set_name": set_name,
+                "special_effect_key": effect_key,
+                "special_effect_percent": effect_percent,
+            })
+    return items
+
+
+# Deliberately NOT appended to DEFAULT_ITEMS at import time (unlike
+# HIDDEN_SET_ITEMS) -- DEFAULT_ITEMS only feeds the fresh-DB (empty items
+# table) seed path in seed_defaults(), but this feature ships into an
+# already-running game.db whose items table has long since stopped being
+# empty, so it needs its own live-migration seeder (_seed_boss_set_items,
+# defined near _upgrade_items below) instead, called unconditionally from
+# seed_defaults() every startup just like _seed_hidden_grounds/_seed_hidden_
+# monsters.
+BOSS_SET_ITEMS = _build_boss_set_items()
+
 # Monster roster, generated rather than hand-typed: every 5-level bracket
 # within a hunting ground gets 2 regular monsters (two long-running species
 # per tier, escalating through an adjective ladder as the bracket climbs),
@@ -837,6 +901,23 @@ def _upgrade_items(conn, country_ids_by_name):
         _insert_item(conn, i, country_ids_by_name)
 
 
+def _seed_boss_set_items(conn):
+    """Add-only seed of the 4 tier-boss equipment sets (BOSS_SET_ITEMS, 12
+    item rows total), matched by exact item name so it is never duplicated
+    and never overwrites a tuned existing row -- same convention as
+    _upgrade_items/_seed_hidden_monsters. Runs on every startup, independent
+    of hunting_grounds/monsters (no dependency ordering needed), routed
+    through the same _insert_item single-INSERT path as every other item so
+    the hidden_set_*/special_effect_* columns are always filled consistently.
+    country_name is always None on a boss-set piece (unpurchasable, same as
+    a 秘境 piece), so an empty country_ids_by_name dict is fine here."""
+    existing_names = {row["name"] for row in conn.execute("SELECT name FROM items")}
+    for i in BOSS_SET_ITEMS:
+        if i["name"] in existing_names:
+            continue
+        _insert_item(conn, i, {})
+
+
 def _seed_return_scroll_items(conn):
     """Idempotent seed of one 回城石 (return scroll) item per town/fortress
     map_tiles row. Unlike DEFAULT_ITEMS this can't be a static list -- map
@@ -1047,6 +1128,8 @@ def _ensure_game_settings_columns(conn):
         conn.execute("ALTER TABLE game_settings ADD COLUMN boss_room_trigger_percent REAL NOT NULL DEFAULT 50")
     if "guardian_exp_multiplier" not in cols:
         conn.execute("ALTER TABLE game_settings ADD COLUMN guardian_exp_multiplier REAL NOT NULL DEFAULT 2")
+    if "boss_set_drop_percent" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN boss_set_drop_percent REAL NOT NULL DEFAULT 50")
     if "same_bracket_encounter_percent" not in cols:
         # Chance a regular (non-guardian/boss) hunt encounter comes from the
         # monster level-bracket matching the character's own level, vs. any
@@ -1260,6 +1343,11 @@ def seed_defaults():
             _insert_item(conn, i, country_ids_by_name)
     else:
         _upgrade_items(conn, country_ids_by_name)
+    # Runs every startup (add-only/self-healing, like _seed_hidden_grounds) --
+    # no dependency on hunting_grounds/monsters, so ordering relative to them
+    # is flexible; kept here right next to _upgrade_items since it shares the
+    # exact same "items table already has rows" add-only concern.
+    _seed_boss_set_items(conn)
     # Runs every startup (add-only/self-healing, like _seed_hidden_grounds) --
     # must come after _seed_map_tiles/_backfill_character_positions above,
     # which have already run by this point in seed_defaults().

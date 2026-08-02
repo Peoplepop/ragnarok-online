@@ -379,6 +379,7 @@ def admin_update_game_settings():
         hidden_wuji_drop_percent = float(request.form.get("hidden_wuji_drop_percent", ""))
         guardian_exp_multiplier = float(request.form.get("guardian_exp_multiplier", ""))
         boss_exp_multiplier = float(request.form.get("boss_exp_multiplier", ""))
+        boss_set_drop_percent = float(request.form.get("boss_set_drop_percent", ""))
         shop_tax_percent = float(request.form.get("shop_tax_percent", ""))
         heal_cost_per_point = float(request.form.get("heal_cost_per_point", ""))
         town_defense_level = int(request.form.get("town_defense_level", ""))
@@ -438,6 +439,10 @@ def admin_update_game_settings():
         or guardian_exp_multiplier < 1 or boss_exp_multiplier < 1
     ):
         flash("守衛怪遭遇機率須介於 0 到 100，經驗倍率須大於等於 1")
+        return redirect(url_for("admin.admin_settings"))
+
+    if boss_set_drop_percent < 0 or boss_set_drop_percent > 100:
+        flash("魔王套裝掉落機率須介於 0 到 100 之間")
         return redirect(url_for("admin.admin_settings"))
 
     if same_bracket_encounter_percent < 0 or same_bracket_encounter_percent > 100:
@@ -531,7 +536,7 @@ def admin_update_game_settings():
                exp_growth_tier2_percent = ?, exp_growth_tier3_percent = ?, exp_growth_tier4_percent = ?,
                rebirth_stat_bonus_percent = ?, sell_back_percent = ?,
                guardian_encounter_percent = ?, guardian_exp_multiplier = ?,
-               boss_exp_multiplier = ?, shop_tax_percent = ?,
+               boss_exp_multiplier = ?, boss_set_drop_percent = ?, shop_tax_percent = ?,
                heal_cost_per_point = ?, town_defense_level = ?, fortress_defense_level = ?,
                stat_reroll_cost = ?,
                war_town_weekday = ?, war_town_start_time = ?, war_town_end_time = ?,
@@ -554,7 +559,7 @@ def admin_update_game_settings():
             exp_growth_tier2_percent, exp_growth_tier3_percent, exp_growth_tier4_percent,
             rebirth_stat_bonus_percent, sell_back_percent,
             guardian_encounter_percent, guardian_exp_multiplier,
-            boss_exp_multiplier, shop_tax_percent,
+            boss_exp_multiplier, boss_set_drop_percent, shop_tax_percent,
             heal_cost_per_point, town_defense_level, fortress_defense_level,
             stat_reroll_cost,
             war_town_weekday, war_town_start_time, war_town_end_time,

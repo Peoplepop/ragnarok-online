@@ -170,6 +170,7 @@ def _activity_log_time_label(created_at):
 _MAJOR_EVENT_MESSAGE_BUILDERS = {
     "character_create": lambda username, detail: f"🆕 {detail} 加入了遊戲",
     "hidden_loot_drop": lambda username, detail: f"✨ {username} 在秘境獲得寶物：{detail}",
+    "boss_set_drop": lambda username, detail: f"👑 {username} {detail}",
     "tournament_champion": lambda username, detail: f"🏆 {detail} 奪得本屆天下武道大會冠軍！",
 }
 
