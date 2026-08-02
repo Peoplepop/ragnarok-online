@@ -12,8 +12,8 @@ STR_DAMAGE_RANGE = (0.85, 1.15)      # 1 STR point -> 0.85~1.15 raw damage, roll
 DEF_REDUCTION_K = 120                # DEF/(DEF+K) -> reduction fraction, asymptotic to 1
 DEF_REDUCTION_JITTER = (0.9, 1.1)    # per-hit jitter on the reduction fraction itself
 DEF_REDUCTION_HARD_CAP = 0.90        # extra safety net alongside the asymptote
-SPEED_PER_AGI = 5                    # 1 AGI -> 5 attack-speed points
-EXTRA_ATTACK_SPEED_STEP = 50         # every 50 speed points of lead = +1 attack per round
+SPEED_PER_AGI = 1                    # 1 AGI -> 1 attack-speed point (speed IS raw AGI)
+EXTRA_ATTACK_SPEED_STEP = 50         # every 50 AGI of lead = +1 attack per round
 CRIT_CHANCE_K = 150                  # AGI/(AGI+K) -> crit chance, asymptotic
 CRIT_CHANCE_HARD_CAP = 70            # percent
 CRIT_DAMAGE_RANGE = (1.3, 1.7)       # crit multiplier rolled per crit
