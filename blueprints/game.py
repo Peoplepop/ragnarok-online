@@ -1722,9 +1722,9 @@ def game_shop():
     db = get_db()
     character = _character_for_shop(db)
 
-    if character["tile_type"] != "fortress":
+    if character["tile_type"] not in ("fortress", "town"):
         db.close()
-        flash("只能在要塞內使用商店")
+        flash("只能在要塞或城鎮內使用商店")
         return redirect(url_for("game.game"))
 
     settings = db.execute(
@@ -1741,10 +1741,14 @@ def game_shop():
     # so it's filtered on return_tile_id instead: only the scroll for the
     # tile the character is currently standing on is offered, matching
     # "在哪裡買，就只能買那裡的回城石" (buy here, get a scroll back to here).
+    # Town tiles only ever sell consumables (potions/return scrolls) -- no
+    # weapon/armor/accessory sets, since those are fortress-only concepts.
+    is_town = character["tile_type"] == "town"
     all_items = db.execute(
         """SELECT items.*, countries.name AS set_country_name
            FROM items LEFT JOIN countries ON countries.id = items.country_id
            WHERE items.hidden_set_key IS NULL
+             AND (? = 0 OR items.shop_type = 'consumable')
              AND (
                (
                  (items.consumable_effect IS NULL OR items.consumable_effect != 'return_scroll')
@@ -1753,7 +1757,7 @@ def game_shop():
                OR (items.consumable_effect = 'return_scroll' AND items.return_tile_id = ?)
              )
            ORDER BY items.shop_type, items.price""",
-        (character["tile_country_id"], character["current_tile_id"]),
+        (1 if is_town else 0, character["tile_country_id"], character["current_tile_id"]),
     ).fetchall()
     shop_items = {shop_type: [] for shop_type in SHOP_TYPE_LABELS}
     for item in all_items:
@@ -1818,30 +1822,50 @@ def game_shop_buy():
         flash("還在冷卻中，請稍候再行動")
         return redirect(url_for("game.game_shop"))
 
-    if character["tile_type"] != "fortress":
+    if character["tile_type"] not in ("fortress", "town"):
         db.close()
-        flash("只能在要塞內的商店購買裝備")
+        flash("只能在要塞或城鎮內的商店購買")
         return redirect(url_for("game.game"))
 
     item_ids = [i for i in request.form.getlist("item_ids") if i]
     if not item_ids:
         db.close()
-        flash("請至少選擇一件要購買的裝備")
+        flash("請至少選擇一件要購買的商品")
         return redirect(url_for("game.game_shop"))
 
     # hidden_set_key IS NULL mirrors game_shop's listing filter: the 秘境
     # pieces are never rendered as buyable, and (since they are priced 0) a
     # hand-crafted POST must not be able to mint one for free either.
+    # Town tiles only ever sell consumables -- a hand-crafted POST trying to
+    # buy weapon/armor/accessory from a town must be rejected the same way.
+    is_town = character["tile_type"] == "town"
     placeholders = ",".join("?" for _ in item_ids)
     items = db.execute(
-        f"SELECT * FROM items WHERE id IN ({placeholders}) AND hidden_set_key IS NULL", item_ids
+        f"""SELECT * FROM items WHERE id IN ({placeholders}) AND hidden_set_key IS NULL
+            AND (? = 0 OR shop_type = 'consumable')""",
+        item_ids + [1 if is_town else 0],
     ).fetchall()
     if not items:
         db.close()
         flash("請選擇有效的商品")
         return redirect(url_for("game.game_shop"))
 
-    total_price = sum(item["price"] for item in items)
+    # Quantity only applies to consumables (potions/return scrolls); equipment
+    # is always bought at quantity 1 regardless of what qty_{id} was posted.
+    quantities = {}
+    total_price = 0
+    for item in items:
+        if item["shop_type"] == "consumable":
+            try:
+                qty = int(request.form.get(f"qty_{item['id']}", "1"))
+            except (TypeError, ValueError):
+                qty = 1
+            qty = max(1, qty)
+        else:
+            qty = 1
+        quantities[item["id"]] = qty
+        total_price += item["price"] * qty
+
     if character["currency"] < total_price:
         db.close()
         flash(f"諸神幣不足，這次購買需要 {total_price} 諸神幣")
@@ -1851,7 +1875,7 @@ def game_shop_buy():
         "SELECT turn_wait_seconds, shop_tax_percent FROM game_settings WHERE id = 1"
     ).fetchone()
     for item in items:
-        _add_to_inventory(db, character["id"], item["id"], 1)
+        _add_to_inventory(db, character["id"], item["id"], quantities[item["id"]])
     db.execute(
         "UPDATE characters SET currency = currency - ?, next_action_at = ? WHERE id = ?",
         (total_price, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
@@ -1859,9 +1883,13 @@ def game_shop_buy():
     tax = round(total_price * settings["shop_tax_percent"] / 100)
     if tax:
         db.execute(
-            "UPDATE countries SET treasury = treasury + ? WHERE id = ?", (tax, character["country_id"])
+            "UPDATE countries SET treasury = treasury + ? WHERE id = ?",
+            (tax, character["tile_country_id"]),
         )
-    names = "、".join(item["name"] for item in items)
+    names = "、".join(
+        f"{item['name']} x{quantities[item['id']]}" if quantities[item["id"]] > 1 else item["name"]
+        for item in items
+    )
     log_activity(
         db, session["user_id"], session["username"], "shop_buy",
         detail=f"{names} ({total_price} 諸神幣)", ip_address=request.remote_addr,
@@ -1884,9 +1912,9 @@ def game_shop_sell():
         flash("還在冷卻中，請稍候再行動")
         return redirect(url_for("game.game_shop"))
 
-    if character["tile_type"] != "fortress":
+    if character["tile_type"] not in ("fortress", "town"):
         db.close()
-        flash("只能在要塞內的商店出售裝備")
+        flash("只能在要塞或城鎮內的商店出售裝備")
         return redirect(url_for("game.game"))
 
     item_ids = [i for i in request.form.getlist("item_ids") if i]
@@ -1933,7 +1961,8 @@ def game_shop_sell():
     tax = round(total_refund * settings["shop_tax_percent"] / 100)
     if tax:
         db.execute(
-            "UPDATE countries SET treasury = treasury + ? WHERE id = ?", (tax, character["country_id"])
+            "UPDATE countries SET treasury = treasury + ? WHERE id = ?",
+            (tax, character["tile_country_id"]),
         )
     log_activity(
         db, session["user_id"], session["username"], "shop_sell",
