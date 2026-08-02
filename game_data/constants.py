@@ -108,6 +108,18 @@ ELEMENT_COLORS = {
     "火": "#c0453f",
     "土": "#8b5a2b",
 }
+# Per-element text color for small badges rendered on top of ELEMENT_COLORS
+# (see templates/_macros.html's element_badge). Picked per-color by actual
+# WCAG contrast ratio against black vs. white, not a single hardcoded choice
+# -- 金/木/水 are light/mid enough that black text reads better, while 火/土
+# are dark enough that white does.
+ELEMENT_BADGE_TEXT_COLORS = {
+    "金": "#1a1a1a",
+    "木": "#1a1a1a",
+    "水": "#1a1a1a",
+    "火": "#ffffff",
+    "土": "#ffffff",
+}
 NEUTRAL_TILE_COLOR = "#5a5a5a"
 MOUNTAIN_TILE_COLOR = "#3e3830"
 

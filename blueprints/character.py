@@ -198,12 +198,21 @@ def character_page():
     equipped_slots = []
     for shop_type, label in SLOT_LABELS.items():
         item_id = character[EQUIP_SLOT_COLUMNS[shop_type]]
-        item = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone() if item_id else None
+        item = (
+            db.execute(
+                """SELECT items.*, countries.element AS set_element
+                   FROM items LEFT JOIN countries ON countries.id = items.country_id
+                   WHERE items.id = ?""",
+                (item_id,),
+            ).fetchone()
+            if item_id else None
+        )
         equipped_slots.append({"slot": shop_type, "label": label, "item": item})
 
     inventory_rows = db.execute(
-        """SELECT items.*, inventory.quantity AS quantity
+        """SELECT items.*, inventory.quantity AS quantity, countries.element AS set_element
            FROM inventory JOIN items ON items.id = inventory.item_id
+           LEFT JOIN countries ON countries.id = items.country_id
            WHERE inventory.character_id = ?
            ORDER BY items.shop_type, items.price""",
         (character["character_id"],),

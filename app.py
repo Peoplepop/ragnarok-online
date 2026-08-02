@@ -9,8 +9,11 @@ from werkzeug.security import generate_password_hash
 
 from db import get_db, init_db, seed_defaults, log_activity
 from web_helpers import _parse_dt, avatar_url, monster_image_url
-from game_data.constants import IDLE_THRESHOLD_MINUTES, LEVEL_STAT_GROWTH
+from game_data.constants import (
+    IDLE_THRESHOLD_MINUTES, LEVEL_STAT_GROWTH, ELEMENT_COLORS, ELEMENT_BADGE_TEXT_COLORS,
+)
 from game_data.skills import SKILL_CATALOG
+from game_data.equipment import item_badge_element, STAT_ELEMENT
 
 from blueprints.auth import auth_bp
 from blueprints.character import character_bp
@@ -314,6 +317,15 @@ app.register_blueprint(feedback_bp)
 # every route threading the URL through render_template kwargs.
 app.jinja_env.globals["avatar_url"] = avatar_url
 app.jinja_env.globals["monster_image_url"] = monster_image_url
+
+# Element badge support (see templates/_macros.html's element_badge): the
+# color maps stay single-sourced in game_data/constants.py, and
+# item_badge_element/STAT_ELEMENT (game_data/equipment.py) resolve an
+# item/skill row down to the one element the badge should show.
+app.jinja_env.globals["element_colors"] = ELEMENT_COLORS
+app.jinja_env.globals["element_badge_text_colors"] = ELEMENT_BADGE_TEXT_COLORS
+app.jinja_env.globals["item_badge_element"] = item_badge_element
+app.jinja_env.globals["stat_element"] = STAT_ELEMENT
 
 
 if __name__ == "__main__":

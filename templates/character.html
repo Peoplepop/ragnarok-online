@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as macros %}
 {% block title %}{{ character.character_name }} - 五行爭鋒{% endblock %}
 
 {% block content %}
@@ -100,22 +101,22 @@
     {% if active_sets %}
     <div style="margin-top:10px; font-size:13px; color:var(--gold-bright);">
       {% for s in active_sets %}
-      <div>套裝加成：{{ s.country_name }}套裝（{{ s.count }}/3）→ {{ s.bonus_text }}</div>
+      <div style="display:flex; align-items:center; gap:6px;">{{ macros.element_badge(s.element) }} 套裝加成：{{ s.country_name }}套裝（{{ s.count }}/3）→ {{ s.bonus_text }}</div>
       {% endfor %}
     </div>
     {% endif %}
     {% if own_element_bonus %}
     <div style="margin-top:10px; font-size:13px; color:var(--gold-bright);">
-      <div>同屬性加成：身上 {{ own_element_bonus.count }} 件{{ character.name }}（{{ character.element }}屬性）裝備 → {{ own_element_bonus.bonus_text }}</div>
+      <div style="display:flex; align-items:center; gap:6px;">{{ macros.element_badge(own_element_bonus.element) }} 同屬性加成：身上 {{ own_element_bonus.count }} 件{{ character.name }}（{{ character.element }}屬性）裝備 → {{ own_element_bonus.bonus_text }}</div>
     </div>
     {% endif %}
     {% if hidden_sets %}
     <div style="margin-top:10px; font-size:13px;">
       {% for s in hidden_sets %}
       {% if s.active %}
-      <div style="color:var(--gold-bright);">✨ {{ s.set_name }}（{{ s.count }}/{{ s.required }}）— {{ s.effect_text }}</div>
+      <div style="color:var(--gold-bright); display:flex; align-items:center; gap:6px;">{{ macros.element_badge(s.element) }} ✨ {{ s.set_name }}（{{ s.count }}/{{ s.required }}）— {{ s.effect_text }}</div>
       {% else %}
-      <div style="color:var(--text-dim);">🔒 {{ s.set_name }}（{{ s.count }}/{{ s.required }}）— 集滿 {{ s.required }} 件才會啟動「{{ s.effect_label }} +{{ s.effect_percent }}%」</div>
+      <div style="color:var(--text-dim); display:flex; align-items:center; gap:6px;">{{ macros.element_badge(s.element) }} 🔒 {{ s.set_name }}（{{ s.count }}/{{ s.required }}）— 集滿 {{ s.required }} 件才會啟動「{{ s.effect_label }} +{{ s.effect_percent }}%」</div>
       {% endif %}
       {% endfor %}
     </div>
@@ -187,7 +188,7 @@
       {% if equipped_skills %}
       {% for entry in equipped_skills %}
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:6px;">
-        <span>技能{{ entry.slot }}：{{ entry.skill.name }}（MP{{ entry.skill.mp_cost }}／{{ entry.skill.trigger_chance }}%／{{ entry.skill.multiplier }}x／以{{ stat_labels[entry.skill.stat] }}計算）</span>
+        <span>{{ macros.element_badge(stat_element.get(entry.skill.stat)) }} 技能{{ entry.slot }}：{{ entry.skill.name }}（MP{{ entry.skill.mp_cost }}／{{ entry.skill.trigger_chance }}%／{{ entry.skill.multiplier }}x／以{{ stat_labels[entry.skill.stat] }}計算）</span>
         <form method="post" action="{{ url_for('character.character_unequip_skill') }}">
           <input type="hidden" name="slot" value="{{ entry.slot }}">
           <button type="submit" style="padding:4px 12px; font-size:12px;">卸下</button>
@@ -204,7 +205,7 @@
       <div style="color:var(--gold-bright); font-size:13px; margin-bottom:6px;">技能庫（已學會、可配置但尚未配置）</div>
       {% for skill in skill_library %}
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--text-dim); margin-bottom:6px;">
-        <span>{{ skill.name }}（MP{{ skill.mp_cost }}／{{ skill.trigger_chance }}%／{{ skill.multiplier }}x／以{{ stat_labels[skill.stat] }}計算）</span>
+        <span>{{ macros.element_badge(stat_element.get(skill.stat)) }} {{ skill.name }}（MP{{ skill.mp_cost }}／{{ skill.trigger_chance }}%／{{ skill.multiplier }}x／以{{ stat_labels[skill.stat] }}計算）</span>
         <form method="post" action="{{ url_for('character.character_equip_skill') }}">
           <input type="hidden" name="skill_key" value="{{ skill.key }}">
           <input type="hidden" name="slot" value="1">
@@ -226,7 +227,7 @@
       {% for skill in learnable_skills %}
       <form method="post" action="{{ url_for('character.character_learn_skill') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--text-dim); margin-bottom:6px;">
         <input type="hidden" name="skill_key" value="{{ skill.key }}">
-        <span>{{ skill.name }}（MP{{ skill.mp_cost }}／{{ skill.trigger_chance }}%／{{ skill.multiplier }}x／以{{ stat_labels[skill.stat] }}計算）</span>
+        <span>{{ macros.element_badge(stat_element.get(skill.stat)) }} {{ skill.name }}（MP{{ skill.mp_cost }}／{{ skill.trigger_chance }}%／{{ skill.multiplier }}x／以{{ stat_labels[skill.stat] }}計算）</span>
         <span>費用 {{ skill.learn_cost }} 諸神幣</span>
         <button type="submit" {% if character.currency < skill.learn_cost %}disabled{% endif %}>學習</button>
       </form>
@@ -240,7 +241,7 @@
       {% for entry in held_skill_books %}
       <form method="post" action="{{ url_for('character.character_skill_book_use') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--text-dim); margin-bottom:6px;">
         <input type="hidden" name="skill_key" value="{{ entry.skill.key }}">
-        <span>📖 {{ entry.skill.name }}（持有 {{ entry.quantity }} 本，MP{{ entry.skill.mp_cost }}／{{ entry.skill.trigger_chance }}%／{{ entry.skill.multiplier }}x）</span>
+        <span>{{ macros.element_badge(stat_element.get(entry.skill.stat)) }} 📖 {{ entry.skill.name }}（持有 {{ entry.quantity }} 本，MP{{ entry.skill.mp_cost }}／{{ entry.skill.trigger_chance }}%／{{ entry.skill.multiplier }}x）</span>
         {% if character.job_tier == 4 %}
         <button type="submit">使用技能書學習</button>
         {% else %}
@@ -335,6 +336,7 @@
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <span style="font-size:13px; color:var(--text-dim); min-width:40px;">{{ s.label }}</span>
         {% if s.item %}
+        {{ macros.element_badge(item_badge_element(s.item)) }}
         <span style="font-size:13px;">{{ s.item.name }}（{{ s.item.stat }}+{{ s.item.stat_bonus }}）</span>
         <form method="post" action="{{ url_for('game.game_unequip') }}">
           <input type="hidden" name="slot" value="{{ s.slot }}">
@@ -363,6 +365,7 @@
           <form method="post" action="{{ url_for('game.game_equip') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <input type="hidden" name="item_id" value="{{ item.id }}">
             <input type="hidden" name="next" value="character">
+            {{ macros.element_badge(item_badge_element(item)) }}
             <span style="font-size:13px;">{{ item.name }}（{{ item.stat }}+{{ item.stat_bonus }}）持有 {{ item.quantity }} 件</span>
             <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">裝備</button>
           </form>

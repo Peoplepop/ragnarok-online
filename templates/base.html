@@ -67,6 +67,23 @@
     }
     nav.topbar .links a:hover { color: var(--gold-bright); }
     nav.topbar .user { color: var(--gold); font-size: 14px; }
+    nav.topbar .links button.sound-toggle {
+      background: none;
+      border: none;
+      box-shadow: none;
+      padding: 0;
+      color: var(--text-dim);
+      font-size: 14px;
+      font-family: inherit;
+      margin-left: 16px;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+    nav.topbar .links button.sound-toggle:hover {
+      color: var(--gold-bright);
+      box-shadow: none;
+      transform: none;
+    }
 
     .panel {
       background: var(--panel);
@@ -210,6 +227,7 @@
   <nav class="topbar">
     <h1 style="margin:0; font-size:18px; letter-spacing:2px;">五行爭鋒</h1>
     <div class="links">
+      <button type="button" id="sound-toggle" class="sound-toggle" title="切換音效" aria-label="切換音效">🔊</button>
       {% if session.get('username') %}
         {% if nav_avatar_url %}<img class="nav-avatar" src="{{ nav_avatar_url }}" alt="頭像">{% endif %}
         <span class="user">{{ nav_display_name }}</span>
@@ -236,6 +254,23 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', function () {
+      var soundToggle = document.getElementById('sound-toggle');
+      if (soundToggle) {
+        var getSoundEnabled = function () {
+          try { return localStorage.getItem('soundEnabled') !== 'false'; }
+          catch (e) { return true; }
+        };
+        var renderSoundToggle = function () {
+          soundToggle.textContent = getSoundEnabled() ? '🔊' : '🔇';
+        };
+        renderSoundToggle();
+        soundToggle.addEventListener('click', function () {
+          var next = !getSoundEnabled();
+          try { localStorage.setItem('soundEnabled', next ? 'true' : 'false'); } catch (e) {}
+          renderSoundToggle();
+        });
+      }
+
       document.querySelectorAll('.password-toggle').forEach(function (btn) {
         var input = document.getElementById(btn.dataset.target);
         if (!input) return;

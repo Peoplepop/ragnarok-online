@@ -1810,7 +1810,7 @@ def game_shop():
     # weapon/armor/accessory sets, since those are fortress-only concepts.
     is_town = character["tile_type"] == "town"
     all_items = db.execute(
-        """SELECT items.*, countries.name AS set_country_name
+        """SELECT items.*, countries.name AS set_country_name, countries.element AS set_element
            FROM items LEFT JOIN countries ON countries.id = items.country_id
            WHERE items.hidden_set_key IS NULL
              AND (? = 0 OR items.shop_type = 'consumable')

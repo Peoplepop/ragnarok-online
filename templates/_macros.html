@@ -1,0 +1,7 @@
+{# Reusable small UI units shared across templates. #}
+
+{% macro element_badge(element) -%}
+{%- if element -%}
+<span style="display:inline-flex; align-items:center; justify-content:center; width:19px; height:19px; border-radius:50%; background:{{ element_colors[element] }}; color:{{ element_badge_text_colors[element] }}; font-size:11px; font-weight:700; line-height:1; flex-shrink:0;">{{ element }}</span>
+{%- endif -%}
+{%- endmacro %}

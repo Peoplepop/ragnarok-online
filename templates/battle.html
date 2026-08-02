@@ -230,6 +230,62 @@
       var hpRe = /（([^（]+) 剩餘 HP (\d+)）$/;
       var dmgRe = /造成 (\d+) 點傷害/;
 
+      var leveledUp = {{ 'true' if leveled_up else 'false' }};
+      var lootDropped = {{ 'true' if (hidden_loot_dropped or boss_set_dropped or skill_book_dropped) else 'false' }};
+
+      function soundEnabled() {
+        try {
+          return localStorage.getItem("soundEnabled") !== "false";
+        } catch (e) {
+          return true;
+        }
+      }
+
+      var audioCtx = null;
+      function tone(ctx, freq, startTime, duration, type, peakGain) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(peakGain, startTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(startTime);
+        osc.stop(startTime + duration + 0.05);
+      }
+
+      // Synthesized rather than asset files (zero licensing/asset concern,
+      // works offline); wrapped in try/catch since Web Audio can throw in
+      // restricted contexts (e.g. no user gesture yet -- a force-fight click
+      // is itself a gesture so this normally succeeds, but degrade silently
+      // if it doesn't).
+      function playSound(kind) {
+        if (!soundEnabled()) return;
+        try {
+          if (!audioCtx) {
+            var Ctx = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new Ctx();
+          }
+          var now = audioCtx.currentTime;
+          if (kind === "win") {
+            tone(audioCtx, 523.25, now, 0.5, "sine", 0.18);
+            tone(audioCtx, 659.25, now + 0.05, 0.5, "sine", 0.15);
+            tone(audioCtx, 783.99, now + 0.1, 0.6, "sine", 0.15);
+          } else if (kind === "levelup") {
+            [523.25, 659.25, 783.99, 1046.5].forEach(function (freq, idx) {
+              tone(audioCtx, freq, now + idx * 0.09, 0.22, "triangle", 0.16);
+            });
+          } else if (kind === "loot") {
+            tone(audioCtx, 880, now, 0.18, "sine", 0.14);
+            tone(audioCtx, 1318.5, now + 0.08, 0.25, "sine", 0.12);
+          }
+        } catch (e) {
+          // no-op fallback
+        }
+      }
+
       function updateHpBar(fillEl, labelEl, value, max) {
         if (!fillEl || !max) return;
         var pct = Math.max(0, Math.min(100, (value / max) * 100));
@@ -251,7 +307,12 @@
         if (i >= log.length) {
           result.style.display = "";
           result.classList.add("reveal");
-          if (result.dataset.won === "true") result.classList.add("won");
+          if (result.dataset.won === "true") {
+            result.classList.add("won");
+            playSound("win");
+          }
+          if (leveledUp) playSound("levelup");
+          if (lootDropped) playSound("loot");
           return;
         }
         var line = document.createElement("div");

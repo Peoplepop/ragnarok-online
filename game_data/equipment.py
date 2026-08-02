@@ -1,3 +1,4 @@
+from db import HIDDEN_SET_EFFECT_BY_ELEMENT
 from game_data.constants import STAT_LABELS
 
 # Country-themed equipment sets (db.py's DEFAULT_SET_ITEMS): items carry a
@@ -11,6 +12,43 @@ from game_data.constants import STAT_LABELS
 SET_SIGNATURE_STAT = {"金": "luk", "木": "def", "水": "agi", "火": "str"}
 SET_BONUS_TIERS = {2: 15, 3: 40}
 EARTH_SET_BONUS_TIERS = {2: 8, 3: 20}
+
+# Reverse of SET_SIGNATURE_STAT, for badging skills by the element whose
+# signature stat they use (see the character sheet's skill panels). 土 has
+# no signature stat so it never appears as a value here -- skills never get
+# a 土 badge, which is expected (see SET_SIGNATURE_STAT's own docstring).
+STAT_ELEMENT = {stat: element for element, stat in SET_SIGNATURE_STAT.items()}
+
+# Reverse of db.py's HIDDEN_SET_EFFECT_BY_ELEMENT (element -> (stat, effect_key)),
+# for badging hidden/boss-set equipment pieces by element: those pieces carry
+# no country_id (so no set_element from the countries join) but do carry
+# special_effect_key, which uniquely identifies the element.
+EFFECT_KEY_ELEMENT = {
+    effect_key: element
+    for element, (_, effect_key) in HIDDEN_SET_EFFECT_BY_ELEMENT.items()
+    if effect_key
+}
+
+
+def item_badge_element(item):
+    """The element (金/木/水/火/土) an item's UI badge should show, or None
+    for gear with no element affiliation. Ordinary country-set gear carries
+    set_element (via the countries LEFT JOIN in _fetch_equipped_items and
+    friends); hidden/boss-set pieces carry no country instead, so their
+    special_effect_key is reverse-mapped through EFFECT_KEY_ELEMENT."""
+    if item is None:
+        return None
+    try:
+        element = item["set_element"]
+    except (IndexError, KeyError):
+        element = None
+    if element:
+        return element
+    try:
+        effect_key = item["special_effect_key"]
+    except (IndexError, KeyError):
+        return None
+    return EFFECT_KEY_ELEMENT.get(effect_key)
 
 # Separate, smaller bonus for equipment whose origin country matches the
 # *wearer's own* country -- unlike the set bonus above (which only cares
@@ -83,7 +121,9 @@ def _active_set_summaries(equipped_items):
         else:
             stat = SET_SIGNATURE_STAT.get(element)
             bonus_text = f"{STAT_LABELS[stat]} +{SET_BONUS_TIERS[tier]}" if stat else ""
-        summaries.append({"country_name": names[element], "count": count, "bonus_text": bonus_text})
+        summaries.append({
+            "country_name": names[element], "count": count, "bonus_text": bonus_text, "element": element,
+        })
     return summaries
 
 
@@ -101,7 +141,7 @@ def _own_element_bonus_summary(equipped_items, own_element):
     else:
         stat = SET_SIGNATURE_STAT.get(own_element)
         bonus_text = f"{STAT_LABELS[stat]} +{OWN_ELEMENT_BONUS_TIERS[tier]}" if stat else ""
-    return {"count": count, "bonus_text": bonus_text}
+    return {"count": count, "bonus_text": bonus_text, "element": own_element}
 
 
 # --- 秘境套裝 special effects ----------------------------------------------
@@ -193,6 +233,7 @@ def _hidden_set_summaries(equipped_items):
             "effect_label": label,
             "effect_percent": entry["effect_percent"],
             "effect_text": f"{label} +{entry['effect_percent']}%" if label else "",
+            "element": EFFECT_KEY_ELEMENT.get(entry["effect_key"]),
         })
     summaries.sort(key=lambda s: (-s["count"], s["set_name"] or ""))
     return summaries
