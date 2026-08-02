@@ -134,12 +134,16 @@ def run_battle(
     regardless of how large the gap is. The faster side fires its full
     attack allotment first (checking for a death after every hit), then the
     slower side fires its own full allotment -- only after BOTH sides have
-    completed their attacks does the round counter advance. Monsters have no
-    LUK column so they use 0 (baseline hit/dodge only), but they do roll
-    crits off their own AGI and carry their own element for the Wu Xing
-    damage multiplier. Each player attack independently tries the
-    character's known skills (strongest first) before falling back to a
-    plain hit.
+    completed their attacks does the round counter advance. Real
+    monsters-table monsters carry their own LUK (via monster.get("luk", 0))
+    and roll LUK-based hit/dodge like a player; other monster-shaped
+    opponents built ad hoc elsewhere (NPC defense towers, the bandit lord,
+    the king-as-monster dict, garrisoned defenders rendered monster-shaped)
+    have no "luk" key in their dict, so the same .get(...) call falls back to
+    0 (baseline hit/dodge only) for them. All of them roll crits off their
+    own AGI and carry their own element for the Wu Xing damage multiplier.
+    Each player attack independently tries the character's known skills
+    (strongest first) before falling back to a plain hit.
 
     If BATTLE_ROUND_CAP is reached with both sides still alive, the fight
     ends in a timeout (`timed_out=True`) rather than a loss -- the attacker
@@ -170,21 +174,21 @@ def run_battle(
                 atk_value = _skill_damage_stat_value(player_stats, skill["stat"])
                 dmg, line = _combat_hit(
                     player_name, atk_value, player_stats["agi"], player_stats["luk"], player_element,
-                    monster["name"], monster["def"], 0, monster["element"],
+                    monster["name"], monster["def"], monster.get("luk", 0), monster["element"],
                     damage_multiplier=skill["multiplier"], skill_name=skill["name"],
                     attacker_independent_damage_percent=player_independent_damage_percent,
                 )
             else:
                 dmg, line = _combat_hit(
                     player_name, player_stats["str"], player_stats["agi"], player_stats["luk"], player_element,
-                    monster["name"], monster["def"], 0, monster["element"],
+                    monster["name"], monster["def"], monster.get("luk", 0), monster["element"],
                     attacker_independent_damage_percent=player_independent_damage_percent,
                 )
             m_hp = max(0, m_hp - dmg)
             log.append(f"{line}（{monster['name']} 剩餘 HP {m_hp}）")
         else:
             dmg, line = _combat_hit(
-                monster["name"], monster["atk"], monster["agi"], 0, monster["element"],
+                monster["name"], monster["atk"], monster["agi"], monster.get("luk", 0), monster["element"],
                 player_name, player_stats["def"], player_stats["luk"], player_element,
             )
             p_hp = max(0, p_hp - dmg)

@@ -96,8 +96,8 @@ def _roll_hidden_loot(db, settings, hidden_key, character_id):
 
 
 def _debuffed_monster(monster, special_effects):
-    """A plain-dict copy of a monster row with its hp/atk/def/agi scaled down
-    by the wearer's 怪物弱化 (enemy_debuff) percent, floored at 1 so a huge
+    """A plain-dict copy of a monster row with its hp/atk/def/agi/luk scaled
+    down by the wearer's 怪物弱化 (enemy_debuff) percent, floored at 1 so a huge
     future percent can never produce a 0-stat monster. Always returns a dict
     copy rather than mutating the argument: monster rows are sqlite3.Row,
     which is immutable, and the tower/bandit callers pass dicts that other
@@ -105,12 +105,16 @@ def _debuffed_monster(monster, special_effects):
 
     Deliberately scoped to monster fights only (game_hunt and
     game_hunt_boss_room) -- conquest, garrison duels and the tournament never
-    call this, per the confirmed "怪物 only" scope."""
+    call this, per the confirmed "怪物 only" scope. Both actual callers pass
+    real monsters-table rows, so scaling "luk" here is safe; it is not
+    reached by the tower/bandit/king/garrison monster-shaped dicts, which
+    have no "luk" key at all and rely on combat.py's monster.get("luk", 0)
+    default."""
     percent = special_effects.get("enemy_debuff", 0)
     scaled = dict(monster)
     if not percent:
         return scaled
-    for key in ("hp", "atk", "def", "agi"):
+    for key in ("hp", "atk", "def", "agi", "luk"):
         scaled[key] = max(1, round(scaled[key] * (1 - percent / 100)))
     return scaled
 
