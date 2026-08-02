@@ -222,8 +222,31 @@
     }
   </style>
   {% block extra_head %}{% endblock %}
+  {% if page_background_url %}
+  <style>
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      background-image: url("{{ page_background_url }}");
+      background-size: cover;
+      background-position: center;
+    }
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background: linear-gradient(rgba(11, 10, 20, 0.55), rgba(11, 10, 20, 0.75));
+    }
+  </style>
+  {% endif %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
+  {% if bgm_url %}
+  <audio id="bgm-player" src="{{ bgm_url }}" loop preload="auto"></audio>
+  {% endif %}
   <nav class="topbar">
     <h1 style="margin:0; font-size:18px; letter-spacing:2px;">五行爭鋒</h1>
     <div class="links">
@@ -254,12 +277,13 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', function () {
+      var getSoundEnabled = function () {
+        try { return localStorage.getItem('soundEnabled') !== 'false'; }
+        catch (e) { return true; }
+      };
+
       var soundToggle = document.getElementById('sound-toggle');
       if (soundToggle) {
-        var getSoundEnabled = function () {
-          try { return localStorage.getItem('soundEnabled') !== 'false'; }
-          catch (e) { return true; }
-        };
         var renderSoundToggle = function () {
           soundToggle.textContent = getSoundEnabled() ? '🔊' : '🔇';
         };
@@ -268,8 +292,33 @@
           var next = !getSoundEnabled();
           try { localStorage.setItem('soundEnabled', next ? 'true' : 'false'); } catch (e) {}
           renderSoundToggle();
+          syncBgm();
         });
       }
+
+      // Background music: reuses the same 🔊/🔇 toggle/flag as battle sound
+      // effects (see templates/battle.html) rather than a separate control.
+      var bgmPlayer = document.getElementById('bgm-player');
+      var syncBgm = function () {
+        if (!bgmPlayer) return;
+        if (!getSoundEnabled()) {
+          bgmPlayer.pause();
+          return;
+        }
+        var playPromise = bgmPlayer.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+          playPromise.catch(function () {
+            // Autoplay-with-sound blocked by the browser -- retry once on
+            // the next user gesture, the standard workaround.
+            var retry = function () {
+              if (getSoundEnabled()) bgmPlayer.play().catch(function () {});
+            };
+            document.addEventListener('click', retry, { once: true });
+            document.addEventListener('keydown', retry, { once: true });
+          });
+        }
+      };
+      syncBgm();
 
       document.querySelectorAll('.password-toggle').forEach(function (btn) {
         var input = document.getElementById(btn.dataset.target);

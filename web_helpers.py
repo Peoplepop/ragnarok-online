@@ -20,6 +20,9 @@ from game_data.constants import (
 from game_data.avatars import (
     BUILT_IN_AVATAR_KEYS, DEFAULT_AVATAR_KEY, CUSTOM_AVATAR_ALLOWED_FORMATS, CUSTOM_AVATAR_FORMAT_HINT,
 )
+from game_data.backgrounds import (
+    BACKGROUND_ALLOWED_FORMATS, BACKGROUND_FORMAT_HINT, BGM_DIR, BGM_EXTENSIONS,
+)
 
 
 def _parse_dt(value):
@@ -358,6 +361,89 @@ def _process_square_image_upload(file_storage, max_bytes, dimension):
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue(), None
+
+
+def background_url(key):
+    """Resolves an admin-uploaded background image's URL for the given
+    BACKGROUND_KEYS key, same override-on-disk pattern as monster_image_url:
+    static/backgrounds/custom/{key}.jpg wins if present, otherwise None (there
+    is no shipped default background -- callers must gate rendering on this
+    being non-None so a zero-upload game looks exactly as it does today)."""
+    if not key:
+        return None
+    override_path = os.path.join(current_app.static_folder, "backgrounds", "custom", f"{key}.jpg")
+    if os.path.exists(override_path):
+        return url_for("static", filename=f"backgrounds/custom/{key}.jpg")
+    return None
+
+
+def _process_background_image_upload(file_storage, max_bytes, max_width, max_height):
+    """Validates and re-encodes an uploaded image into a JPEG that fits within
+    max_width x max_height (aspect ratio preserved, no forced crop -- CSS
+    background-size:cover handles the rest on render), returned as raw bytes.
+    Same "never trust the raw bytes/extension" rule as
+    _process_square_image_upload, just without the square crop and with a
+    JPEG re-encode instead of PNG (backgrounds don't need alpha transparency).
+    Returns (jpeg_bytes, error_message), exactly one of which is None."""
+    data = file_storage.read()
+    if not data:
+        return None, "請選擇一個圖片檔案"
+    if len(data) > max_bytes:
+        return None, f"檔案大小超過 {max_bytes // (1024 * 1024)}MB 上限"
+
+    try:
+        probe = Image.open(io.BytesIO(data))
+        probe.verify()
+        img = Image.open(io.BytesIO(data))  # verify() consumes the first handle
+        img.load()
+    except Exception:
+        # Same broad catch as _process_square_image_upload -- any decode
+        # failure means "reject the upload", not a bug.
+        return None, f"無法辨識這個圖片檔案。{BACKGROUND_FORMAT_HINT}"
+
+    if img.format not in BACKGROUND_ALLOWED_FORMATS:
+        return None, BACKGROUND_FORMAT_HINT
+
+    img = img.convert("RGB")
+    width, height = img.size
+    scale = min(max_width / width, max_height / height, 1.0)
+    if scale < 1.0:
+        img = img.resize((max(1, round(width * scale)), max(1, round(height * scale))), Image.LANCZOS)
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=85)
+    return buf.getvalue(), None
+
+
+def _sniff_audio_format(data):
+    """Identifies data's audio container by magic number, independent of
+    whatever extension the upload claims -- mp3 (ID3 tag or a raw MPEG frame
+    sync), ogg (OggS), wav (RIFF....WAVE). Returns one of BGM_EXTENSIONS, or
+    None if nothing matches. There is no audio-processing library in
+    requirements.txt to actually decode/re-encode the file (unlike images,
+    which are fully re-decoded through Pillow), so this magic-number sniff
+    plus the extension check in admin_upload_bgm is the full trust boundary
+    -- bytes that pass both are stored as-is."""
+    if data[:3] == b"ID3" or data[:2] in (b"\xff\xfb", b"\xff\xfa", b"\xff\xf3", b"\xff\xf2"):
+        return "mp3"
+    if data[:4] == b"OggS":
+        return "ogg"
+    if data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+        return "wav"
+    return None
+
+
+def bgm_url():
+    """Resolves the single global background-music track's URL, whichever of
+    static/audio/bgm.{mp3,ogg,wav} currently exists on disk (there is only
+    ever one at a time -- see admin_upload_bgm). None if no track has been
+    uploaded, so templates/base.html can skip rendering the <audio> tag
+    entirely rather than pointing it at a 404."""
+    for ext in BGM_EXTENSIONS:
+        path = os.path.join(BGM_DIR, f"bgm.{ext}")
+        if os.path.exists(path):
+            return url_for("static", filename=f"audio/bgm.{ext}")
+    return None
 
 
 def login_required(view):

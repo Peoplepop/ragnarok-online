@@ -1,5 +1,6 @@
-"""Admin console: sessions, logs, country roles, game settings and image
-overrides (monster art / built-in avatar picker, see /admin/images below)."""
+"""Admin console: sessions, logs, country roles, game settings, image
+overrides (monster art / built-in avatar picker, see /admin/images below),
+and background image/music overrides (see /admin/backgrounds below)."""
 import os
 import sqlite3
 from datetime import datetime
@@ -10,6 +11,7 @@ from db import get_db, LEVEL_CAP, log_activity, DEFAULT_MONSTERS, HIDDEN_MONSTER
 from web_helpers import (
     admin_required, _parse_dt, _valid_war_time, _format_duration, _sanitized_action_block_order,
     avatar_url, monster_image_url, _process_square_image_upload,
+    background_url, bgm_url, _process_background_image_upload, _sniff_audio_format,
 )
 from game_data.constants import (
     STAT_FIELDS, IDLE_THRESHOLD_MINUTES, ACTION_LABELS, GOVERNMENT_ROLES,
@@ -17,6 +19,10 @@ from game_data.constants import (
 )
 from game_data.avatars import (
     BUILT_IN_AVATARS, BUILT_IN_AVATAR_KEYS, CUSTOM_AVATAR_MAX_BYTES, CUSTOM_AVATAR_DIMENSION,
+)
+from game_data.backgrounds import (
+    BACKGROUND_KEYS, BACKGROUND_CUSTOM_DIR, BACKGROUND_MAX_BYTES, BACKGROUND_MAX_WIDTH, BACKGROUND_MAX_HEIGHT,
+    BGM_DIR, BGM_MAX_BYTES, BGM_EXTENSIONS, BGM_FORMAT_HINT,
 )
 
 admin_bp = Blueprint("admin", __name__)
@@ -828,3 +834,142 @@ def admin_reset_all_avatar_images():
                 os.remove(path)
     flash("已將所有頭像圖片重置為預設")
     return redirect(url_for("admin.admin_images"))
+
+
+# ---- 背景圖片／背景音樂 (game/battle/tournament/shop backgrounds + one
+# global BGM track) -- same admin-override-on-disk convention as the monster
+# and avatar routes above, just with a non-square image pipeline (see
+# web_helpers._process_background_image_upload) and a trusted-after-
+# validation byte pass-through for audio (see web_helpers._sniff_audio_format).
+
+@admin_bp.route("/admin/backgrounds")
+@admin_required
+def admin_backgrounds():
+    background_items = []
+    for key, label in BACKGROUND_KEYS.items():
+        background_items.append({
+            "key": key,
+            "label": label,
+            "has_override": os.path.isfile(os.path.join(BACKGROUND_CUSTOM_DIR, f"{key}.jpg")),
+            "preview_url": background_url(key),
+        })
+
+    bgm_path = None
+    for ext in BGM_EXTENSIONS:
+        candidate = os.path.join(BGM_DIR, f"bgm.{ext}")
+        if os.path.isfile(candidate):
+            bgm_path = candidate
+            break
+
+    return render_template(
+        "admin_backgrounds.html", background_items=background_items,
+        bgm_preview_url=bgm_url(), has_bgm=bgm_path is not None, active_tab="backgrounds",
+    )
+
+
+@admin_bp.route("/admin/backgrounds/image/<key>", methods=["POST"])
+@admin_required
+def admin_upload_background_image(key):
+    # key becomes part of a filesystem path below -- validated against the
+    # fixed allow-list rather than sanitized, same rule as the monster/avatar
+    # upload routes above.
+    if key not in BACKGROUND_KEYS:
+        flash("無效的背景圖片代碼")
+        return redirect(url_for("admin.admin_backgrounds"))
+
+    upload = request.files.get("image_file")
+    if upload is None or not upload.filename:
+        flash("請選擇一個圖片檔案")
+        return redirect(url_for("admin.admin_backgrounds"))
+
+    jpeg_bytes, error = _process_background_image_upload(
+        upload, BACKGROUND_MAX_BYTES, BACKGROUND_MAX_WIDTH, BACKGROUND_MAX_HEIGHT,
+    )
+    if error:
+        flash(error)
+        return redirect(url_for("admin.admin_backgrounds"))
+
+    os.makedirs(BACKGROUND_CUSTOM_DIR, exist_ok=True)
+    with open(os.path.join(BACKGROUND_CUSTOM_DIR, f"{key}.jpg"), "wb") as f:
+        f.write(jpeg_bytes)
+
+    flash(f"已更新背景圖片「{BACKGROUND_KEYS[key]}」")
+    return redirect(url_for("admin.admin_backgrounds"))
+
+
+@admin_bp.route("/admin/backgrounds/image/<key>/reset", methods=["POST"])
+@admin_required
+def admin_reset_background_image(key):
+    if key not in BACKGROUND_KEYS:
+        flash("無效的背景圖片代碼")
+        return redirect(url_for("admin.admin_backgrounds"))
+
+    path = os.path.join(BACKGROUND_CUSTOM_DIR, f"{key}.jpg")
+    if os.path.isfile(path):
+        os.remove(path)
+    flash(f"已將背景圖片「{BACKGROUND_KEYS[key]}」重置為預設")
+    return redirect(url_for("admin.admin_backgrounds"))
+
+
+@admin_bp.route("/admin/backgrounds/image/reset_all", methods=["POST"])
+@admin_required
+def admin_reset_all_background_images():
+    if os.path.isdir(BACKGROUND_CUSTOM_DIR):
+        for name in os.listdir(BACKGROUND_CUSTOM_DIR):
+            path = os.path.join(BACKGROUND_CUSTOM_DIR, name)
+            if os.path.isfile(path):
+                os.remove(path)
+    flash("已將所有背景圖片重置為預設")
+    return redirect(url_for("admin.admin_backgrounds"))
+
+
+@admin_bp.route("/admin/backgrounds/music", methods=["POST"])
+@admin_required
+def admin_upload_bgm():
+    upload = request.files.get("audio_file")
+    if upload is None or not upload.filename:
+        flash("請選擇一個音樂檔案")
+        return redirect(url_for("admin.admin_backgrounds"))
+
+    ext = upload.filename.rsplit(".", 1)[-1].lower() if "." in upload.filename else ""
+    if ext not in BGM_EXTENSIONS:
+        flash(BGM_FORMAT_HINT)
+        return redirect(url_for("admin.admin_backgrounds"))
+
+    data = upload.read()
+    if not data:
+        flash("請選擇一個音樂檔案")
+        return redirect(url_for("admin.admin_backgrounds"))
+    if len(data) > BGM_MAX_BYTES:
+        flash(f"檔案大小超過 {BGM_MAX_BYTES // (1024 * 1024)}MB 上限")
+        return redirect(url_for("admin.admin_backgrounds"))
+
+    # Extension AND magic-number sniff must agree -- neither alone is
+    # trusted (see web_helpers._sniff_audio_format for why there's no
+    # decode/re-encode step to fall back on here).
+    if _sniff_audio_format(data) != ext:
+        flash(f"檔案內容與副檔名不符。{BGM_FORMAT_HINT}")
+        return redirect(url_for("admin.admin_backgrounds"))
+
+    os.makedirs(BGM_DIR, exist_ok=True)
+    for other_ext in BGM_EXTENSIONS:
+        if other_ext != ext:
+            other_path = os.path.join(BGM_DIR, f"bgm.{other_ext}")
+            if os.path.isfile(other_path):
+                os.remove(other_path)
+    with open(os.path.join(BGM_DIR, f"bgm.{ext}"), "wb") as f:
+        f.write(data)
+
+    flash("已更新背景音樂")
+    return redirect(url_for("admin.admin_backgrounds"))
+
+
+@admin_bp.route("/admin/backgrounds/music/reset", methods=["POST"])
+@admin_required
+def admin_reset_bgm():
+    for ext in BGM_EXTENSIONS:
+        path = os.path.join(BGM_DIR, f"bgm.{ext}")
+        if os.path.isfile(path):
+            os.remove(path)
+    flash("已移除背景音樂")
+    return redirect(url_for("admin.admin_backgrounds"))

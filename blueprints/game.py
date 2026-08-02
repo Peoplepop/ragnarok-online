@@ -12,13 +12,14 @@ from web_helpers import (
     _remove_from_inventory, _in_any_war_window, _taipei_now, _parse_dt,
     _current_war_window_end, _morale_buff_active, _tournament_registration_open,
     _taipei_time_label, ACTION_DT_FORMAT, _major_event_feed, _sanitized_action_block_order,
-    avatar_url,
+    avatar_url, background_url,
 )
 from game_data.constants import (
     SHOP_TYPE_LABELS, SLOT_LABELS, EQUIP_SLOT_COLUMNS, GOVERNMENT_ROLES, tile_display_name,
     HEX_SIZE, ELEMENT_COLORS, NEUTRAL_TILE_COLOR, MOUNTAIN_TILE_COLOR, STAT_LABELS,
     CHAT_MESSAGE_MAX_LEN,
 )
+from game_data.backgrounds import ELEMENT_TO_BG_SLUG
 from game_data.jobs import _process_job_progression
 from game_data.skills import TIER4_SLOT2_SKILL_KEYS, SKILL_CATALOG, _character_usable_skills
 from game_data.equipment import _fetch_equipped_items, character_special_effects
@@ -29,6 +30,17 @@ from game_data.progression import exp_required_for_level, LEVEL_UP_POINT_VALUE, 
 from game_data.combat import gold_luk_bonus_pct, run_battle, _resolve_battle_element
 
 game_bp = Blueprint("game", __name__)
+
+
+def _bg_key_for_element(prefix, element):
+    """"game_bg_"/"battle_bg_" + the ASCII slug for a tile's owning-country
+    element ("金"/"木"/"水"/"火"/"土"), or the "_neutral" variant if element
+    is None (unowned tile) or not a recognized element."""
+    return f"{prefix}_{ELEMENT_TO_BG_SLUG.get(element, 'neutral')}"
+
+
+def _battle_bg_url(element):
+    return background_url(_bg_key_for_element("battle_bg", element))
 
 
 def _roll_hidden_encounter(db, settings):
@@ -420,6 +432,7 @@ def _render_game(**extra):
         chat_message_max_len=CHAT_MESSAGE_MAX_LEN,
         action_block_order=_sanitized_action_block_order(settings["action_block_order"]),
         consumable_items=consumable_items,
+        page_background_url=background_url(_bg_key_for_element("game_bg", current_tile["element"])),
     )
     context.update(extra)
     return render_template("game.html", **context)
@@ -507,7 +520,7 @@ def game_hunt():
                   characters.stat_floor_def, characters.stat_floor_agi, characters.stat_floor_luk,
                   characters.level_bonus_hp, characters.level_bonus_mp, characters.level_bonus_str,
                   characters.level_bonus_def, characters.level_bonus_agi, characters.level_bonus_luk,
-                  map_tiles.tile_type, countries.*
+                  map_tiles.tile_type, map_tiles.country_id AS tile_country_id, countries.*
            FROM characters
            JOIN map_tiles ON map_tiles.id = characters.current_tile_id
            JOIN countries ON countries.id = characters.country_id
@@ -778,12 +791,23 @@ def game_hunt():
     else:
         stats_after = None
 
+    # Tile's owning-country element (independent of character["element"],
+    # which is the hunter's OWN home country from the countries.* join
+    # above) -- picks the battle background variant. None (unowned/neutral
+    # tile) resolves to battle_bg_neutral via _battle_bg_url.
+    tile_element = None
+    if character["tile_country_id"] is not None:
+        tile_element = db.execute(
+            "SELECT element FROM countries WHERE id = ?", (character["tile_country_id"],)
+        ).fetchone()["element"]
+
     db.commit()
     db.close()
 
     return render_template(
         "battle.html",
         ground=ground,
+        page_background_url=_battle_bg_url(tile_element),
         # The DEBUFFED copy is what the player actually fought, so the
         # "敵方" stat panel must show those numbers, not the pristine row's.
         monster=fought_monster,
@@ -829,8 +853,9 @@ def game_hunt_boss_room():
                   characters.stat_floor_def, characters.stat_floor_agi, characters.stat_floor_luk,
                   characters.level_bonus_hp, characters.level_bonus_mp, characters.level_bonus_str,
                   characters.level_bonus_def, characters.level_bonus_agi, characters.level_bonus_luk,
-                  countries.*
+                  map_tiles.country_id AS tile_country_id, countries.*
            FROM characters
+           JOIN map_tiles ON map_tiles.id = characters.current_tile_id
            JOIN countries ON countries.id = characters.country_id
            WHERE characters.user_id = ?""",
         (session["user_id"],),
@@ -953,12 +978,19 @@ def game_hunt_boss_room():
     else:
         stats_after = None
 
+    tile_element = None
+    if character["tile_country_id"] is not None:
+        tile_element = db.execute(
+            "SELECT element FROM countries WHERE id = ?", (character["tile_country_id"],)
+        ).fetchone()["element"]
+
     db.commit()
     db.close()
 
     return render_template(
         "battle.html",
         ground=ground,
+        page_background_url=_battle_bg_url(tile_element),
         monster=fought_boss,
         boss_room_challenge=True,
         boss_set_dropped=boss_set_dropped,
@@ -1077,6 +1109,7 @@ def _resolve_bandit_conquest(
         "battle.html",
         conquest=True,
         bandit_fight=True,
+        page_background_url=_battle_bg_url(None),  # neutral tile, always
         captured_tile_name=tile_name,
         defending_country_name=character["name"],  # attacker's own country, once captured
         monster=bandit_monster,
@@ -1389,6 +1422,7 @@ def game_conquer():
         return render_template(
             "battle.html",
             conquest=True,
+            page_background_url=_battle_bg_url(defending_country["element"]),
             captured_tile_name=tile_name,
             defending_country_name=defending_country["name"],
             monster=defender_monster,
@@ -1475,6 +1509,7 @@ def game_conquer():
     return render_template(
         "battle.html",
         conquest=True,
+        page_background_url=_battle_bg_url(defending_country["element"]),
         captured_tile_name=tile_name,
         defending_country_name=defending_country["name"],
         monster=tower,
@@ -1868,6 +1903,7 @@ def game_shop():
     return render_template(
         "shop.html",
         character=character,
+        page_background_url=background_url("shop_bg"),
         cooldown_seconds=_cooldown_remaining_seconds(character["next_action_at"]),
         shop_items=shop_items,
         shop_type_labels=SHOP_TYPE_LABELS,

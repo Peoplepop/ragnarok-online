@@ -23,7 +23,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 from db import get_db, log_activity
 from web_helpers import (
     character_required, _next_weekly_instant_at, _taipei_time_label,
-    _tournament_registration_open, ACTION_DT_FORMAT, avatar_url,
+    _tournament_registration_open, ACTION_DT_FORMAT, avatar_url, background_url,
 )
 from game_data.equipment import _fetch_equipped_items, character_special_effects
 from game_data.skills import _equipped_combat_skills, _learned_skill_keys
@@ -533,6 +533,7 @@ def tournament_page():
     return render_template(
         "tournament.html",
         tournament=tournament,
+        page_background_url=background_url("tournament_bg"),
         registration_open=registration_open,
         registration_deadline_label=(
             _taipei_time_label(tournament["registration_deadline_at"]) if tournament else "-"

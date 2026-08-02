@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}背景與音樂管理 - 五行爭鋒{% endblock %}
+
+{% block content %}
+  {% include "_admin_nav.html" %}
+
+  <h2 style="color: var(--gold-bright); font-size: 18px; margin-top:0;">背景音樂</h2>
+  <p class="hint" style="margin-top:-8px; margin-bottom:16px;">
+    全站共用一首背景音樂（循環播放），格式限 MP3 / OGG / WAV，檔案大小上限 10MB。
+  </p>
+  <div class="panel" style="margin-bottom:28px; display:flex; flex-direction:column; gap:10px;">
+    {% if has_bgm %}
+      <div style="font-size:12px; color:var(--gold);">已上傳背景音樂</div>
+      <audio controls src="{{ bgm_preview_url }}" style="width:100%;"></audio>
+    {% else %}
+      <div style="font-size:12px; color:var(--text-dim);">尚未上傳背景音樂</div>
+    {% endif %}
+    <form method="post" action="{{ url_for('admin.admin_upload_bgm') }}"
+          enctype="multipart/form-data" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+      <input type="file" name="audio_file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav" style="font-size:12px;">
+      <button type="submit" style="padding:6px 16px; font-size:13px;">上傳</button>
+    </form>
+    {% if has_bgm %}
+    <form method="post" action="{{ url_for('admin.admin_reset_bgm') }}"
+          onsubmit="return confirm('確定要移除背景音樂嗎？');">
+      <button type="submit" class="btn" style="border-color:var(--danger); color:var(--danger); padding:6px 16px; font-size:13px;">移除背景音樂</button>
+    </form>
+    {% endif %}
+  </div>
+
+  <h2 style="color: var(--gold-bright); font-size: 18px;">背景圖片</h2>
+  <p class="hint" style="margin-top:-8px; margin-bottom:16px;">
+    上傳的圖片會依比例縮放並覆蓋在畫面底層（僅顯示用）。圖片格式限 JPG / PNG / GIF / WEBP，檔案大小上限 5MB，
+    系統會自動縮放至 1920x1080 以內（保持原比例，不裁切）。
+  </p>
+
+  <div class="panel" style="margin-bottom:18px;">
+    <form method="post" action="{{ url_for('admin.admin_reset_all_background_images') }}"
+          onsubmit="return confirm('確定要把全部背景圖片重置為預設嗎？此動作無法復原。');">
+      <button type="submit" class="btn" style="border-color:var(--danger); color:var(--danger);">重置全部為預設</button>
+    </form>
+  </div>
+
+  {% macro bg_group(title, keys) %}
+  <h3 style="color: var(--gold-bright); font-size: 15px; margin-bottom:10px;">{{ title }}</h3>
+  <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:12px; margin-bottom:24px;">
+    {% for item in background_items if item.key in keys %}
+    <div class="panel" style="display:flex; flex-direction:column; gap:8px; align-items:center; text-align:center;">
+      {% if item.preview_url %}
+      <img src="{{ item.preview_url }}" alt="{{ item.label }}" style="width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:6px; border:2px solid var(--border);">
+      {% else %}
+      <div style="width:100%; aspect-ratio:16/9; border-radius:6px; border:2px dashed var(--border); display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--text-dim);">未上傳</div>
+      {% endif %}
+      <div style="font-size:12px; color:var(--gold-bright);">{{ item.label }}</div>
+      <div style="font-size:11px; color:var(--text-dim); word-break:break-all;">{{ item.key }}</div>
+      {% if item.has_override %}<div style="font-size:11px; color:var(--gold);">已自訂</div>{% endif %}
+
+      <form method="post" action="{{ url_for('admin.admin_upload_background_image', key=item.key) }}"
+            enctype="multipart/form-data" style="display:flex; flex-direction:column; gap:6px; width:100%;">
+        <input type="file" name="image_file" accept="image/png,image/jpeg,image/gif,image/webp" style="font-size:11px;">
+        <button type="submit" style="padding:4px 10px; font-size:12px;">上傳</button>
+      </form>
+
+      {% if item.has_override %}
+      <form method="post" action="{{ url_for('admin.admin_reset_background_image', key=item.key) }}"
+            onsubmit="return confirm('確定要把「{{ item.label }}」重置為預設嗎？');" style="width:100%;">
+        <button type="submit" class="btn" style="padding:4px 10px; font-size:12px; width:100%;">重置此項</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endmacro %}
+
+  {{ bg_group("遊戲畫面", ["game_bg_jin", "game_bg_mu", "game_bg_shui", "game_bg_huo", "game_bg_tu", "game_bg_neutral"]) }}
+  {{ bg_group("戰鬥畫面", ["battle_bg_jin", "battle_bg_mu", "battle_bg_shui", "battle_bg_huo", "battle_bg_tu", "battle_bg_neutral"]) }}
+  {{ bg_group("其他", ["tournament_bg", "shop_bg"]) }}
+{% endblock %}

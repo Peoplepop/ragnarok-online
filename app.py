@@ -8,7 +8,7 @@ from flask import Flask, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash
 
 from db import get_db, init_db, seed_defaults, log_activity
-from web_helpers import _parse_dt, avatar_url, monster_image_url
+from web_helpers import _parse_dt, avatar_url, monster_image_url, bgm_url
 from game_data.constants import (
     IDLE_THRESHOLD_MINUTES, LEVEL_STAT_GROWTH, ELEMENT_COLORS, ELEMENT_BADGE_TEXT_COLORS,
 )
@@ -26,10 +26,11 @@ from blueprints.feedback import feedback_bp
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-only-secret-change-me")
-# Hard abuse-prevention ceiling on any request body, well above the 2MB
-# custom-avatar-upload soft cap (game_data.avatars.CUSTOM_AVATAR_MAX_BYTES),
-# which is what actually produces the friendly Chinese rejection message.
-app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
+# Hard abuse-prevention ceiling on any request body, well above the largest
+# per-feature soft cap -- game_data.backgrounds.BGM_MAX_BYTES (10MB, the
+# biggest of the bunch) -- which is what actually produces the friendly
+# Chinese rejection message in each upload route.
+app.config["MAX_CONTENT_LENGTH"] = 12 * 1024 * 1024
 
 
 def _backfill_level_bonus_columns():
@@ -300,6 +301,7 @@ def _inject_nav_display_name():
     return {
         "nav_display_name": session.get("character_name") or session.get("username"),
         "nav_avatar_url": nav_avatar_url,
+        "bgm_url": bgm_url(),
     }
 
 
