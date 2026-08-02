@@ -26,7 +26,7 @@ from game_data.stats import (
     character_final_stats, defense_tower_stats, _current_hp_mp, _bandit_lord_stats,
 )
 from game_data.progression import exp_required_for_level, LEVEL_UP_POINT_VALUE, apply_exp
-from game_data.combat import gold_luk_bonus_pct, run_battle
+from game_data.combat import gold_luk_bonus_pct, run_battle, _resolve_battle_element
 
 game_bp = Blueprint("game", __name__)
 
@@ -636,6 +636,7 @@ def game_hunt():
     # (level_min is NULL) and keep showing "Lv.???", unchanged.
     if fought_monster["level_min"] is not None:
         fought_monster["level"] = random.randint(fought_monster["level_min"], fought_monster["level_max"])
+    fought_monster["element"] = _resolve_battle_element(fought_monster)
 
     usable_skills = _character_usable_skills(db, character)
     result = run_battle(
@@ -866,6 +867,7 @@ def game_hunt_boss_room():
         return redirect(url_for("game.game"))
 
     fought_boss = _debuffed_monster(boss, special_effects)
+    fought_boss["element"] = _resolve_battle_element(fought_boss)
     usable_skills = _character_usable_skills(db, character)
     result = run_battle(
         character["character_name"], stats, character["element"], current_hp, fought_boss,

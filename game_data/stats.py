@@ -156,7 +156,7 @@ def _bandit_lord_stats(settings=None):
         "name": _BANDIT_LORD_NAME,
         "hp": s["hp"] * BANDIT_HP_MULTIPLIER,
         "atk": s["str"], "def": s["def"], "agi": s["agi"],
-        "element": "",
+        "element": "", "element_neutral": True,
         "image_key": "bandit_lord", "level": LEVEL_CAP,
     }
 

@@ -293,6 +293,7 @@ CREATE TABLE IF NOT EXISTS monsters (
     currency_reward INTEGER NOT NULL DEFAULT 0,
     exp_reward INTEGER NOT NULL DEFAULT 0,
     element TEXT NOT NULL DEFAULT '',
+    element_neutral INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (hunting_ground_id) REFERENCES hunting_grounds(id)
 );
 

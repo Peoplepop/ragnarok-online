@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as macros %}
 {% block title %}{{ monster.name }} 戰鬥 - 五行爭鋒{% endblock %}
 
 {% block extra_head %}
@@ -109,9 +110,10 @@
     </div>
     <div id="enemy-side" style="display:flex; align-items:center; gap:12px; position:relative;">
       <div style="text-align:right;">
-        <div style="color:var(--danger); margin-bottom:4px;">
+        <div style="color:var(--danger); margin-bottom:4px; display:flex; align-items:center; justify-content:flex-end; gap:6px;">
           {% if bandit_fight %}山賊領主{% elif conquest %}守軍{% else %}敵方{% endif %}
           {% if monster.level %}　Lv.{{ monster.level }}{% elif monster.level_min %}　Lv.{{ monster.level_min }}-{{ monster.level_max }}{% else %}　Lv.???{% endif %}
+          {{ macros.element_badge(monster.element) }}
         </div>
         <div style="width:120px; margin-left:auto; margin-bottom:4px;">
           <div style="background:var(--panel-2); border:1px solid var(--border); border-radius:6px; height:8px; overflow:hidden;">

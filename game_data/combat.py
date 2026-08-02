@@ -39,6 +39,22 @@ def elemental_multiplier(attacker_element, defender_element):
     return 1.0
 
 
+WU_XING_ELEMENTS = ("金", "木", "水", "火", "土")
+
+
+def _resolve_battle_element(monster):
+    """A monster-shaped dict with a real element keeps it untouched. One with
+    a blank element gets a fresh random Wu Xing pick for THIS fight only (the
+    caller must not persist the result) -- UNLESS it carries "element_neutral":
+    True, the explicit per-monster marker for the handful of endgame/neutral
+    fights (陰陽尊者, 混沌天尊, 山賊領主) that are deliberately unaligned and must
+    stay that way regardless of who fights them."""
+    element = monster.get("element")
+    if element or monster.get("element_neutral"):
+        return element
+    return random.choice(WU_XING_ELEMENTS)
+
+
 def _hit_chance_pct(attacker_luk):
     return HIT_CHANCE_BASE + HIT_CHANCE_MAX_BONUS * attacker_luk / (attacker_luk + HIT_CHANCE_K)
 

@@ -565,14 +565,14 @@ HIDDEN_MONSTERS = [
         "tier": "taiji_hidden", "name": "陰陽尊者", "is_boss": 0, "is_guardian": 0,
         "level_min": None, "level_max": None,
         "hp": 27000, "atk": 240, "def": 150, "agi": 90, "luk": 45,
-        "currency_reward": 20000, "exp_reward": 3000, "element": "",
+        "currency_reward": 20000, "exp_reward": 3000, "element": "", "element_neutral": True,
         "image_key": "taiji_sage",
     },
     {
         "tier": "wuji_hidden", "name": "混沌天尊", "is_boss": 0, "is_guardian": 0,
         "level_min": None, "level_max": None,
         "hp": 38000, "atk": 450, "def": 220, "agi": 130, "luk": 65,
-        "currency_reward": 33000, "exp_reward": 5000, "element": "",
+        "currency_reward": 33000, "exp_reward": 5000, "element": "", "element_neutral": True,
         "image_key": "wuji_sage",
     },
 ]
@@ -752,6 +752,8 @@ def _ensure_monster_columns(conn):
         conn.execute("ALTER TABLE monsters ADD COLUMN image_key TEXT")
     if "luk" not in cols:
         conn.execute("ALTER TABLE monsters ADD COLUMN luk INTEGER NOT NULL DEFAULT 0")
+    if "element_neutral" not in cols:
+        conn.execute("ALTER TABLE monsters ADD COLUMN element_neutral INTEGER NOT NULL DEFAULT 0")
 
 
 def _ensure_item_columns(conn):
@@ -1000,15 +1002,27 @@ def _seed_hidden_monsters(conn):
         conn.execute(
             """INSERT INTO monsters
                (hunting_ground_id, name, is_boss, is_guardian, level_min, level_max,
-                hp, atk, def, agi, luk, currency_reward, exp_reward, element, image_key)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                hp, atk, def, agi, luk, currency_reward, exp_reward, element, element_neutral, image_key)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 ground_ids[m["tier"]], m["name"], m["is_boss"], m["is_guardian"],
                 m["level_min"], m["level_max"],
                 m["hp"], m["atk"], m["def"], m["agi"], m["luk"],
-                m["currency_reward"], m["exp_reward"], m["element"], m["image_key"],
+                m["currency_reward"], m["exp_reward"], m["element"],
+                int(bool(m.get("element_neutral"))), m["image_key"],
             ),
         )
+    # Self-healing: a DB that already had these rows seeded before
+    # element_neutral existed would otherwise be stuck with the column's
+    # ALTER TABLE default of 0 forever (the INSERT above is add-only and
+    # skips names already present), silently making 陰陽尊者/混沌天尊 eligible
+    # for random-element assignment like any other blank-element monster.
+    for m in HIDDEN_MONSTERS:
+        if m.get("element_neutral"):
+            conn.execute(
+                "UPDATE monsters SET element_neutral = 1 WHERE name = ? AND element_neutral = 0",
+                (m["name"],),
+            )
 
 
 def _backfill_monster_image_keys(conn):
