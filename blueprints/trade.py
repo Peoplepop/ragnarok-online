@@ -377,6 +377,75 @@ def trade_room(trade_id):
     )
 
 
+def _apply_offer_from_form(db, trade, character):
+    """Writes this character's currency/item offer from the submitted form
+    onto `trade` (trade_items + trades.<side>_currency), resetting BOTH
+    confirmation flags -- standard anti-scam trade-window behavior so a
+    stale confirmation never silently carries over onto a changed offer.
+    Shared by trade_offer and trade_confirm (the latter calls this first
+    when the confirm submission also carries offer fields, so a player can
+    fill in their offer and confirm in one click instead of two).
+
+    No-ops entirely (including the confirmation reset) if the submitted
+    offer is identical to what's already saved -- otherwise, since the
+    merged confirm button always resubmits the offer fields alongside the
+    confirm, a player re-clicking "confirm" a second time (e.g. after the
+    other side updated their own offer and invalidated this side's earlier
+    confirmation) would immediately re-invalidate whatever the other side
+    just confirmed, and the trade could never settle."""
+    raw_amount = request.form.get("currency", "0").strip()
+    try:
+        amount = int(raw_amount)
+    except ValueError:
+        amount = 0
+    amount = max(0, min(amount, character["character_currency"]))
+
+    inventory_rows = db.execute(
+        "SELECT item_id, quantity FROM inventory WHERE character_id = ?",
+        (character["character_id"],),
+    ).fetchall()
+
+    new_items = {}
+    for row in inventory_rows:
+        raw_qty = request.form.get(f"item_qty_{row['item_id']}", "0").strip()
+        try:
+            qty = int(raw_qty)
+        except ValueError:
+            qty = 0
+        qty = max(0, min(qty, row["quantity"]))
+        if qty > 0:
+            new_items[row["item_id"]] = qty
+
+    is_initiator = character["character_id"] == trade["initiator_character_id"]
+    currency_column = "initiator_currency" if is_initiator else "target_currency"
+    current_amount = trade["initiator_currency"] if is_initiator else trade["target_currency"]
+    current_items = {
+        row["item_id"]: row["quantity"]
+        for row in db.execute(
+            "SELECT item_id, quantity FROM trade_items WHERE trade_id = ? AND character_id = ?",
+            (trade["trade_id"], character["character_id"]),
+        ).fetchall()
+    }
+    if amount == current_amount and new_items == current_items:
+        return
+
+    db.execute(
+        "DELETE FROM trade_items WHERE trade_id = ? AND character_id = ?",
+        (trade["trade_id"], character["character_id"]),
+    )
+    for item_id, qty in new_items.items():
+        db.execute(
+            "INSERT INTO trade_items (trade_id, character_id, item_id, quantity) VALUES (?, ?, ?, ?)",
+            (trade["trade_id"], character["character_id"], item_id, qty),
+        )
+
+    db.execute(
+        f"""UPDATE trades SET {currency_column} = ?, initiator_confirmed = 0, target_confirmed = 0,
+               updated_at = datetime('now') WHERE id = ?""",
+        (amount, trade["trade_id"]),
+    )
+
+
 @trade_bp.route("/trade/<int:trade_id>/offer", methods=["POST"])
 @character_required
 def trade_offer(trade_id):
@@ -402,45 +471,7 @@ def trade_offer(trade_id):
         flash("這筆交易目前無法調整報價")
         return redirect(url_for("trade.trade_home"))
 
-    raw_amount = request.form.get("currency", "0").strip()
-    try:
-        amount = int(raw_amount)
-    except ValueError:
-        amount = 0
-    amount = max(0, min(amount, character["character_currency"]))
-
-    inventory_rows = db.execute(
-        "SELECT item_id, quantity FROM inventory WHERE character_id = ?",
-        (character["character_id"],),
-    ).fetchall()
-
-    db.execute(
-        "DELETE FROM trade_items WHERE trade_id = ? AND character_id = ?",
-        (trade_id, character["character_id"]),
-    )
-    for row in inventory_rows:
-        raw_qty = request.form.get(f"item_qty_{row['item_id']}", "0").strip()
-        try:
-            qty = int(raw_qty)
-        except ValueError:
-            qty = 0
-        qty = max(0, min(qty, row["quantity"]))
-        if qty > 0:
-            db.execute(
-                "INSERT INTO trade_items (trade_id, character_id, item_id, quantity) VALUES (?, ?, ?, ?)",
-                (trade_id, character["character_id"], row["item_id"], qty),
-            )
-
-    is_initiator = character["character_id"] == trade["initiator_character_id"]
-    currency_column = "initiator_currency" if is_initiator else "target_currency"
-    # Any successful offer update resets BOTH confirmation flags -- standard
-    # anti-scam trade-window behavior so a stale confirmation never silently
-    # carries over onto a changed offer.
-    db.execute(
-        f"""UPDATE trades SET {currency_column} = ?, initiator_confirmed = 0, target_confirmed = 0,
-               updated_at = datetime('now') WHERE id = ?""",
-        (amount, trade_id),
-    )
+    _apply_offer_from_form(db, trade, character)
     db.commit()
     db.close()
     flash("已更新你的交易報價")
@@ -471,6 +502,13 @@ def trade_confirm(trade_id):
         db.close()
         flash("這筆交易目前無法確認")
         return redirect(url_for("trade.trade_home"))
+
+    # A confirm submitted from the merged offer+confirm button carries the
+    # same offer fields as trade_offer -- save them first so confirming
+    # always locks in exactly what's currently in the boxes, not a possibly
+    # stale previously-saved offer.
+    if "currency" in request.form:
+        _apply_offer_from_form(db, trade, character)
 
     is_initiator = character["character_id"] == trade["initiator_character_id"]
     confirm_column = "initiator_confirmed" if is_initiator else "target_confirmed"

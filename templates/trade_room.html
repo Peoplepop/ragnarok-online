@@ -2,7 +2,25 @@
 {% block title %}與 {{ opp_name }} 的交易 - 五行爭鋒{% endblock %}
 {% block extra_head %}
 {% if trade.trade_status in ('pending', 'active') %}
-<meta http-equiv="refresh" content="5">
+<script>
+  // Same 5s auto-refresh as before, except deferred while the player is
+  // actively focused in an offer input -- otherwise a mid-typing refresh
+  // reloads the page from the last SAVED offer (0 if nothing was saved
+  // yet), silently wiping whatever they were typing.
+  (function () {
+    function scheduleReload() {
+      setTimeout(function () {
+        var active = document.activeElement;
+        if (active && active.tagName === 'INPUT') {
+          scheduleReload();
+        } else {
+          location.reload();
+        }
+      }, 5000);
+    }
+    scheduleReload();
+  })();
+</script>
 {% endif %}
 {% endblock %}
 
@@ -45,7 +63,7 @@
         <h3 style="margin:0 0 8px; color:var(--gold-bright); font-size:14px;">
           我的報價{% if my_confirmed %}（已確認）{% endif %}
         </h3>
-        <form method="post" action="{{ url_for('trade.trade_offer', trade_id=trade.trade_id) }}">
+        <form method="post" action="{{ url_for('trade.trade_offer', trade_id=trade.trade_id) }}" id="offer-form">
           <label>諸神幣（目前身上 {{ my_currency_available }}）</label>
           <input type="text" inputmode="numeric" name="currency" value="{{ my_currency_offer }}">
           {% for row in my_offer_rows %}
@@ -55,7 +73,10 @@
           {% if not my_offer_rows %}
           <p class="hint" style="margin:0 0 12px;">背包裡目前沒有可交易的裝備</p>
           {% endif %}
-          <button type="submit" class="btn-success">更新報價</button>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="submit" class="btn-success">更新報價</button>
+            <button type="submit" formaction="{{ url_for('trade.trade_confirm', trade_id=trade.trade_id) }}" class="btn-success">送出並確認交易</button>
+          </div>
         </form>
       </div>
 
@@ -77,9 +98,6 @@
     </div>
 
     <div style="margin-top:18px; display:flex; gap:12px; flex-wrap:wrap;">
-      <form method="post" action="{{ url_for('trade.trade_confirm', trade_id=trade.trade_id) }}">
-        <button type="submit" class="btn-success">確認交易</button>
-      </form>
       <form method="post" action="{{ url_for('trade.trade_cancel', trade_id=trade.trade_id) }}" onsubmit="return confirm('確定要取消這筆交易嗎？');">
         <button type="submit" class="btn-danger">取消交易</button>
       </form>
