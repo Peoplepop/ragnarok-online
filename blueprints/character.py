@@ -200,7 +200,7 @@ def character_page():
         item_id = character[EQUIP_SLOT_COLUMNS[shop_type]]
         item = (
             db.execute(
-                """SELECT items.*, countries.element AS set_element
+                """SELECT items.*, countries.element AS set_element, countries.name AS set_country_name
                    FROM items LEFT JOIN countries ON countries.id = items.country_id
                    WHERE items.id = ?""",
                 (item_id,),
@@ -210,7 +210,8 @@ def character_page():
         equipped_slots.append({"slot": shop_type, "label": label, "item": item})
 
     inventory_rows = db.execute(
-        """SELECT items.*, inventory.quantity AS quantity, countries.element AS set_element
+        """SELECT items.*, inventory.quantity AS quantity,
+                  countries.element AS set_element, countries.name AS set_country_name
            FROM inventory JOIN items ON items.id = inventory.item_id
            LEFT JOIN countries ON countries.id = items.country_id
            WHERE inventory.character_id = ?

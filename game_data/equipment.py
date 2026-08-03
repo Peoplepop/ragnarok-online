@@ -239,6 +239,44 @@ def _hidden_set_summaries(equipped_items):
     return summaries
 
 
+def item_set_effect_text(item):
+    """Short Chinese description of what an item's set grants at 2/3 (or, for
+    a 秘境 piece, 3/3) pieces -- independent of what else is currently
+    equipped, unlike _active_set_summaries/_hidden_set_summaries above (which
+    only report bonuses already active in the CURRENT loadout). For showing
+    inline next to gear in an inventory listing, so a player can see the set
+    payoff before ever equipping the first piece. None for gear with no set
+    affiliation at all."""
+    if item is None:
+        return None
+    try:
+        hidden_set_key = item["hidden_set_key"]
+    except (IndexError, KeyError):
+        hidden_set_key = None
+    if hidden_set_key:
+        label = SPECIAL_EFFECT_LABELS.get(item["special_effect_key"], item["special_effect_key"] or "")
+        percent = item["special_effect_percent"] or 0
+        return f"《{item['hidden_set_name']}》秘境套裝：集滿 {HIDDEN_SET_PIECES_REQUIRED} 件才生效 → {label} +{percent}%"
+
+    try:
+        set_element = item["set_element"]
+    except (IndexError, KeyError):
+        set_element = None
+    if not set_element:
+        return None
+    try:
+        set_country_name = item["set_country_name"]
+    except (IndexError, KeyError):
+        set_country_name = None
+    prefix = f"《{set_country_name}》套裝" if set_country_name else f"{set_element}套裝"
+    if set_element == "土":
+        tiers = "、".join(f"{n}件 四維各+{EARTH_SET_BONUS_TIERS[n]}" for n in (2, 3))
+    else:
+        stat = SET_SIGNATURE_STAT.get(set_element)
+        tiers = "、".join(f"{n}件 {STAT_LABELS[stat]}+{SET_BONUS_TIERS[n]}" for n in (2, 3)) if stat else ""
+    return f"{prefix}：{tiers}"
+
+
 def _fetch_equipped_items(db, character):
     """Equipped weapon/armor/accessory rows, each carrying a `set_element`
     field (the item's origin country's element, NULL for ordinary gear) so

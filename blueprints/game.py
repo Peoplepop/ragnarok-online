@@ -244,6 +244,37 @@ def _render_game(**extra):
             })
     equipped_items = _fetch_equipped_items(db, character)
 
+    # Equip/unequip UI for the 🎒 背包 block below -- lets a player gear up
+    # directly from the main game page instead of needing a trip to the
+    # separate character-detail page (which also has its own copy of this
+    # same equipped_slots/inventory_items pattern, further down that page).
+    equipped_slots = []
+    for shop_type, label in SLOT_LABELS.items():
+        item_id = character[EQUIP_SLOT_COLUMNS[shop_type]]
+        item = (
+            db.execute(
+                """SELECT items.*, countries.element AS set_element, countries.name AS set_country_name
+                   FROM items LEFT JOIN countries ON countries.id = items.country_id
+                   WHERE items.id = ?""",
+                (item_id,),
+            ).fetchone()
+            if item_id else None
+        )
+        equipped_slots.append({"slot": shop_type, "label": label, "item": item})
+
+    equipment_inventory_rows = db.execute(
+        """SELECT items.*, inventory.quantity AS quantity,
+                  countries.element AS set_element, countries.name AS set_country_name
+           FROM inventory JOIN items ON items.id = inventory.item_id
+           LEFT JOIN countries ON countries.id = items.country_id
+           WHERE inventory.character_id = ? AND items.shop_type != 'consumable'
+           ORDER BY items.shop_type, items.price""",
+        (character["character_id"],),
+    ).fetchall()
+    equipment_inventory_items = {shop_type: [] for shop_type in SLOT_LABELS}
+    for row in equipment_inventory_rows:
+        equipment_inventory_items[row["shop_type"]].append(row)
+
     # Garrison status: fetched off the garrisons table itself (not inferred
     # from current_tile_id) -- see game.html/point 12 for why this is
     # defensive rather than assumed.
@@ -458,6 +489,9 @@ def _render_game(**extra):
         action_block_order=_sanitized_action_block_order(settings["action_block_order"]),
         game_layout_blocks=GAME_LAYOUT_BLOCKS,
         consumable_items=consumable_items,
+        equipped_slots=equipped_slots,
+        equipment_inventory_items=equipment_inventory_items,
+        slot_labels=SLOT_LABELS,
         page_background_url=background_url(_bg_key_for_element("game_bg", current_tile["element"])),
     )
     context.update(extra)
@@ -2348,6 +2382,7 @@ def game_treasury_donate():
 EQUIPMENT_RETURN_ENDPOINTS = {
     "shop": "game.game_shop",
     "character": "character.character_page",
+    "game": "game.game",
 }
 
 
