@@ -668,6 +668,8 @@ def game_hunt():
     skill_book_dropped = None
     hidden_loot_dropped = None
     boss_set_dropped = None
+    leveled_up = False
+    stats_after = None
     if result["won"]:
         if is_guardian_fight:
             exp_multiplier = settings["guardian_exp_multiplier"]
@@ -706,6 +708,15 @@ def game_hunt():
             job_class=character["job_class"], job_tier=character["job_tier"],
         )
         new_currency = character["currency"] + currency_gain
+        leveled_up = new_level > character["level"]
+        if leveled_up:
+            updated = dict(character)
+            updated["level"] = new_level
+            for stat in ("hp", "mp", "str", "def", "agi", "luk"):
+                updated[f"level_bonus_{stat}"] = character[f"level_bonus_{stat}"] + stat_gain[stat]
+            stats_after = character_final_stats(updated, equipped_items, settings, king_war_defense_bonus)
+        else:
+            stats_after = None
         # No 魔王房間 chain ever follows a 秘境 fight: a hidden ground holds a
         # single monster and no boss at all, so `boss` is None there anyway --
         # the explicit hidden_key guard just makes that intent unmissable.
@@ -749,6 +760,12 @@ def game_hunt():
 
     _process_job_progression(db, character, character["level"], new_level)
 
+    # A level-up fully restores HP/MP to the new (post-level) max, same as
+    # the 回復 station's full-heal -- otherwise a hunter would land on the
+    # next screen mid-HP despite having just grown a bigger max.
+    persisted_hp = stats_after["hp"] if leveled_up else result["player_hp"]
+    persisted_mp = stats_after["mp"] if leveled_up else result["player_mp"]
+
     db.execute(
         """UPDATE characters
            SET level = ?, exp = ?, currency = ?, current_hp = ?, current_mp = ?, next_action_at = ?,
@@ -759,7 +776,7 @@ def game_hunt():
                level_bonus_agi = level_bonus_agi + ?, level_bonus_luk = level_bonus_luk + ?
            WHERE id = ?""",
         (
-            new_level, new_exp, new_currency, result["player_hp"], result["player_mp"],
+            new_level, new_exp, new_currency, persisted_hp, persisted_mp,
             _next_action_at(settings["turn_wait_seconds"]), 1 if result["won"] else 0,
             pending_boss_id,
             stat_gain["hp"], stat_gain["mp"], stat_gain["str"],
@@ -781,15 +798,6 @@ def game_hunt():
         db, session["user_id"], session["username"], "hunt",
         detail=f"{ground['name']} {outcome_detail}", ip_address=request.remote_addr,
     )
-
-    if new_level > character["level"]:
-        updated = dict(character)
-        updated["level"] = new_level
-        for stat in ("hp", "mp", "str", "def", "agi", "luk"):
-            updated[f"level_bonus_{stat}"] = character[f"level_bonus_{stat}"] + stat_gain[stat]
-        stats_after = character_final_stats(updated, equipped_items, settings, king_war_defense_bonus)
-    else:
-        stats_after = None
 
     # Tile's owning-country element (independent of character["element"],
     # which is the hunter's OWN home country from the countries.* join
@@ -822,15 +830,15 @@ def game_hunt():
         log=result["log"],
         won=result["won"],
         timed_out=result["timed_out"],
-        leveled_up=new_level > character["level"],
+        leveled_up=leveled_up,
         new_level=new_level,
         exp_gain=exp_gain,
         currency_gain=currency_gain,
         currency_lost=currency_lost,
-        player_hp=result["player_hp"],
-        max_hp=stats["hp"],
-        player_mp=result["player_mp"],
-        max_mp=stats["mp"],
+        player_hp=persisted_hp,
+        max_hp=stats_after["hp"] if leveled_up else stats["hp"],
+        player_mp=persisted_mp,
+        max_mp=stats_after["mp"] if leveled_up else stats["mp"],
         player_stats=stats,
         stats_after=stats_after,
         stat_labels=STAT_LABELS,
@@ -906,6 +914,8 @@ def game_hunt_boss_room():
     new_level, new_exp = character["level"], character["exp"]
     stat_gain = {key: 0 for key in LEVEL_UP_POINT_VALUE}
     boss_set_dropped = None
+    leveled_up = False
+    stats_after = None
     if result["won"]:
         exp_gain = round(
             boss["exp_reward"] * settings["boss_exp_multiplier"]
@@ -933,6 +943,13 @@ def game_hunt_boss_room():
             job_class=character["job_class"], job_tier=character["job_tier"],
         )
         new_currency = character["currency"] + currency_gain
+        leveled_up = new_level > character["level"]
+        if leveled_up:
+            updated = dict(character)
+            updated["level"] = new_level
+            for stat in ("hp", "mp", "str", "def", "agi", "luk"):
+                updated[f"level_bonus_{stat}"] = character[f"level_bonus_{stat}"] + stat_gain[stat]
+            stats_after = character_final_stats(updated, equipped_items, settings)
     elif not result["timed_out"]:
         currency_lost = character["currency"] // 2
         new_currency = character["currency"] - currency_lost
@@ -940,6 +957,12 @@ def game_hunt_boss_room():
         new_currency = character["currency"]
 
     _process_job_progression(db, character, character["level"], new_level)
+
+    # A level-up fully restores HP/MP to the new (post-level) max, same as
+    # the 回復 station's full-heal -- otherwise a hunter would land on the
+    # next screen mid-HP despite having just grown a bigger max.
+    persisted_hp = stats_after["hp"] if leveled_up else result["player_hp"]
+    persisted_mp = stats_after["mp"] if leveled_up else result["player_mp"]
 
     db.execute(
         """UPDATE characters
@@ -951,7 +974,7 @@ def game_hunt_boss_room():
                level_bonus_agi = level_bonus_agi + ?, level_bonus_luk = level_bonus_luk + ?
            WHERE id = ?""",
         (
-            new_level, new_exp, new_currency, result["player_hp"], result["player_mp"],
+            new_level, new_exp, new_currency, persisted_hp, persisted_mp,
             1 if result["won"] else 0,
             stat_gain["hp"], stat_gain["mp"], stat_gain["str"],
             stat_gain["def"], stat_gain["agi"], stat_gain["luk"],
@@ -968,15 +991,6 @@ def game_hunt_boss_room():
         db, session["user_id"], session["username"], "hunt",
         detail=f"[魔王房間] {ground['name']} {outcome_detail}", ip_address=request.remote_addr,
     )
-
-    if new_level > character["level"]:
-        updated = dict(character)
-        updated["level"] = new_level
-        for stat in ("hp", "mp", "str", "def", "agi", "luk"):
-            updated[f"level_bonus_{stat}"] = character[f"level_bonus_{stat}"] + stat_gain[stat]
-        stats_after = character_final_stats(updated, equipped_items, settings)
-    else:
-        stats_after = None
 
     tile_element = None
     if character["tile_country_id"] is not None:
@@ -997,15 +1011,15 @@ def game_hunt_boss_room():
         log=result["log"],
         won=result["won"],
         timed_out=result["timed_out"],
-        leveled_up=new_level > character["level"],
+        leveled_up=leveled_up,
         new_level=new_level,
         exp_gain=exp_gain,
         currency_gain=currency_gain,
         currency_lost=currency_lost,
-        player_hp=result["player_hp"],
-        max_hp=stats["hp"],
-        player_mp=result["player_mp"],
-        max_mp=stats["mp"],
+        player_hp=persisted_hp,
+        max_hp=stats_after["hp"] if leveled_up else stats["hp"],
+        player_mp=persisted_mp,
+        max_mp=stats_after["mp"] if leveled_up else stats["mp"],
         player_stats=stats,
         stats_after=stats_after,
         stat_labels=STAT_LABELS,
