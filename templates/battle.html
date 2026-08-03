@@ -253,6 +253,40 @@
 
       var hpRe = /（([^（]+) 剩餘 HP (\d+)）$/;
       var dmgRe = /造成 (\d+) 點傷害/;
+      var skillNameRe = /使出「([^」]+)」/;
+
+      // 金/木/水/火/土 -> hex, single-sourced from game_data/constants.py
+      // (same palette as map tiles/element badges elsewhere in the game).
+      var elementColors = {{ element_colors | tojson }};
+      // skill name -> element (金/木/水/火), from game_data/skills.py's
+      // SKILL_ELEMENT_BY_NAME -- 土-flavored skills have no entry and stay
+      // uncolored, matching the character sheet's existing skill badges.
+      var skillElementByName = {{ skill_element_by_name | tojson }};
+      var CRIT_COLOR = "#c78cf2";
+
+      function escapeHtml(s) {
+        return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      }
+
+      // Highlights just the "會心一擊" substring (purple, bold) and just the
+      // skill name inside 使出「...」(colored by its element) -- the rest of
+      // the line keeps its normal styling instead of the whole sentence
+      // changing color/size.
+      function highlightLine(text) {
+        var html = escapeHtml(text);
+        html = html.replace(skillNameRe, function (match, skillName) {
+          var element = skillElementByName[skillName];
+          var color = element ? elementColors[element] : null;
+          var styled = color
+            ? '<span style="color:' + color + '; font-weight:bold;">' + skillName + "</span>"
+            : skillName;
+          return "使出「" + styled + "」";
+        });
+        html = html.replace(/會心一擊/g, function (match) {
+          return '<span style="color:' + CRIT_COLOR + '; font-weight:bold;">' + match + "</span>";
+        });
+        return html;
+      }
 
       var leveledUp = {{ 'true' if leveled_up else 'false' }};
       var lootDropped = {{ 'true' if (hidden_loot_dropped or boss_set_dropped or skill_book_dropped or potion_dropped) else 'false' }};
@@ -341,15 +375,9 @@
         }
         var line = document.createElement("div");
         var text = log[i];
-        line.textContent = text;
+        line.innerHTML = highlightLine(text);
+        line.style.color = "var(--text-dim)";
         var isCrit = text.indexOf("會心一擊") !== -1;
-        if (isCrit) {
-          line.style.color = "var(--gold-bright)";
-          line.style.fontWeight = "bold";
-          line.style.fontSize = "17px";
-        } else {
-          line.style.color = "var(--text-dim)";
-        }
         container.appendChild(line);
         container.scrollTop = container.scrollHeight;
 

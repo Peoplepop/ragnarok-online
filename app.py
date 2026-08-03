@@ -12,7 +12,7 @@ from web_helpers import _parse_dt, avatar_url, monster_image_url, bgm_url, favic
 from game_data.constants import (
     IDLE_THRESHOLD_MINUTES, LEVEL_STAT_GROWTH, ELEMENT_COLORS, ELEMENT_BADGE_TEXT_COLORS,
 )
-from game_data.skills import SKILL_CATALOG
+from game_data.skills import SKILL_CATALOG, SKILL_ELEMENT_BY_NAME
 from game_data.equipment import item_badge_element, STAT_ELEMENT
 
 from blueprints.auth import auth_bp
@@ -329,6 +329,7 @@ app.jinja_env.globals["element_colors"] = ELEMENT_COLORS
 app.jinja_env.globals["element_badge_text_colors"] = ELEMENT_BADGE_TEXT_COLORS
 app.jinja_env.globals["item_badge_element"] = item_badge_element
 app.jinja_env.globals["stat_element"] = STAT_ELEMENT
+app.jinja_env.globals["skill_element_by_name"] = SKILL_ELEMENT_BY_NAME
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import random
 
 from game_data.jobs import TIER2_JOBS, TIER3_JOBS, TIER4_JOB_BY_STAT, TIER4_TIE_JOB
+from game_data.equipment import STAT_ELEMENT
 
 # Skill tree: every job path (novice-by-element, then each 二轉/三轉/四轉 job)
 # has 1-3 learnable skills gated by level, each a one-time currency purchase
@@ -159,6 +160,19 @@ def _build_skill_catalog():
 
 
 SKILL_CATALOG = _build_skill_catalog()
+
+# skill name -> element, for coloring skill names in the battle log by the
+# element of the signature stat they scale off. Same STAT_ELEMENT mapping
+# already used to badge skills on the character sheet (see
+# templates/character.html's stat_element.get(skill.stat) calls) -- reused
+# here rather than re-derived, so both places agree on which element a skill
+# is even if SET_SIGNATURE_STAT ever changes. 土-flavored skills (stat ==
+# "avg") intentionally get no entry, same as there.
+SKILL_ELEMENT_BY_NAME = {
+    skill["name"]: STAT_ELEMENT[skill["stat"]]
+    for skill in SKILL_CATALOG.values()
+    if skill["stat"] in STAT_ELEMENT
+}
 
 # The 5 monster-drop-only 四轉 slot-2 skill keys, used by the ultimate hunting
 # ground's skill-book drop roll to pick which book a won hunt hands out.
