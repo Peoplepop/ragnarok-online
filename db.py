@@ -455,6 +455,15 @@ BOSS_STAT_MULT = 1.5
 BOSS_CURRENCY_MULT = 5.0
 _STAT_KEYS = ("hp", "atk", "def", "agi", "luk")
 
+# Flat buff applied to every monster's four combat stats (攻擊/防禦/敏捷/幸運 --
+# the "水平" row shown on the battle screen, as opposed to hp which gets its
+# own bar) -- hp/currency_reward/exp_reward are untouched. See
+# _bump_monster_combat_stats for how this reaches monsters already seeded
+# into an existing game.db, since _build_default_monsters/HIDDEN_MONSTERS
+# alone only affect a brand-new database.
+MONSTER_COMBAT_STAT_BUMP = 2
+_NON_HP_STAT_KEYS = ("atk", "def", "agi", "luk")
+
 
 def _build_default_monsters():
     monsters = []
@@ -472,8 +481,9 @@ def _build_default_monsters():
                 monsters.append({
                     "tier": cfg["tier"], "name": f"{adjective}{species}", "is_boss": 0, "is_guardian": 0,
                     "level_min": level_min, "level_max": level_max,
-                    "hp": stats["hp"], "atk": stats["atk"], "def": stats["def"], "agi": stats["agi"],
-                    "luk": stats["luk"],
+                    "hp": stats["hp"], "atk": stats["atk"] + MONSTER_COMBAT_STAT_BUMP,
+                    "def": stats["def"] + MONSTER_COMBAT_STAT_BUMP, "agi": stats["agi"] + MONSTER_COMBAT_STAT_BUMP,
+                    "luk": stats["luk"] + MONSTER_COMBAT_STAT_BUMP,
                     "currency_reward": currency, "exp_reward": exp, "element": element,
                     "image_key": image_key,
                 })
@@ -481,9 +491,10 @@ def _build_default_monsters():
         monsters.append({
             "tier": cfg["tier"], "name": cfg["guardian"]["name"], "is_boss": 0, "is_guardian": 1,
             "level_min": None, "level_max": None,
-            "hp": guardian_stats["hp"], "atk": guardian_stats["atk"],
-            "def": guardian_stats["def"], "agi": guardian_stats["agi"],
-            "luk": guardian_stats["luk"],
+            "hp": guardian_stats["hp"], "atk": guardian_stats["atk"] + MONSTER_COMBAT_STAT_BUMP,
+            "def": guardian_stats["def"] + MONSTER_COMBAT_STAT_BUMP,
+            "agi": guardian_stats["agi"] + MONSTER_COMBAT_STAT_BUMP,
+            "luk": guardian_stats["luk"] + MONSTER_COMBAT_STAT_BUMP,
             "currency_reward": round(high["currency_reward"] * GUARDIAN_CURRENCY_MULT),
             "exp_reward": high["exp_reward"],
             "element": cfg["guardian"]["element"],
@@ -493,9 +504,10 @@ def _build_default_monsters():
         monsters.append({
             "tier": cfg["tier"], "name": cfg["boss"]["name"], "is_boss": 1, "is_guardian": 0,
             "level_min": None, "level_max": None,
-            "hp": boss_stats["hp"], "atk": boss_stats["atk"],
-            "def": boss_stats["def"], "agi": boss_stats["agi"],
-            "luk": boss_stats["luk"],
+            "hp": boss_stats["hp"], "atk": boss_stats["atk"] + MONSTER_COMBAT_STAT_BUMP,
+            "def": boss_stats["def"] + MONSTER_COMBAT_STAT_BUMP,
+            "agi": boss_stats["agi"] + MONSTER_COMBAT_STAT_BUMP,
+            "luk": boss_stats["luk"] + MONSTER_COMBAT_STAT_BUMP,
             "currency_reward": round(high["currency_reward"] * BOSS_CURRENCY_MULT),
             "exp_reward": high["exp_reward"],
             "element": cfg["boss"]["element"],
@@ -564,14 +576,16 @@ HIDDEN_MONSTERS = [
     {
         "tier": "taiji_hidden", "name": "陰陽尊者", "is_boss": 0, "is_guardian": 0,
         "level_min": None, "level_max": None,
-        "hp": 27000, "atk": 240, "def": 150, "agi": 90, "luk": 45,
+        "hp": 27000, "atk": 240 + MONSTER_COMBAT_STAT_BUMP, "def": 150 + MONSTER_COMBAT_STAT_BUMP,
+        "agi": 90 + MONSTER_COMBAT_STAT_BUMP, "luk": 45 + MONSTER_COMBAT_STAT_BUMP,
         "currency_reward": 20000, "exp_reward": 3000, "element": "", "element_neutral": True,
         "image_key": "taiji_sage",
     },
     {
         "tier": "wuji_hidden", "name": "混沌天尊", "is_boss": 0, "is_guardian": 0,
         "level_min": None, "level_max": None,
-        "hp": 38000, "atk": 450, "def": 220, "agi": 130, "luk": 65,
+        "hp": 38000, "atk": 450 + MONSTER_COMBAT_STAT_BUMP, "def": 220 + MONSTER_COMBAT_STAT_BUMP,
+        "agi": 130 + MONSTER_COMBAT_STAT_BUMP, "luk": 65 + MONSTER_COMBAT_STAT_BUMP,
         "currency_reward": 33000, "exp_reward": 5000, "element": "", "element_neutral": True,
         "image_key": "wuji_sage",
     },
@@ -879,6 +893,28 @@ def _upgrade_monster_elements(conn):
         if not row["element"] and row["name"] in by_name:
             conn.execute(
                 "UPDATE monsters SET element = ? WHERE id = ?", (by_name[row["name"]], row["id"])
+            )
+
+
+def _bump_monster_combat_stats(conn):
+    """Syncs atk/def/agi/luk to DEFAULT_MONSTERS/HIDDEN_MONSTERS' current
+    values (matched by exact name), covering the flat MONSTER_COMBAT_STAT_BUMP
+    buff for monsters already seeded into an existing game.db -- the two
+    source lists alone only affect a brand-new database. hp/currency_reward/
+    exp_reward are left untouched. Safe to run every startup: once a row's
+    four stats match, this is a no-op, so it's also safe to re-run after any
+    future change to the bump amount."""
+    by_name = {m["name"]: m for m in DEFAULT_MONSTERS + HIDDEN_MONSTERS}
+    for row in conn.execute("SELECT id, name, atk, def, agi, luk FROM monsters"):
+        target = by_name.get(row["name"])
+        if target is None:
+            continue
+        current = (row["atk"], row["def"], row["agi"], row["luk"])
+        wanted = (target["atk"], target["def"], target["agi"], target["luk"])
+        if current != wanted:
+            conn.execute(
+                "UPDATE monsters SET atk = ?, def = ?, agi = ?, luk = ? WHERE id = ?",
+                wanted + (row["id"],),
             )
 
 
@@ -1409,6 +1445,7 @@ def seed_defaults():
     _seed_hidden_monsters(conn)
     _backfill_monster_image_keys(conn)
     _backfill_monster_luk(conn)
+    _bump_monster_combat_stats(conn)
 
     conn.commit()
     conn.close()

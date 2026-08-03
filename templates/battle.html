@@ -109,9 +109,14 @@
           <div style="background:var(--panel-2); border:1px solid var(--border); border-radius:6px; height:8px; overflow:hidden;">
             <div id="player-hp-fill" style="width:100%; height:100%; background:linear-gradient(90deg, var(--danger), var(--danger-bright)); transition: width 0.3s;"></div>
           </div>
-          <div id="player-hp-label" style="font-size:11px; color:var(--text-dim); margin-top:2px;">HP {{ player_stats.hp }}/{{ player_stats.hp }}</div>
+          <div id="player-hp-label" style="font-size:11px; color:var(--text-dim); margin-top:2px;">HP {{ max_hp | default(player_stats.hp) }}/{{ max_hp | default(player_stats.hp) }}</div>
         </div>
-        <div style="color:var(--text-dim);">MP {{ player_stats.mp }}</div>
+        <div style="width:120px; margin-bottom:4px;">
+          <div style="background:var(--panel-2); border:1px solid var(--border); border-radius:6px; height:8px; overflow:hidden;">
+            <div id="player-mp-fill" style="width:100%; height:100%; background:linear-gradient(90deg, var(--mp), var(--mp-bright)); transition: width 0.3s;"></div>
+          </div>
+          <div id="player-mp-label" style="font-size:11px; color:var(--text-dim); margin-top:2px;">MP {{ max_mp | default(player_stats.mp) }}/{{ max_mp | default(player_stats.mp) }}</div>
+        </div>
         <div style="color:var(--text-dim);">力量 {{ player_stats.str }}　防禦 {{ player_stats.def }}　敏捷 {{ player_stats.agi }}　幸運 {{ player_stats.luk }}</div>
       </div>
     </div>
@@ -244,7 +249,19 @@
       var enemyName = {{ monster.name | tojson if monster else '""' }};
       var playerHpFill = document.getElementById("player-hp-fill");
       var playerHpLabel = document.getElementById("player-hp-label");
-      var playerHpMax = {{ player_stats.hp | default(0) }};
+      // max_hp/max_mp (not player_stats.hp/.mp) so a level-up mid-fight is
+      // reflected correctly: player_stats is the PRE-fight stat snapshot,
+      // while max_hp/max_mp already account for stats_after when leveled_up
+      // (see the render_template("battle.html", ...) call sites in game.py).
+      var playerHpMax = {{ max_hp | default(player_stats.hp) | default(0) }};
+      var playerMpFill = document.getElementById("player-mp-fill");
+      var playerMpLabel = document.getElementById("player-mp-label");
+      var playerMpMax = {{ max_mp | default(player_stats.mp) | default(0) }};
+      // The combat log only ever mentions HP per hit, never MP, so unlike
+      // the HP bar the MP bar can't animate turn-by-turn -- it starts full
+      // and snaps once, straight to the real post-battle remaining MP, when
+      // the log finishes playing out (see appendLine's end-of-log branch).
+      var playerMpFinal = {{ player_mp | default(0) }};
       var enemyHpFill = document.getElementById("enemy-hp-fill");
       var enemyHpLabel = document.getElementById("enemy-hp-label");
       var enemyHpMax = {{ enemy_hp_max | default(0) }};
@@ -345,11 +362,11 @@
         }
       }
 
-      function updateHpBar(fillEl, labelEl, value, max) {
+      function updateHpBar(fillEl, labelEl, value, max, label) {
         if (!fillEl || !max) return;
         var pct = Math.max(0, Math.min(100, (value / max) * 100));
         fillEl.style.width = pct + "%";
-        if (labelEl) labelEl.textContent = "HP " + value + "/" + max;
+        if (labelEl) labelEl.textContent = (label || "HP") + " " + value + "/" + max;
       }
 
       function spawnFloat(sideEl, text, cls) {
@@ -364,6 +381,7 @@
 
       function appendLine() {
         if (i >= log.length) {
+          updateHpBar(playerMpFill, playerMpLabel, playerMpFinal, playerMpMax, "MP");
           result.style.display = "";
           result.classList.add("reveal");
           if (result.dataset.won === "true") {
