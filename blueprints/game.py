@@ -1872,12 +1872,17 @@ def game_recover():
 @game_bp.route("/game/inventory/use", methods=["POST"])
 @character_required
 def game_inventory_use():
-    """Use a 消耗品 (potion or return scroll) from the character's inventory.
-    Unlike game_recover this is NOT fortress-gated -- reachable from
-    anywhere, per the whole point of adding potions (no more walking back to
-    a fortress just to top off HP/MP mid-hunt). Still gated on the shared
-    per-character cooldown and still refreshes next_action_at on success,
-    matching every sibling world-action route in this file."""
+    """Use a 消耗品 (potion, money pouch, or return scroll) from the
+    character's inventory. Unlike game_recover this is NOT fortress-gated --
+    reachable from anywhere, per the whole point of adding potions (no more
+    walking back to a fortress just to top off HP/MP mid-hunt). Still gated
+    on the shared per-character cooldown and still refreshes next_action_at
+    on success, matching every sibling world-action route in this file --
+    that cooldown is charged once per batch, not once per item, which is the
+    whole point of supporting a quantity here (potions/pouches stacked to
+    heal or cash in several at once instead of one turn-wait per click).
+    return_scroll ignores quantity entirely -- teleporting more than once in
+    one action makes no sense, so it always consumes exactly 1."""
     db = get_db()
     character = db.execute(
         """SELECT characters.id, characters.next_action_at, characters.current_hp, characters.current_mp,
@@ -1915,6 +1920,14 @@ def game_inventory_use():
         flash("背包裡沒有這個道具")
         return redirect(url_for("game.game"))
 
+    try:
+        quantity = int(request.form.get("quantity", "1"))
+    except ValueError:
+        quantity = 1
+    quantity = max(1, min(quantity, owned["quantity"]))
+    if item["consumable_effect"] == "return_scroll":
+        quantity = 1
+
     settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
 
     if item["consumable_effect"] == "return_scroll":
@@ -1948,41 +1961,43 @@ def game_inventory_use():
         equipped_items = _fetch_equipped_items(db, character)
         stats = character_final_stats(character, equipped_items, settings)
         current_hp, current_mp = _current_hp_mp(character, stats)
+        total_amount = item["consumable_amount"] * quantity
         if item["consumable_effect"] == "heal_hp":
-            new_hp = min(stats["hp"], current_hp + item["consumable_amount"])
+            new_hp = min(stats["hp"], current_hp + total_amount)
             db.execute(
                 "UPDATE characters SET current_hp = ?, next_action_at = ? WHERE id = ?",
                 (new_hp, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
             )
         else:
-            new_mp = min(stats["mp"], current_mp + item["consumable_amount"])
+            new_mp = min(stats["mp"], current_mp + total_amount)
             db.execute(
                 "UPDATE characters SET current_mp = ?, next_action_at = ? WHERE id = ?",
                 (new_mp, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
             )
-        _remove_from_inventory(db, character["id"], item["id"], 1)
+        _remove_from_inventory(db, character["id"], item["id"], quantity)
         log_activity(
             db, session["user_id"], session["username"], "use_item",
-            detail=f"使用{item['name']}", ip_address=request.remote_addr,
+            detail=f"使用{item['name']} x{quantity}", ip_address=request.remote_addr,
         )
         db.commit()
         db.close()
-        flash(f"使用了「{item['name']}」")
+        flash(f"使用了「{item['name']}」x{quantity}")
         return redirect(url_for("game.game"))
 
     if item["consumable_effect"] == "currency":
+        total_amount = item["consumable_amount"] * quantity
         db.execute(
             "UPDATE characters SET currency = currency + ?, next_action_at = ? WHERE id = ?",
-            (item["consumable_amount"], _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+            (total_amount, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
         )
-        _remove_from_inventory(db, character["id"], item["id"], 1)
+        _remove_from_inventory(db, character["id"], item["id"], quantity)
         log_activity(
             db, session["user_id"], session["username"], "use_item",
-            detail=f"使用{item['name']}，獲得 {item['consumable_amount']} 諸神幣", ip_address=request.remote_addr,
+            detail=f"使用{item['name']} x{quantity}，獲得 {total_amount} 諸神幣", ip_address=request.remote_addr,
         )
         db.commit()
         db.close()
-        flash(f"使用了「{item['name']}」，獲得 {item['consumable_amount']} 諸神幣")
+        flash(f"使用了「{item['name']}」x{quantity}，獲得 {total_amount} 諸神幣")
         return redirect(url_for("game.game"))
 
     # Defensive fallback: an items row with an unrecognized consumable_effect

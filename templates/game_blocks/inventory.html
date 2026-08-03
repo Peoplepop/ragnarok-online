@@ -15,8 +15,12 @@
         {% endif %}
         持有 {{ item.quantity }} 件
       </span>
-      <form method="post" action="{{ url_for('game.game_inventory_use') }}">
+      <form method="post" action="{{ url_for('game.game_inventory_use') }}" style="display:flex; gap:6px; align-items:center;">
         <input type="hidden" name="item_id" value="{{ item.id }}">
+        {% if item.consumable_effect != 'return_scroll' %}
+        <input type="number" name="quantity" value="1" min="1" max="{{ item.quantity }}" style="width:56px; padding:4px 6px; font-size:13px;">
+        <button type="button" onclick="this.previousElementSibling.value={{ item.quantity }};" class="btn-info" style="padding:6px 10px; font-size:12px;">全部</button>
+        {% endif %}
         <button type="submit" class="turn-action-control btn-success" style="padding:6px 14px; font-size:13px;">使用</button>
       </form>
     </div>
