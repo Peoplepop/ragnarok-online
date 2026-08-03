@@ -134,6 +134,21 @@ def login():
         flash("此帳號已被管理員鎖定，暫時無法登入")
         return render_template("login.html")
 
+    if user["must_reset_password"]:
+        # Deliberately does NOT set session["user_id"] -- until the reset
+        # flow completes this account isn't "logged in" for login_required/
+        # character_required's purposes, so it can't reach anything else
+        # (including /game) by guessing a URL. Only pending_reset_user_id is
+        # set, which auth.reset_password itself checks for.
+        log_activity(
+            db, user["id"], user["username"], "login_forced_reset", ip_address=request.remote_addr,
+        )
+        db.commit()
+        db.close()
+        session["pending_reset_user_id"] = user["id"]
+        flash("管理員已重設你的密碼，請先設定一組新密碼")
+        return redirect(url_for("auth.reset_password"))
+
     db.execute(
         "UPDATE users SET last_login_at = datetime('now'), last_seen_at = datetime('now'), is_online = 1 WHERE id = ?",
         (user["id"],),
@@ -167,3 +182,49 @@ def logout():
         db.close()
     session.clear()
     return redirect(url_for("auth.index"))
+
+
+@auth_bp.route("/reset-password", methods=["GET", "POST"])
+def reset_password():
+    """Only reachable via the session["pending_reset_user_id"] auth.login
+    sets for an account with must_reset_password -- there is no normal
+    session["user_id"] at this point, so login_required/character_required
+    can't be used to gate this route the usual way."""
+    user_id = session.get("pending_reset_user_id")
+    if not user_id:
+        flash("請先登入")
+        return redirect(url_for("auth.login"))
+
+    if request.method == "GET":
+        return render_template("reset_password.html")
+
+    password = request.form.get("password", "")
+    confirm = request.form.get("confirm", "")
+
+    password_error = _validate_password(password)
+    if password_error:
+        flash(password_error)
+        return render_template("reset_password.html")
+    if password != confirm:
+        flash("兩次輸入的密碼不一致")
+        return render_template("reset_password.html")
+
+    db = get_db()
+    user = db.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
+    if user is None:
+        db.close()
+        session.pop("pending_reset_user_id", None)
+        flash("請先登入")
+        return redirect(url_for("auth.login"))
+
+    db.execute(
+        "UPDATE users SET password_hash = ?, must_reset_password = 0 WHERE id = ?",
+        (generate_password_hash(password), user_id),
+    )
+    log_activity(db, user_id, user["username"], "password_reset_complete", ip_address=request.remote_addr)
+    db.commit()
+    db.close()
+
+    session.pop("pending_reset_user_id", None)
+    flash("密碼已更新，請用新密碼重新登入")
+    return redirect(url_for("auth.login"))

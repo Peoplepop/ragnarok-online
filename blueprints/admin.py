@@ -2,10 +2,13 @@
 overrides (monster art / built-in avatar picker, see /admin/images below),
 and background image/music overrides (see /admin/backgrounds below)."""
 import os
+import secrets
 import sqlite3
+import string
 from datetime import datetime
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
+from werkzeug.security import generate_password_hash
 
 from db import get_db, LEVEL_CAP, log_activity, DEFAULT_MONSTERS, HIDDEN_MONSTERS
 from web_helpers import (
@@ -54,7 +57,7 @@ def admin():
 def admin_sessions():
     db = get_db()
     users = db.execute(
-        "SELECT id, username, is_admin, is_online, is_locked, last_login_at, last_seen_at "
+        "SELECT id, username, is_admin, is_online, is_locked, must_reset_password, last_login_at, last_seen_at "
         "FROM users WHERE is_npc = 0 ORDER BY last_seen_at IS NULL, last_seen_at DESC"
     ).fetchall()
     db.close()
@@ -79,6 +82,7 @@ def admin_sessions():
             "username": u["username"],
             "is_admin": u["is_admin"],
             "is_locked": u["is_locked"],
+            "must_reset_password": u["must_reset_password"],
             "status": status,
             "last_login_at": u["last_login_at"],
             "last_seen_at": u["last_seen_at"],
@@ -117,6 +121,52 @@ def admin_toggle_user_lock(user_id):
     db.commit()
     db.close()
     flash(f"已{'鎖定' if new_locked else '解除鎖定'}帳號「{target['username']}」")
+    return redirect(url_for("admin.admin_sessions"))
+
+
+def _generate_temp_password():
+    """A random password that already satisfies _validate_password's own
+    complexity rule (digit + lower + upper), so the admin never has to
+    manually retry -- one guaranteed char from each required class, padded
+    to 10 with a shared pool, then shuffled so the classes aren't positional."""
+    required = [
+        secrets.choice(string.ascii_uppercase),
+        secrets.choice(string.ascii_lowercase),
+        secrets.choice(string.digits),
+    ]
+    pool = string.ascii_letters + string.digits
+    chars = required + [secrets.choice(pool) for _ in range(7)]
+    secrets.SystemRandom().shuffle(chars)
+    return "".join(chars)
+
+
+@admin_bp.route("/admin/users/<int:user_id>/reset_password", methods=["POST"])
+@admin_required
+def admin_reset_user_password(user_id):
+    db = get_db()
+    target = db.execute(
+        "SELECT id, username, is_npc FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    if target is None or target["is_npc"]:
+        db.close()
+        flash("找不到這個玩家帳號")
+        return redirect(url_for("admin.admin_sessions"))
+
+    temp_password = _generate_temp_password()
+    db.execute(
+        "UPDATE users SET password_hash = ?, must_reset_password = 1 WHERE id = ?",
+        (generate_password_hash(temp_password), target["id"]),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "admin_reset_password",
+        detail=target["username"], ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+    flash(
+        f"已重設「{target['username']}」的密碼，臨時密碼為「{temp_password}」，請告知玩家；"
+        f"玩家登入後會直接進入設定新密碼的畫面"
+    )
     return redirect(url_for("admin.admin_sessions"))
 
 

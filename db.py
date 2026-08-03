@@ -616,6 +616,12 @@ def _ensure_session_columns(conn):
         conn.execute("ALTER TABLE users ADD COLUMN is_online INTEGER NOT NULL DEFAULT 0")
     if "is_locked" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN is_locked INTEGER NOT NULL DEFAULT 0")
+    if "must_reset_password" not in cols:
+        # Set by an admin's "重設密碼" action (blueprints/admin.py) alongside a
+        # fresh random password_hash -- forces the next successful login to
+        # go straight to auth.reset_password instead of the game (see
+        # auth.login), and is cleared once that flow completes.
+        conn.execute("ALTER TABLE users ADD COLUMN must_reset_password INTEGER NOT NULL DEFAULT 0")
 
 
 def _ensure_user_avatar_columns(conn):

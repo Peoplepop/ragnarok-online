@@ -31,6 +31,7 @@
             {{ r.username }}
             {% if r.is_admin %}<span style="color:var(--gold); font-size:11px;">管理員</span>{% endif %}
             {% if r.is_locked %}<span style="color:var(--danger); font-size:11px;">🔒 已鎖定</span>{% endif %}
+            {% if r.must_reset_password %}<span style="color:var(--gold-bright); font-size:11px;">🔑 待重設密碼</span>{% endif %}
           </td>
           <td style="padding:8px 6px; color: {{ 'var(--gold-bright)' if r.status=='在線' else 'var(--text-dim)' }};">{{ r.status }}</td>
           <td style="padding:8px 6px; color:var(--text-dim);">{{ r.last_login_at or '-' }}</td>
@@ -46,6 +47,10 @@
                 <button type="submit" class="btn" style="padding:4px 10px; font-size:12px;">
                   {{ '🔓 解除鎖定' if r.is_locked else '🔒 鎖定帳號' }}
                 </button>
+              </form>
+              <form method="post" action="{{ url_for('admin.admin_reset_user_password', user_id=r.id) }}"
+                    onsubmit="return confirm('確定要重設「{{ r.username }}」的密碼嗎？系統會產生一組新的臨時密碼，玩家下次登入時會被要求立即設定新密碼。');">
+                <button type="submit" class="btn" style="padding:4px 10px; font-size:12px;">🔑 重設密碼</button>
               </form>
               <form method="post" action="{{ url_for('admin.admin_delete_user', user_id=r.id) }}"
                     onsubmit="return confirm('確定要刪除玩家「{{ r.username }}」嗎？角色、裝備、交易、聊天、活動紀錄等所有資料都會一併永久刪除，此動作無法復原。');">
