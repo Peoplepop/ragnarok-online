@@ -1254,6 +1254,11 @@ def _ensure_game_settings_columns(conn):
         conn.execute(
             "ALTER TABLE game_settings ADD COLUMN avatar_change_base_cost INTEGER NOT NULL DEFAULT 5000"
         )
+    if "potion_drop_percent" not in cols:
+        # Consolation-prize roll for an ordinary hunt/魔王房間 win that didn't
+        # already drop anything else this fight (no 秘境/魔王套裝/技能書) -- see
+        # _roll_potion_drop in blueprints/game.py.
+        conn.execute("ALTER TABLE game_settings ADD COLUMN potion_drop_percent REAL NOT NULL DEFAULT 5")
     # /game action-panel display order -- key set + order here MUST be kept in
     # sync with game_data.constants.GAME_LAYOUT_BLOCKS (same keys, same order).
     if "action_block_order" not in cols:

@@ -48,6 +48,7 @@ ACTION_LABELS = {
     "learn_skill": "學習技能",
     "skill_book_drop": "掉落技能書",
     "hidden_loot_drop": "秘境掉寶",
+    "potion_drop": "掉落藥水",
     "tournament_champion": "天下武道大會優勝",
     "feedback_submit": "提交意見箱建議",
     "debug_reset": "（除錯）重置角色",
