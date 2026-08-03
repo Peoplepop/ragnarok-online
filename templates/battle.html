@@ -394,6 +394,7 @@
       var cooldownRemaining = {{ cooldown_seconds | default(0) }};
       var maxHpAfter = {{ max_hp | default(0) }};
       var playerHpAfter = {{ player_hp | default(0) }};
+      var bossRoomAvailable = {{ 'true' if boss_room_available else 'false' }};
       var LOW_HP_RATIO = 0.2;
 
       var continueForm = document.getElementById("continue-hunt-form");
@@ -470,6 +471,14 @@
         armed = false;
         persistArmed(false);
         setStatus("已停止自動挑戰：HP 過低（低於上限 " + Math.round(LOW_HP_RATIO * 100) + "%）");
+      } else if (armed && bossRoomAvailable) {
+        // A guardian win just unlocked a one-time boss-room invitation
+        // (server-side `pending_boss_monster_id`); continuing the auto-loop
+        // would silently overwrite it with the next regular hunt before the
+        // player ever sees it, so pause here and let them decide by hand.
+        armed = false;
+        persistArmed(false);
+        setStatus("已暫停自動挑戰：出現魔王房間邀請，請自行選擇是否進攻");
       }
 
       function renderToggle() {
