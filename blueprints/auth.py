@@ -218,7 +218,7 @@ def reset_password():
         return redirect(url_for("auth.login"))
 
     db.execute(
-        "UPDATE users SET password_hash = ?, must_reset_password = 0 WHERE id = ?",
+        "UPDATE users SET password_hash = ?, must_reset_password = 0, password_reset_requested = 0 WHERE id = ?",
         (generate_password_hash(password), user_id),
     )
     log_activity(db, user_id, user["username"], "password_reset_complete", ip_address=request.remote_addr)
@@ -228,3 +228,72 @@ def reset_password():
     session.pop("pending_reset_user_id", None)
     flash("密碼已更新，請用新密碼重新登入")
     return redirect(url_for("auth.login"))
+
+
+@auth_bp.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    """Self-service entry point for a player who can't log in at all (so
+    auth.reset_password's own session["pending_reset_user_id"] gate, which
+    only auth.login sets after a successful password check, is unreachable
+    for them). Instead this remembers the claimed username in THIS browser's
+    session (session["forgot_password_username"]) across a request/approve/
+    revisit cycle -- no email, so re-checking on GET is the only way this
+    browser finds out an admin has approved it."""
+    username = session.get("forgot_password_username")
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        db = get_db()
+        user = db.execute(
+            "SELECT id, username, is_npc, must_reset_password, password_reset_requested "
+            "FROM users WHERE username = ?", (username,),
+        ).fetchone()
+        if user is None or user["is_npc"]:
+            db.close()
+            flash("找不到這個帳號")
+            return render_template("forgot_password.html", state="form")
+
+        session["forgot_password_username"] = username
+        if user["must_reset_password"]:
+            # Already approved (or an admin reset it directly without a
+            # request ever being filed) -- skip straight to the same reset
+            # screen auth.login's forced-reset path uses.
+            db.close()
+            session["pending_reset_user_id"] = user["id"]
+            session.pop("forgot_password_username", None)
+            return redirect(url_for("auth.reset_password"))
+
+        if not user["password_reset_requested"]:
+            db.execute(
+                "UPDATE users SET password_reset_requested = 1 WHERE id = ?", (user["id"],)
+            )
+            log_activity(
+                db, user["id"], user["username"], "password_reset_requested",
+                ip_address=request.remote_addr,
+            )
+            db.commit()
+        db.close()
+        return render_template("forgot_password.html", state="pending")
+
+    if not username:
+        return render_template("forgot_password.html", state="form")
+
+    db = get_db()
+    user = db.execute(
+        "SELECT id, must_reset_password, password_reset_requested FROM users WHERE username = ?",
+        (username,),
+    ).fetchone()
+    db.close()
+
+    if user is None:
+        session.pop("forgot_password_username", None)
+        return render_template("forgot_password.html", state="form")
+    if user["must_reset_password"]:
+        session["pending_reset_user_id"] = user["id"]
+        session.pop("forgot_password_username", None)
+        return redirect(url_for("auth.reset_password"))
+    if user["password_reset_requested"]:
+        return render_template("forgot_password.html", state="pending")
+
+    session.pop("forgot_password_username", None)
+    return render_template("forgot_password.html", state="form")

@@ -57,7 +57,8 @@ def admin():
 def admin_sessions():
     db = get_db()
     users = db.execute(
-        "SELECT id, username, is_admin, is_online, is_locked, must_reset_password, last_login_at, last_seen_at "
+        "SELECT id, username, is_admin, is_online, is_locked, must_reset_password, "
+        "password_reset_requested, last_login_at, last_seen_at "
         "FROM users WHERE is_npc = 0 ORDER BY last_seen_at IS NULL, last_seen_at DESC"
     ).fetchall()
     db.close()
@@ -83,6 +84,7 @@ def admin_sessions():
             "is_admin": u["is_admin"],
             "is_locked": u["is_locked"],
             "must_reset_password": u["must_reset_password"],
+            "password_reset_requested": u["password_reset_requested"],
             "status": status,
             "last_login_at": u["last_login_at"],
             "last_seen_at": u["last_seen_at"],
@@ -167,6 +169,41 @@ def admin_reset_user_password(user_id):
         f"已重設「{target['username']}」的密碼，臨時密碼為「{temp_password}」，請告知玩家；"
         f"玩家登入後會直接進入設定新密碼的畫面"
     )
+    return redirect(url_for("admin.admin_sessions"))
+
+
+@admin_bp.route("/admin/users/<int:user_id>/approve_password_reset", methods=["POST"])
+@admin_required
+def admin_approve_password_reset(user_id):
+    """Approves a player's self-service "忘記密碼" request (auth.forgot_password)
+    -- unlike admin_reset_user_password above, this never touches
+    password_hash at all, since the player sets their own new password
+    directly once they revisit /forgot-password and it notices
+    must_reset_password has flipped on."""
+    db = get_db()
+    target = db.execute(
+        "SELECT id, username, is_npc, password_reset_requested FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    if target is None or target["is_npc"]:
+        db.close()
+        flash("找不到這個玩家帳號")
+        return redirect(url_for("admin.admin_sessions"))
+    if not target["password_reset_requested"]:
+        db.close()
+        flash("這個帳號目前沒有忘記密碼的申請")
+        return redirect(url_for("admin.admin_sessions"))
+
+    db.execute(
+        "UPDATE users SET password_reset_requested = 0, must_reset_password = 1 WHERE id = ?",
+        (target["id"],),
+    )
+    log_activity(
+        db, session["user_id"], session["username"], "admin_approve_password_reset",
+        detail=target["username"], ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+    flash(f"已核准「{target['username']}」的忘記密碼申請，玩家回到忘記密碼頁面即可自行設定新密碼")
     return redirect(url_for("admin.admin_sessions"))
 
 
