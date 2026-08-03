@@ -1,21 +1,20 @@
-{% if current_tile.tile_type in ('fortress', 'town') %}
 <details class="panel" id="block-{{ block_key }}" open style="flex:1 1 380px;">
   <summary><h3 style="margin:0; color:var(--gold-bright); font-size:15px;">🏪 商店與交易</h3></summary>
   <div class="panel-body">
   <div style="display:flex; flex-direction:column; gap:10px; align-items:flex-start;">
     {% if current_tile.tile_type == 'fortress' %}
     <a href="{{ url_for('game.game_shop') }}" class="btn btn-success" style="padding:8px 18px; font-size:13px;">🏪 前往要塞商店</a>
+    {% elif current_tile.tile_type == 'town' %}
+    <a href="{{ url_for('game.game_shop') }}" class="btn btn-success" style="padding:8px 18px; font-size:13px;">🏪 前往城鎮商店</a>
+    {% endif %}
+    {# 交易不限地點 -- 跟商店/回復不同，任何地方都能邀請/進行交易 #}
     <a href="{{ url_for('trade.trade_home') }}" class="btn btn-success" style="padding:8px 18px; font-size:13px;">🤝 交易</a>
-    {% if current_hp < stats.hp or current_mp < stats.mp %}
+    {% if current_tile.tile_type == 'fortress' and (current_hp < stats.hp or current_mp < stats.mp) %}
     <form method="post" action="{{ url_for('game.game_recover') }}" style="display:flex; flex-direction:column; gap:6px;">
       <button type="submit" class="btn-success" style="padding:8px 18px; font-size:13px;">✨ 回復 HP／MP（{{ recover_cost }} 諸神幣）</button>
       <span class="hint" style="margin:0;">費用將計入「{{ current_tile.country_name }}」國庫</span>
     </form>
     {% endif %}
-    {% else %}
-    <a href="{{ url_for('game.game_shop') }}" class="btn btn-success" style="padding:8px 18px; font-size:13px;">🏪 前往城鎮商店</a>
-    {% endif %}
   </div>
   </div>
 </details>
-{% endif %}
