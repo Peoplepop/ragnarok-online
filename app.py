@@ -235,7 +235,16 @@ def _session_activity():
         flash(f"閒置超過 {IDLE_THRESHOLD_MINUTES} 分鐘，系統已自動將您登出")
         return redirect(url_for("auth.login"))
 
-    db.execute("UPDATE users SET last_seen_at = datetime('now') WHERE id = ?", (user_id,))
+    # Also self-heals is_online back to 1 here, not just at login: is_online
+    # is one flag per ACCOUNT, but a player can hold multiple valid session
+    # cookies at once (another tab, another device). If any one of those
+    # logs out or idles out, it flips is_online to 0 for the whole account
+    # -- while THIS tab's cookie stays perfectly valid and keeps making
+    # requests, permanently stuck showing "offline" (e.g. to /trade's
+    # online-gating) until its owner happens to log in fresh somewhere.
+    # Reaching this line at all means the current request has a valid,
+    # non-idle session, so the account genuinely is in use right now.
+    db.execute("UPDATE users SET last_seen_at = datetime('now'), is_online = 1 WHERE id = ?", (user_id,))
     db.commit()
     db.close()
 
