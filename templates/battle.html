@@ -268,22 +268,23 @@
         return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       }
 
-      // Highlights just the "會心一擊" substring (purple, bold) and just the
-      // skill name inside 使出「...」(colored by its element) -- the rest of
-      // the line keeps its normal styling instead of the whole sentence
-      // changing color/size.
+      // Highlights just the "會心一擊" substring (purple, bold, 2x size) and
+      // just the skill name inside 使出「...」(colored by its element, bold,
+      // 2x size) -- the rest of the line keeps its normal styling instead of
+      // the whole sentence changing color/size.
+      var HIGHLIGHT_STYLE = "font-weight:bold; font-size:2em; line-height:1;";
       function highlightLine(text) {
         var html = escapeHtml(text);
         html = html.replace(skillNameRe, function (match, skillName) {
           var element = skillElementByName[skillName];
           var color = element ? elementColors[element] : null;
           var styled = color
-            ? '<span style="color:' + color + '; font-weight:bold;">' + skillName + "</span>"
+            ? '<span style="color:' + color + "; " + HIGHLIGHT_STYLE + '">' + skillName + "</span>"
             : skillName;
           return "使出「" + styled + "」";
         });
         html = html.replace(/會心一擊/g, function (match) {
-          return '<span style="color:' + CRIT_COLOR + '; font-weight:bold;">' + match + "</span>";
+          return '<span style="color:' + CRIT_COLOR + "; " + HIGHLIGHT_STYLE + '">' + match + "</span>";
         });
         return html;
       }
