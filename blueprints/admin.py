@@ -474,6 +474,8 @@ def admin_update_game_settings():
         boss_exp_multiplier = float(request.form.get("boss_exp_multiplier", ""))
         boss_set_drop_percent = float(request.form.get("boss_set_drop_percent", ""))
         potion_drop_percent = float(request.form.get("potion_drop_percent", ""))
+        small_money_pouch_drop_percent = float(request.form.get("small_money_pouch_drop_percent", ""))
+        large_money_pouch_drop_percent = float(request.form.get("large_money_pouch_drop_percent", ""))
         shop_tax_percent = float(request.form.get("shop_tax_percent", ""))
         heal_cost_per_point = float(request.form.get("heal_cost_per_point", ""))
         town_defense_level = int(request.form.get("town_defense_level", ""))
@@ -541,6 +543,13 @@ def admin_update_game_settings():
 
     if potion_drop_percent < 0 or potion_drop_percent > 100:
         flash("藥水掉落機率須介於 0 到 100 之間")
+        return redirect(url_for("admin.admin_settings"))
+
+    if (
+        small_money_pouch_drop_percent < 0 or small_money_pouch_drop_percent > 100
+        or large_money_pouch_drop_percent < 0 or large_money_pouch_drop_percent > 100
+    ):
+        flash("錢袋掉落機率須介於 0 到 100 之間")
         return redirect(url_for("admin.admin_settings"))
 
     if same_bracket_encounter_percent < 0 or same_bracket_encounter_percent > 100:
@@ -651,7 +660,8 @@ def admin_update_game_settings():
                hidden_taiji_trigger_percent = ?, hidden_wuji_trigger_percent = ?,
                hidden_taiji_drop_percent = ?, hidden_wuji_drop_percent = ?,
                avatar_change_base_cost = ?, same_bracket_encounter_percent = ?,
-               potion_drop_percent = ?
+               potion_drop_percent = ?, small_money_pouch_drop_percent = ?,
+               large_money_pouch_drop_percent = ?
            WHERE id = 1""",
         (
             turn_wait_seconds, exp_base, exp_growth_novice_percent,
@@ -675,7 +685,8 @@ def admin_update_game_settings():
             hidden_taiji_trigger_percent, hidden_wuji_trigger_percent,
             hidden_taiji_drop_percent, hidden_wuji_drop_percent,
             avatar_change_base_cost, same_bracket_encounter_percent,
-            potion_drop_percent,
+            potion_drop_percent, small_money_pouch_drop_percent,
+            large_money_pouch_drop_percent,
         ),
     )
     db.commit()

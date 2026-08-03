@@ -203,6 +203,12 @@
     {% if potion_dropped %}
     <p style="margin:10px 0 0; font-size:13px; color:var(--gold-bright);">🧪 意外收穫！你獲得了「{{ potion_dropped.name }}」，已放入背包！</p>
     {% endif %}
+    {% if small_pouch_dropped %}
+    <p style="margin:10px 0 0; font-size:22px; font-weight:700; color:var(--gold-bright);">💰 你獲得了「{{ small_pouch_dropped.name }}」，已放入背包！</p>
+    {% endif %}
+    {% if large_pouch_dropped %}
+    <p style="margin:10px 0 0; font-size:22px; font-weight:700; color:var(--gold-bright);">💰 你獲得了「{{ large_pouch_dropped.name }}」，已放入背包！</p>
+    {% endif %}
     {% if boss_room_available %}
     <form method="post" action="{{ url_for('game.game_hunt_boss_room') }}" style="display:inline-block; margin-top:14px;">
       <p class="hint" style="margin:0 0 8px;">你擊敗了守衛怪，可以選擇挑戰魔王房間，或直接返回主畫面</p>
@@ -307,7 +313,7 @@
       }
 
       var leveledUp = {{ 'true' if leveled_up else 'false' }};
-      var lootDropped = {{ 'true' if (hidden_loot_dropped or boss_set_dropped or skill_book_dropped or potion_dropped) else 'false' }};
+      var lootDropped = {{ 'true' if (hidden_loot_dropped or boss_set_dropped or skill_book_dropped or potion_dropped or small_pouch_dropped or large_pouch_dropped) else 'false' }};
 
       function soundEnabled() {
         try {

@@ -175,6 +175,15 @@ _MAJOR_EVENT_MESSAGE_BUILDERS = {
     "hidden_loot_drop": lambda username, detail: f"✨ {username} 在秘境獲得寶物：{detail}",
     "boss_set_drop": lambda username, detail: f"👑 {username} {detail}",
     "tournament_champion": lambda username, detail: f"🏆 {detail} 奪得本屆天下武道大會冠軍！",
+    # detail is already the full "角色名 已X轉為「職業」" phrase (set at
+    # log_activity call time in blueprints/character.py's promote_tier1..4),
+    # same self-contained-detail convention as character_create above --
+    # username here is the ACCOUNT username, less useful than the character
+    # name already baked into detail, so it's ignored just like there.
+    "promote_tier1": lambda username, detail: f"🎓 {detail}",
+    "promote_tier2": lambda username, detail: f"🎓 {detail}",
+    "promote_tier3": lambda username, detail: f"🎓 {detail}",
+    "promote_tier4": lambda username, detail: f"🌟 {detail}",
 }
 
 

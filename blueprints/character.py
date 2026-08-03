@@ -811,7 +811,7 @@ def character_promote_tier1():
     )
     log_activity(
         db, session["user_id"], session["username"], "promote_tier1",
-        detail=job_name, ip_address=request.remote_addr,
+        detail=f"{character['character_name']} 已一轉為「{job_name}」", ip_address=request.remote_addr,
     )
     db.commit()
 
@@ -870,7 +870,7 @@ def character_promote_tier2():
     )
     log_activity(
         db, session["user_id"], session["username"], "promote_tier2",
-        detail=job_name, ip_address=request.remote_addr,
+        detail=f"{character['character_name']} 已二轉為「{job_name}」", ip_address=request.remote_addr,
     )
     db.commit()
 
@@ -929,7 +929,7 @@ def character_promote_tier3():
     )
     log_activity(
         db, session["user_id"], session["username"], "promote_tier3",
-        detail=job_name, ip_address=request.remote_addr,
+        detail=f"{character['character_name']} 已三轉為「{job_name}」", ip_address=request.remote_addr,
     )
     db.commit()
 
@@ -986,7 +986,8 @@ def character_promote_tier4():
     )
     log_activity(
         db, session["user_id"], session["username"], "promote_tier4",
-        detail=job_name, ip_address=request.remote_addr,
+        detail=f"{character['character_name']} 已四轉為「{job_name}」，職業旅程至此圓滿",
+        ip_address=request.remote_addr,
     )
     db.commit()
 

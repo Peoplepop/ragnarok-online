@@ -155,6 +155,23 @@ def _roll_potion_drop(db, settings, character_id):
     return dropped
 
 
+def _roll_money_pouch_drop(db, drop_percent, item_name, character_id):
+    """Independent post-WIN drop roll for every ordinary hunt/魔王房間 win,
+    same convention as _roll_potion_drop -- never gated on whatever else the
+    fight already dropped, so a small AND large pouch can both land on the
+    same kill. Only one item name to pick from (unlike the 2-potion pool),
+    so this looks it up directly by exact name rather than via random.choice
+    over a pool. Returns the dropped item row, or None when the roll failed
+    (or, defensively, if the named item somehow isn't seeded)."""
+    if random.random() * 100 >= drop_percent:
+        return None
+    item = db.execute("SELECT * FROM items WHERE name = ?", (item_name,)).fetchone()
+    if item is None:
+        return None
+    _add_to_inventory(db, character_id, item["id"], 1)
+    return item
+
+
 def _debuffed_monster(monster, special_effects):
     """A plain-dict copy of a monster row with its hp/atk/def/agi/luk scaled
     down by the wearer's 怪物弱化 (enemy_debuff) percent, floored at 1 so a huge
@@ -314,11 +331,15 @@ def _render_game(**extra):
 
     # 重大事件 sidebar: a curated subset of activity_log (see
     # _major_event_feed) -- new players joining a country, 秘境 loot drops,
-    # and 天下武道大會 champions. Global across every player, not scoped to
-    # this character, so it's read here rather than filtered by user_id.
+    # 天下武道大會 champions, and job promotions (一轉~四轉). Global across
+    # every player, not scoped to this character, so it's read here rather
+    # than filtered by user_id.
     major_event_rows = db.execute(
         """SELECT action, detail, username, created_at FROM activity_log
-           WHERE action IN ('character_create', 'hidden_loot_drop', 'boss_set_drop', 'tournament_champion')
+           WHERE action IN (
+               'character_create', 'hidden_loot_drop', 'boss_set_drop', 'tournament_champion',
+               'promote_tier1', 'promote_tier2', 'promote_tier3', 'promote_tier4'
+           )
            ORDER BY created_at DESC LIMIT 100"""
     ).fetchall()
     major_events = _major_event_feed(major_event_rows)
@@ -729,6 +750,8 @@ def game_hunt():
     hidden_loot_dropped = None
     boss_set_dropped = None
     potion_dropped = None
+    small_pouch_dropped = None
+    large_pouch_dropped = None
     leveled_up = False
     stats_after = None
     if result["won"]:
@@ -823,6 +846,26 @@ def game_hunt():
                 detail=f"擊敗{monster['name']}，獲得「{potion_dropped['name']}」",
                 ip_address=request.remote_addr,
             )
+        # 錢袋 drops: same "independent roll every win" convention as the
+        # potion drop above -- can stack with it and with each other.
+        small_pouch_dropped = _roll_money_pouch_drop(
+            db, settings["small_money_pouch_drop_percent"], "小錢袋", character["character_id"],
+        )
+        if small_pouch_dropped is not None:
+            log_activity(
+                db, session["user_id"], session["username"], "money_pouch_drop",
+                detail=f"擊敗{monster['name']}，獲得「{small_pouch_dropped['name']}」",
+                ip_address=request.remote_addr,
+            )
+        large_pouch_dropped = _roll_money_pouch_drop(
+            db, settings["large_money_pouch_drop_percent"], "大錢袋", character["character_id"],
+        )
+        if large_pouch_dropped is not None:
+            log_activity(
+                db, session["user_id"], session["username"], "money_pouch_drop",
+                detail=f"擊敗{monster['name']}，獲得「{large_pouch_dropped['name']}」",
+                ip_address=request.remote_addr,
+            )
     elif not result["timed_out"]:
         currency_lost = character["currency"] // 2
         new_currency = character["currency"] - currency_lost
@@ -905,6 +948,8 @@ def game_hunt():
         skill_book_dropped=skill_book_dropped,
         boss_set_dropped=boss_set_dropped,
         potion_dropped=potion_dropped,
+        small_pouch_dropped=small_pouch_dropped,
+        large_pouch_dropped=large_pouch_dropped,
         log=result["log"],
         won=result["won"],
         timed_out=result["timed_out"],
@@ -994,6 +1039,8 @@ def game_hunt_boss_room():
     stat_gain = {key: 0 for key in LEVEL_UP_POINT_VALUE}
     boss_set_dropped = None
     potion_dropped = None
+    small_pouch_dropped = None
+    large_pouch_dropped = None
     leveled_up = False
     stats_after = None
     if result["won"]:
@@ -1024,6 +1071,26 @@ def game_hunt_boss_room():
             log_activity(
                 db, session["user_id"], session["username"], "potion_drop",
                 detail=f"擊敗{boss['name']}，獲得「{potion_dropped['name']}」",
+                ip_address=request.remote_addr,
+            )
+        # 錢袋 drops: same "independent roll every win" convention as the
+        # potion drop above -- can stack with it and with each other.
+        small_pouch_dropped = _roll_money_pouch_drop(
+            db, settings["small_money_pouch_drop_percent"], "小錢袋", character["character_id"],
+        )
+        if small_pouch_dropped is not None:
+            log_activity(
+                db, session["user_id"], session["username"], "money_pouch_drop",
+                detail=f"擊敗{boss['name']}，獲得「{small_pouch_dropped['name']}」",
+                ip_address=request.remote_addr,
+            )
+        large_pouch_dropped = _roll_money_pouch_drop(
+            db, settings["large_money_pouch_drop_percent"], "大錢袋", character["character_id"],
+        )
+        if large_pouch_dropped is not None:
+            log_activity(
+                db, session["user_id"], session["username"], "money_pouch_drop",
+                detail=f"擊敗{boss['name']}，獲得「{large_pouch_dropped['name']}」",
                 ip_address=request.remote_addr,
             )
         new_level, new_exp, stat_gain = apply_exp(
@@ -1098,6 +1165,8 @@ def game_hunt_boss_room():
         boss_room_challenge=True,
         boss_set_dropped=boss_set_dropped,
         potion_dropped=potion_dropped,
+        small_pouch_dropped=small_pouch_dropped,
+        large_pouch_dropped=large_pouch_dropped,
         log=result["log"],
         won=result["won"],
         timed_out=result["timed_out"],
@@ -1901,6 +1970,21 @@ def game_inventory_use():
         flash(f"使用了「{item['name']}」")
         return redirect(url_for("game.game"))
 
+    if item["consumable_effect"] == "currency":
+        db.execute(
+            "UPDATE characters SET currency = currency + ?, next_action_at = ? WHERE id = ?",
+            (item["consumable_amount"], _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+        )
+        _remove_from_inventory(db, character["id"], item["id"], 1)
+        log_activity(
+            db, session["user_id"], session["username"], "use_item",
+            detail=f"使用{item['name']}，獲得 {item['consumable_amount']} 諸神幣", ip_address=request.remote_addr,
+        )
+        db.commit()
+        db.close()
+        flash(f"使用了「{item['name']}」，獲得 {item['consumable_amount']} 諸神幣")
+        return redirect(url_for("game.game"))
+
     # Defensive fallback: an items row with an unrecognized consumable_effect
     # value should never exist, but fail closed with a clean flash rather
     # than a 500 if one somehow does.
@@ -1954,6 +2038,7 @@ def game_shop():
         """SELECT items.*, countries.name AS set_country_name, countries.element AS set_element
            FROM items LEFT JOIN countries ON countries.id = items.country_id
            WHERE items.hidden_set_key IS NULL
+             AND (items.consumable_effect IS NULL OR items.consumable_effect != 'currency')
              AND (? = 0 OR items.shop_type = 'consumable')
              AND (
                (
