@@ -10,7 +10,7 @@ from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
 from werkzeug.security import generate_password_hash
 
-from db import get_db, LEVEL_CAP, log_activity, DEFAULT_MONSTERS, HIDDEN_MONSTERS
+from db import get_db, LEVEL_CAP, log_activity, DEFAULT_MONSTERS, HIDDEN_MONSTERS, _bump_monster_combat_stats
 from web_helpers import (
     admin_required, _parse_dt, _valid_war_time, _format_duration, _sanitized_action_block_order,
     avatar_url, monster_image_url, _process_square_image_upload,
@@ -476,6 +476,7 @@ def admin_update_game_settings():
         potion_drop_percent = float(request.form.get("potion_drop_percent", ""))
         small_money_pouch_drop_percent = float(request.form.get("small_money_pouch_drop_percent", ""))
         large_money_pouch_drop_percent = float(request.form.get("large_money_pouch_drop_percent", ""))
+        monster_combat_stat_bump = int(request.form.get("monster_combat_stat_bump", ""))
         shop_tax_percent = float(request.form.get("shop_tax_percent", ""))
         heal_cost_per_point = float(request.form.get("heal_cost_per_point", ""))
         town_defense_level = int(request.form.get("town_defense_level", ""))
@@ -661,7 +662,7 @@ def admin_update_game_settings():
                hidden_taiji_drop_percent = ?, hidden_wuji_drop_percent = ?,
                avatar_change_base_cost = ?, same_bracket_encounter_percent = ?,
                potion_drop_percent = ?, small_money_pouch_drop_percent = ?,
-               large_money_pouch_drop_percent = ?
+               large_money_pouch_drop_percent = ?, monster_combat_stat_bump = ?
            WHERE id = 1""",
         (
             turn_wait_seconds, exp_base, exp_growth_novice_percent,
@@ -686,9 +687,13 @@ def admin_update_game_settings():
             hidden_taiji_drop_percent, hidden_wuji_drop_percent,
             avatar_change_base_cost, same_bracket_encounter_percent,
             potion_drop_percent, small_money_pouch_drop_percent,
-            large_money_pouch_drop_percent,
+            large_money_pouch_drop_percent, monster_combat_stat_bump,
         ),
     )
+    # Applied immediately rather than waiting for the next server restart --
+    # seed_defaults() only runs at startup, so without this an admin
+    # changing the bump wouldn't see monsters actually update until then.
+    _bump_monster_combat_stats(db, monster_combat_stat_bump)
     db.commit()
     db.close()
 

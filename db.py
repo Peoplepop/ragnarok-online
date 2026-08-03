@@ -471,16 +471,16 @@ BOSS_STAT_MULT = 1.5
 BOSS_CURRENCY_MULT = 5.0
 _STAT_KEYS = ("hp", "atk", "def", "agi", "luk")
 
-# Flat buff applied to every monster's four combat stats (攻擊/防禦/敏捷/幸運 --
-# the "水平" row shown on the battle screen, as opposed to hp which gets its
-# own bar) -- hp/currency_reward/exp_reward are untouched. See
-# _bump_monster_combat_stats for how this reaches monsters already seeded
-# into an existing game.db, since _build_default_monsters/HIDDEN_MONSTERS
-# alone only affect a brand-new database. Started at +2 (2026-08), then
-# raised by another +10 on top (2026-08, same day) -- cumulative +12 from
-# the original values; _bump_monster_combat_stats re-syncs every startup,
-# so bumping this constant further is always enough on its own.
-MONSTER_COMBAT_STAT_BUMP = 12
+# The admin-configurable flat buff applied to every monster's four combat
+# stats (攻擊/防禦/敏捷/幸運 -- the "水平" row shown on the battle screen, as
+# opposed to hp which gets its own bar) lives entirely in
+# game_settings.monster_combat_stat_bump now (see
+# _ensure_game_settings_columns' DEFAULT 12, and the /admin/settings field)
+# -- DEFAULT_MONSTERS/HIDDEN_MONSTERS below intentionally stay at their BASE
+# (unbumped) values, since they're also matched by name elsewhere (item
+# drops, _upgrade_monster_elements, etc.) where the bump is irrelevant.
+# _bump_monster_combat_stats reads the live setting and applies it on top of
+# these base values onto the actual monsters table rows every startup.
 _NON_HP_STAT_KEYS = ("atk", "def", "agi", "luk")
 
 
@@ -500,9 +500,9 @@ def _build_default_monsters():
                 monsters.append({
                     "tier": cfg["tier"], "name": f"{adjective}{species}", "is_boss": 0, "is_guardian": 0,
                     "level_min": level_min, "level_max": level_max,
-                    "hp": stats["hp"], "atk": stats["atk"] + MONSTER_COMBAT_STAT_BUMP,
-                    "def": stats["def"] + MONSTER_COMBAT_STAT_BUMP, "agi": stats["agi"] + MONSTER_COMBAT_STAT_BUMP,
-                    "luk": stats["luk"] + MONSTER_COMBAT_STAT_BUMP,
+                    "hp": stats["hp"], "atk": stats["atk"],
+                    "def": stats["def"], "agi": stats["agi"],
+                    "luk": stats["luk"],
                     "currency_reward": currency, "exp_reward": exp, "element": element,
                     "image_key": image_key,
                 })
@@ -510,10 +510,10 @@ def _build_default_monsters():
         monsters.append({
             "tier": cfg["tier"], "name": cfg["guardian"]["name"], "is_boss": 0, "is_guardian": 1,
             "level_min": None, "level_max": None,
-            "hp": guardian_stats["hp"], "atk": guardian_stats["atk"] + MONSTER_COMBAT_STAT_BUMP,
-            "def": guardian_stats["def"] + MONSTER_COMBAT_STAT_BUMP,
-            "agi": guardian_stats["agi"] + MONSTER_COMBAT_STAT_BUMP,
-            "luk": guardian_stats["luk"] + MONSTER_COMBAT_STAT_BUMP,
+            "hp": guardian_stats["hp"], "atk": guardian_stats["atk"],
+            "def": guardian_stats["def"],
+            "agi": guardian_stats["agi"],
+            "luk": guardian_stats["luk"],
             "currency_reward": round(high["currency_reward"] * GUARDIAN_CURRENCY_MULT),
             "exp_reward": high["exp_reward"],
             "element": cfg["guardian"]["element"],
@@ -523,10 +523,10 @@ def _build_default_monsters():
         monsters.append({
             "tier": cfg["tier"], "name": cfg["boss"]["name"], "is_boss": 1, "is_guardian": 0,
             "level_min": None, "level_max": None,
-            "hp": boss_stats["hp"], "atk": boss_stats["atk"] + MONSTER_COMBAT_STAT_BUMP,
-            "def": boss_stats["def"] + MONSTER_COMBAT_STAT_BUMP,
-            "agi": boss_stats["agi"] + MONSTER_COMBAT_STAT_BUMP,
-            "luk": boss_stats["luk"] + MONSTER_COMBAT_STAT_BUMP,
+            "hp": boss_stats["hp"], "atk": boss_stats["atk"],
+            "def": boss_stats["def"],
+            "agi": boss_stats["agi"],
+            "luk": boss_stats["luk"],
             "currency_reward": round(high["currency_reward"] * BOSS_CURRENCY_MULT),
             "exp_reward": high["exp_reward"],
             "element": cfg["boss"]["element"],
@@ -595,16 +595,14 @@ HIDDEN_MONSTERS = [
     {
         "tier": "taiji_hidden", "name": "陰陽尊者", "is_boss": 0, "is_guardian": 0,
         "level_min": None, "level_max": None,
-        "hp": 27000, "atk": 240 + MONSTER_COMBAT_STAT_BUMP, "def": 150 + MONSTER_COMBAT_STAT_BUMP,
-        "agi": 90 + MONSTER_COMBAT_STAT_BUMP, "luk": 45 + MONSTER_COMBAT_STAT_BUMP,
+        "hp": 27000, "atk": 240, "def": 150, "agi": 90, "luk": 45,
         "currency_reward": 20000, "exp_reward": 3000, "element": "", "element_neutral": True,
         "image_key": "taiji_sage",
     },
     {
         "tier": "wuji_hidden", "name": "混沌天尊", "is_boss": 0, "is_guardian": 0,
         "level_min": None, "level_max": None,
-        "hp": 38000, "atk": 450 + MONSTER_COMBAT_STAT_BUMP, "def": 220 + MONSTER_COMBAT_STAT_BUMP,
-        "agi": 130 + MONSTER_COMBAT_STAT_BUMP, "luk": 65 + MONSTER_COMBAT_STAT_BUMP,
+        "hp": 38000, "atk": 450, "def": 220, "agi": 130, "luk": 65,
         "currency_reward": 33000, "exp_reward": 5000, "element": "", "element_neutral": True,
         "image_key": "wuji_sage",
     },
@@ -915,21 +913,25 @@ def _upgrade_monster_elements(conn):
             )
 
 
-def _bump_monster_combat_stats(conn):
-    """Syncs atk/def/agi/luk to DEFAULT_MONSTERS/HIDDEN_MONSTERS' current
-    values (matched by exact name), covering the flat MONSTER_COMBAT_STAT_BUMP
-    buff for monsters already seeded into an existing game.db -- the two
-    source lists alone only affect a brand-new database. hp/currency_reward/
-    exp_reward are left untouched. Safe to run every startup: once a row's
-    four stats match, this is a no-op, so it's also safe to re-run after any
-    future change to the bump amount."""
+def _bump_monster_combat_stats(conn, bump):
+    """Syncs atk/def/agi/luk to DEFAULT_MONSTERS/HIDDEN_MONSTERS' BASE values
+    (matched by exact name) plus the admin-configurable
+    game_settings.monster_combat_stat_bump, for monsters already seeded into
+    an existing game.db -- the two source lists alone only affect a
+    brand-new database, and deliberately hold unbumped values so this is the
+    single place the bump is ever applied. hp/currency_reward/exp_reward are
+    left untouched. Floored at 1 so a large negative bump (an admin nerfing
+    monsters below their base stats) can never produce a 0-or-negative stat.
+    Safe to run every startup: once a row's four stats already match, this
+    is a no-op, so it's also safe to re-run after the admin changes the
+    bump amount."""
     by_name = {m["name"]: m for m in DEFAULT_MONSTERS + HIDDEN_MONSTERS}
     for row in conn.execute("SELECT id, name, atk, def, agi, luk FROM monsters"):
         target = by_name.get(row["name"])
         if target is None:
             continue
         current = (row["atk"], row["def"], row["agi"], row["luk"])
-        wanted = (target["atk"], target["def"], target["agi"], target["luk"])
+        wanted = tuple(max(1, target[stat] + bump) for stat in ("atk", "def", "agi", "luk"))
         if current != wanted:
             conn.execute(
                 "UPDATE monsters SET atk = ?, def = ?, agi = ?, luk = ? WHERE id = ?",
@@ -1338,6 +1340,15 @@ def _ensure_game_settings_columns(conn):
         conn.execute(
             "ALTER TABLE game_settings ADD COLUMN large_money_pouch_drop_percent REAL NOT NULL DEFAULT 10"
         )
+    if "monster_combat_stat_bump" not in cols:
+        # Flat buff (can be set negative to nerf instead) applied to every
+        # monster's atk/def/agi/luk -- see _bump_monster_combat_stats.
+        # Default 12 preserves the value already in effect before this
+        # became admin-configurable (+2 on 2026-08, then +10 more the same
+        # day).
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN monster_combat_stat_bump INTEGER NOT NULL DEFAULT 12"
+        )
     # /game action-panel display order -- key set + order here MUST be kept in
     # sync with game_data.constants.GAME_LAYOUT_BLOCKS (same keys, same order).
     if "action_block_order" not in cols:
@@ -1475,7 +1486,10 @@ def seed_defaults():
     _seed_hidden_monsters(conn)
     _backfill_monster_image_keys(conn)
     _backfill_monster_luk(conn)
-    _bump_monster_combat_stats(conn)
+    combat_stat_bump = conn.execute(
+        "SELECT monster_combat_stat_bump FROM game_settings WHERE id = 1"
+    ).fetchone()["monster_combat_stat_bump"]
+    _bump_monster_combat_stats(conn, combat_stat_bump)
 
     conn.commit()
     conn.close()
