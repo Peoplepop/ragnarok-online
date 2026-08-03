@@ -476,8 +476,11 @@ _STAT_KEYS = ("hp", "atk", "def", "agi", "luk")
 # own bar) -- hp/currency_reward/exp_reward are untouched. See
 # _bump_monster_combat_stats for how this reaches monsters already seeded
 # into an existing game.db, since _build_default_monsters/HIDDEN_MONSTERS
-# alone only affect a brand-new database.
-MONSTER_COMBAT_STAT_BUMP = 2
+# alone only affect a brand-new database. Started at +2 (2026-08), then
+# raised by another +10 on top (2026-08, same day) -- cumulative +12 from
+# the original values; _bump_monster_combat_stats re-syncs every startup,
+# so bumping this constant further is always enough on its own.
+MONSTER_COMBAT_STAT_BUMP = 12
 _NON_HP_STAT_KEYS = ("atk", "def", "agi", "luk")
 
 
