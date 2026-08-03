@@ -194,7 +194,7 @@
     {% if boss_room_available %}
     <form method="post" action="{{ url_for('game.game_hunt_boss_room') }}" style="display:inline-block; margin-top:14px;">
       <p class="hint" style="margin:0 0 8px;">你擊敗了守衛怪，可以選擇挑戰魔王房間，或直接返回主畫面</p>
-      <button type="submit">⚔️ 進攻魔王房間</button>
+      <button type="submit" class="btn-primary">⚔️ 進攻魔王房間</button>
     </form>
     {% endif %}
   </div>
@@ -213,7 +213,20 @@
   </div>
   {% endif %}
 
-  <a href="{{ url_for('game.game') }}" class="btn">← 返回主畫面</a>
+  {% set can_continue_hunt = ground and not conquest and not bandit_fight and not boss_room_challenge and (won or timed_out) and player_hp > 0 %}
+  <div>
+    {% if can_continue_hunt %}
+    <form method="post" action="{{ url_for('game.game_hunt') }}" id="continue-hunt-form" style="display:inline-block; margin-right:10px;">
+      <input type="hidden" name="ground_id" value="{{ ground.id }}">
+      <button type="submit" class="turn-action-control btn-primary" id="continue-hunt-btn">⚔️ 繼續挑戰</button>
+    </form>
+    <button type="button" id="auto-hunt-toggle" class="btn-info" style="margin-right:10px;">🔁 自動連續挑戰</button>
+    {% endif %}
+    <a href="{{ url_for('game.game') }}" class="btn btn-info">← 返回主畫面</a>
+    {% if can_continue_hunt %}
+    <div id="auto-hunt-status" class="hint" style="margin-top:8px;"></div>
+    {% endif %}
+  </div>
 
   <script>
     (function () {
@@ -360,6 +373,130 @@
       }
 
       appendLine();
+    })();
+  </script>
+
+  <script>
+    (function () {
+      // 自動連續挑戰 (item 5): a pure client-side loop that just re-submits
+      // the same "continue hunt" form once the server-enforced cooldown
+      // naturally expires -- it never shortens or bypasses that cooldown,
+      // game_hunt() itself is still the source of truth and will reject an
+      // early submit regardless of anything computed here.
+      var groundId = {{ (ground.id if ground else None) | tojson }};
+      var eligible = {{ 'true' if can_continue_hunt else 'false' }};
+      var cooldownRemaining = {{ cooldown_seconds | default(0) }};
+      var maxHpAfter = {{ max_hp | default(0) }};
+      var playerHpAfter = {{ player_hp | default(0) }};
+      var LOW_HP_RATIO = 0.2;
+
+      var continueForm = document.getElementById("continue-hunt-form");
+      var autoToggle = document.getElementById("auto-hunt-toggle");
+      var statusEl = document.getElementById("auto-hunt-status");
+      var controls = document.querySelectorAll(".turn-action-control");
+
+      function setControlsDisabled(disabled) {
+        controls.forEach(function (el) { el.disabled = disabled; });
+      }
+      function setStatus(text) {
+        if (statusEl) statusEl.textContent = text || "";
+      }
+      function readArmed() {
+        try {
+          var parsed = JSON.parse(sessionStorage.getItem("autoHunt") || "null");
+          return !!(parsed && parsed.groundId === groundId);
+        } catch (e) {
+          return false;
+        }
+      }
+      function persistArmed(on) {
+        try {
+          if (on) {
+            sessionStorage.setItem("autoHunt", JSON.stringify({ groundId: groundId, armedAt: Date.now() }));
+          } else {
+            sessionStorage.removeItem("autoHunt");
+          }
+        } catch (e) {}
+      }
+
+      if (!eligible) {
+        // Loss / conquest / bandit / boss-room / HP already 0 -- this fight
+        // never resumes an armed auto-hunt, and if a stale flag happens to
+        // be sitting in sessionStorage from an earlier fight, drop it so it
+        // can't leak into some unrelated later hunt.
+        persistArmed(false);
+        // Still keep whatever turn-action-control elements exist on this
+        // page (e.g. the 魔王房間 button) in sync with the real cooldown.
+        if (controls.length) {
+          var r0 = cooldownRemaining;
+          (function tick0() {
+            if (r0 <= 0) { setControlsDisabled(false); return; }
+            setControlsDisabled(true);
+            r0 -= 1;
+            setTimeout(tick0, 1000);
+          })();
+        }
+        return;
+      }
+
+      var armed = readArmed();
+      var lowHp = maxHpAfter > 0 && (playerHpAfter / maxHpAfter) < LOW_HP_RATIO;
+      if (armed && lowHp) {
+        armed = false;
+        persistArmed(false);
+        setStatus("已停止自動挑戰：HP 過低（低於上限 " + Math.round(LOW_HP_RATIO * 100) + "%）");
+      }
+
+      function renderToggle() {
+        if (!autoToggle) return;
+        autoToggle.textContent = armed ? "⏹ 停止自動挑戰" : "🔁 自動連續挑戰";
+        autoToggle.classList.toggle("btn-danger", armed);
+        autoToggle.classList.toggle("btn-info", !armed);
+      }
+      renderToggle();
+
+      var remaining = cooldownRemaining;
+      var timer = null;
+
+      function tick() {
+        if (remaining <= 0) {
+          setControlsDisabled(false);
+          if (armed) {
+            setStatus("自動挑戰中，重新出發...");
+            if (continueForm) continueForm.submit();
+          }
+          return;
+        }
+        setControlsDisabled(true);
+        if (armed) setStatus("自動挑戰中，" + remaining + " 秒後繼續...");
+        remaining -= 1;
+        timer = setTimeout(tick, 1000);
+      }
+
+      if (autoToggle) {
+        autoToggle.addEventListener("click", function () {
+          armed = !armed;
+          persistArmed(armed);
+          renderToggle();
+          if (armed) {
+            if (remaining <= 0) {
+              setStatus("自動挑戰中，重新出發...");
+              if (continueForm) continueForm.submit();
+            } else {
+              setStatus("自動挑戰中，" + remaining + " 秒後繼續...");
+            }
+          } else {
+            // Deliberately NOT clearing `timer` here -- the ambient tick()
+            // loop below must keep running either way to stay in sync with
+            // the real server-side cooldown (and keep .turn-action-control
+            // elements correctly disabled/enabled); it already checks
+            // `armed` itself right before ever auto-submitting.
+            setStatus("已停止自動挑戰");
+          }
+        });
+      }
+
+      tick();
     })();
   </script>
 {% endblock %}

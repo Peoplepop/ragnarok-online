@@ -40,7 +40,7 @@
     <p class="hint" style="margin:0;">報名只能在要塞內進行（任何國家的要塞都可以）</p>
     {% else %}
     <form method="post" action="{{ url_for('tournament.tournament_register') }}">
-      <button type="submit" style="padding:8px 18px; font-size:13px;">🏆 報名（{{ fee }} 諸神幣）</button>
+      <button type="submit" class="btn-primary" style="padding:8px 18px; font-size:13px;">🏆 報名（{{ fee }} 諸神幣）</button>
     </form>
     {% endif %}
   </div>
@@ -136,5 +136,5 @@
     {% endif %}
   </div>
 
-  <p style="margin-top:20px;"><a href="{{ url_for('game.game') }}" class="btn">← 返回主畫面</a></p>
+  <p style="margin-top:20px;"><a href="{{ url_for('game.game') }}" class="btn btn-info">← 返回主畫面</a></p>
 {% endblock %}

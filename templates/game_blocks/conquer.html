@@ -1,6 +1,7 @@
 {% if can_attack_tile %}
-<div class="panel" style="flex:1 1 380px;">
-  <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">⚔️ 攻城／討伐</h3>
+<details class="panel" id="block-{{ block_key }}" open style="flex:1 1 380px;">
+  <summary><h3 style="margin:0; color:var(--gold-bright); font-size:15px;">⚔️ 攻城／討伐</h3></summary>
+  <div class="panel-body">
   {% if current_tile.tile_type == 'neutral' %}
   <div style="font-size:13px; color:var(--text-dim); margin-bottom:8px;">
     此地由山賊盤據，尚未被任何國家佔領<br>
@@ -19,16 +20,17 @@
   <p class="hint" style="margin:0 0 8px; color:var(--danger);">你目前正在駐防中，攻打前必須先撤離駐防，請確認是否撤離並攻打</p>
   <form method="post" action="{{ url_for('game.game_conquer') }}">
     <input type="hidden" name="confirm_withdraw_garrison" value="1">
-    <button type="submit" style="padding:6px 14px; font-size:13px;">確認撤離駐防並攻打</button>
+    <button type="submit" class="btn-danger" style="padding:6px 14px; font-size:13px;">確認撤離駐防並攻打</button>
   </form>
   {% elif current_tile.tile_type == 'neutral' %}
   <form method="post" action="{{ url_for('game.game_conquer') }}">
-    <button type="submit" style="padding:6px 14px; font-size:13px;">⚔️ 討伐山賊領主</button>
+    <button type="submit" class="btn-danger" style="padding:6px 14px; font-size:13px;">⚔️ 討伐山賊領主</button>
   </form>
   {% else %}
   <form method="post" action="{{ url_for('game.game_conquer') }}">
-    <button type="submit" style="padding:6px 14px; font-size:13px;">⚔️ 攻打此地</button>
+    <button type="submit" class="btn-danger" style="padding:6px 14px; font-size:13px;">⚔️ 攻打此地</button>
   </form>
   {% endif %}
-</div>
+  </div>
+</details>
 {% endif %}

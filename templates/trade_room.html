@@ -25,15 +25,15 @@
     {% if trade.trade_status == 'pending' %}
       {% if is_initiator %}
       <form method="post" action="{{ url_for('trade.trade_cancel', trade_id=trade.trade_id) }}">
-        <button type="submit" style="background:linear-gradient(135deg, var(--danger), #7a2a2d);">取消邀請</button>
+        <button type="submit" class="btn-danger">取消邀請</button>
       </form>
       {% else %}
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <form method="post" action="{{ url_for('trade.trade_accept', trade_id=trade.trade_id) }}">
-          <button type="submit">接受</button>
+          <button type="submit" class="btn-success">接受</button>
         </form>
         <form method="post" action="{{ url_for('trade.trade_decline', trade_id=trade.trade_id) }}">
-          <button type="submit" style="background:linear-gradient(135deg, var(--danger), #7a2a2d);">拒絕</button>
+          <button type="submit" class="btn-danger">拒絕</button>
         </form>
       </div>
       {% endif %}
@@ -55,7 +55,7 @@
           {% if not my_offer_rows %}
           <p class="hint" style="margin:0 0 12px;">背包裡目前沒有可交易的裝備</p>
           {% endif %}
-          <button type="submit">更新報價</button>
+          <button type="submit" class="btn-success">更新報價</button>
         </form>
       </div>
 
@@ -78,10 +78,10 @@
 
     <div style="margin-top:18px; display:flex; gap:12px; flex-wrap:wrap;">
       <form method="post" action="{{ url_for('trade.trade_confirm', trade_id=trade.trade_id) }}">
-        <button type="submit">確認交易</button>
+        <button type="submit" class="btn-success">確認交易</button>
       </form>
       <form method="post" action="{{ url_for('trade.trade_cancel', trade_id=trade.trade_id) }}" onsubmit="return confirm('確定要取消這筆交易嗎？');">
-        <button type="submit" style="background:linear-gradient(135deg, var(--danger), #7a2a2d);">取消交易</button>
+        <button type="submit" class="btn-danger">取消交易</button>
       </form>
     </div>
     {% endif %}
@@ -95,5 +95,5 @@
   </div>
 
   <p class="hint"><a href="{{ url_for('trade.trade_home') }}">← 返回交易首頁</a></p>
-  <p style="margin-top:20px;"><a href="{{ url_for('game.game') }}" class="btn">← 返回主畫面</a></p>
+  <p style="margin-top:20px;"><a href="{{ url_for('game.game') }}" class="btn btn-info">← 返回主畫面</a></p>
 {% endblock %}

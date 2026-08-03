@@ -19,10 +19,13 @@
       --danger-bright: #ff8a8f;
       --mp: #3d7fc9;
       --mp-bright: #7ec4f0;
+      --success: #4c9a5c;
+      --success-bright: #7ec98d;
     }
 
     * { box-sizing: border-box; }
     svg text { font-family: inherit; }
+    html { scroll-behavior: smooth; }
 
     body {
       font-family: "jf-openhuninn", "Microsoft JhengHei", sans-serif;
@@ -159,6 +162,36 @@
       box-shadow: none;
       transform: none;
     }
+
+    /* Semantic button variants -- same box-model/typography as the base
+       button/.btn rule above, only background/glow/text color differ. */
+    .btn-primary {
+      background: linear-gradient(135deg, var(--gold), #9c6b1f);
+      color: #1a1408;
+      box-shadow: 0 0 14px rgba(212, 175, 55, 0.3);
+    }
+    .btn-primary:hover { box-shadow: 0 0 20px rgba(212, 175, 55, 0.5); }
+
+    .btn-danger {
+      background: linear-gradient(135deg, var(--danger), #7a2a2d);
+      color: #2a0d0f;
+      box-shadow: 0 0 14px rgba(224, 85, 90, 0.3);
+    }
+    .btn-danger:hover { box-shadow: 0 0 20px rgba(224, 85, 90, 0.5); }
+
+    .btn-info {
+      background: linear-gradient(135deg, var(--mp), #234a75);
+      color: #f2f8ff;
+      box-shadow: 0 0 14px rgba(61, 127, 201, 0.3);
+    }
+    .btn-info:hover { box-shadow: 0 0 20px rgba(61, 127, 201, 0.5); }
+
+    .btn-success {
+      background: linear-gradient(135deg, var(--success), #2d5c37);
+      color: #f0faf1;
+      box-shadow: 0 0 14px rgba(76, 154, 92, 0.3);
+    }
+    .btn-success:hover { box-shadow: 0 0 20px rgba(76, 154, 92, 0.5); }
 
     select {
       background: var(--panel-2);

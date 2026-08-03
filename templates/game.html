@@ -2,6 +2,59 @@
 {% block title %}{{ character.character_name }} - 五行爭鋒{% endblock %}
 {% block body_class %}wide{% endblock %}
 
+{% block extra_head %}
+<style>
+  .quick-jump-nav {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    background: rgba(11, 10, 20, 0.92);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 16px;
+    backdrop-filter: blur(4px);
+  }
+  .quick-jump-nav a {
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    transition: color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+  .quick-jump-nav a:hover { color: var(--gold-bright); border-color: var(--gold); }
+
+  details.panel { scroll-margin-top: 64px; }
+  details.panel > summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    user-select: none;
+  }
+  details.panel > summary::-webkit-details-marker { display: none; }
+  details.panel > summary::marker { content: ""; }
+  details.panel > summary::before {
+    content: "▶";
+    display: inline-block;
+    font-size: 10px;
+    color: var(--gold);
+    transition: transform 0.15s;
+    flex-shrink: 0;
+  }
+  details.panel[open] > summary::before { transform: rotate(90deg); }
+  details.panel > summary h3 { display: inline; margin: 0 !important; }
+  details.panel > .panel-body { margin-top: 12px; }
+</style>
+{% endblock %}
+
 {% block content %}
   <div class="panel" style="margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
     <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
@@ -63,6 +116,8 @@
     <a href="{{ url_for('character.character_page') }}" style="color:var(--gold-bright); font-size:13px; text-decoration:none;">✨ 你已經可以在角色詳情頁進行升轉或轉生了 →</a>
   </div>
   {% endif %}
+
+  <nav class="quick-jump-nav" id="quick-jump-nav" aria-label="快速跳轉區塊"></nav>
 
   <div style="display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap;">
     <div class="panel" style="padding:0; overflow:hidden; position:relative; flex:1 1 560px; max-width:560px;">
@@ -303,6 +358,45 @@
       }
 
       tick();
+    })();
+  </script>
+
+  <script>
+    (function () {
+      // Quick-jump nav: built from the DOM (not the raw action_block_order
+      // list) so a block that didn't actually render this request (e.g.
+      // shop/tournament/bank/treasury are conditional on current_tile) is
+      // simply skipped, without game.html needing to know or duplicate any
+      // individual block's own render condition.
+      var blockOrder = {{ action_block_order | tojson }};
+      var blockLabels = {{ game_layout_blocks | tojson }};
+      var nav = document.getElementById("quick-jump-nav");
+      if (nav) {
+        var any = false;
+        blockOrder.forEach(function (key) {
+          var el = document.getElementById("block-" + key);
+          if (!el) return;
+          any = true;
+          var a = document.createElement("a");
+          a.href = "#block-" + key;
+          a.textContent = blockLabels[key] || key;
+          nav.appendChild(a);
+        });
+        if (!any) nav.style.display = "none";
+      }
+
+      // Collapsible block state, persisted per block key in localStorage so
+      // a reload doesn't re-expand everything.
+      document.querySelectorAll('details.panel[id^="block-"]').forEach(function (details) {
+        var storageKey = "gameBlockOpen:" + details.id;
+        try {
+          var stored = localStorage.getItem(storageKey);
+          if (stored !== null) details.open = stored === "true";
+        } catch (e) {}
+        details.addEventListener("toggle", function () {
+          try { localStorage.setItem(storageKey, details.open ? "true" : "false"); } catch (e) {}
+        });
+      });
     })();
   </script>
 {% endblock %}

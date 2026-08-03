@@ -10,7 +10,7 @@
     </p>
     <form method="post" action="{{ url_for('trade.trade_invite') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:14px;">
       <input type="text" name="target_name" placeholder="對方角色名稱" style="max-width:220px;">
-      <button type="submit">發送交易邀請</button>
+      <button type="submit" class="btn-success">發送交易邀請</button>
     </form>
   </div>
 
@@ -22,10 +22,10 @@
       <span style="font-size:13px; color:var(--text);">{{ invite.initiator_name }} 邀請你進行交易</span>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <form method="post" action="{{ url_for('trade.trade_accept', trade_id=invite.trade_id) }}">
-          <button type="submit">接受</button>
+          <button type="submit" class="btn-success">接受</button>
         </form>
         <form method="post" action="{{ url_for('trade.trade_decline', trade_id=invite.trade_id) }}">
-          <button type="submit" style="background:linear-gradient(135deg, var(--danger), #7a2a2d);">拒絕</button>
+          <button type="submit" class="btn-danger">拒絕</button>
         </form>
       </div>
     </div>
@@ -35,5 +35,5 @@
     {% endif %}
   </div>
 
-  <p style="margin-top:20px;"><a href="{{ url_for('game.game') }}" class="btn">← 返回主畫面</a></p>
+  <p style="margin-top:20px;"><a href="{{ url_for('game.game') }}" class="btn btn-info">← 返回主畫面</a></p>
 {% endblock %}

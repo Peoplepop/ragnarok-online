@@ -17,7 +17,7 @@ from web_helpers import (
 from game_data.constants import (
     SHOP_TYPE_LABELS, SLOT_LABELS, EQUIP_SLOT_COLUMNS, GOVERNMENT_ROLES, tile_display_name,
     HEX_SIZE, ELEMENT_COLORS, NEUTRAL_TILE_COLOR, MOUNTAIN_TILE_COLOR, STAT_LABELS,
-    CHAT_MESSAGE_MAX_LEN,
+    CHAT_MESSAGE_MAX_LEN, GAME_LAYOUT_BLOCKS,
 )
 from game_data.backgrounds import ELEMENT_TO_BG_SLUG
 from game_data.jobs import _process_job_progression
@@ -456,6 +456,7 @@ def _render_game(**extra):
         major_events=major_events,
         chat_message_max_len=CHAT_MESSAGE_MAX_LEN,
         action_block_order=_sanitized_action_block_order(settings["action_block_order"]),
+        game_layout_blocks=GAME_LAYOUT_BLOCKS,
         consumable_items=consumable_items,
         page_background_url=background_url(_bg_key_for_element("game_bg", current_tile["element"])),
     )
@@ -801,6 +802,12 @@ def game_hunt():
     # next screen mid-HP despite having just grown a bigger max.
     persisted_hp = stats_after["hp"] if leveled_up else result["player_hp"]
     persisted_mp = stats_after["mp"] if leveled_up else result["player_mp"]
+    # Computed once and reused for both the persisted column and the
+    # cooldown_seconds handed to battle.html (for the item 4/5 "繼續挑戰" /
+    # auto-battle countdown) -- this is the exact same wait this hunt itself
+    # just incurred, so no separate _cooldown_remaining_seconds re-lookup
+    # against the (not-yet-committed) DB row is needed.
+    new_next_action_at = _next_action_at(settings["turn_wait_seconds"])
 
     db.execute(
         """UPDATE characters
@@ -813,7 +820,7 @@ def game_hunt():
            WHERE id = ?""",
         (
             new_level, new_exp, new_currency, persisted_hp, persisted_mp,
-            _next_action_at(settings["turn_wait_seconds"]), 1 if result["won"] else 0,
+            new_next_action_at, 1 if result["won"] else 0,
             pending_boss_id,
             stat_gain["hp"], stat_gain["mp"], stat_gain["str"],
             stat_gain["def"], stat_gain["agi"], stat_gain["luk"],
@@ -881,6 +888,7 @@ def game_hunt():
         stat_labels=STAT_LABELS,
         player_level=character["level"],
         player_avatar_url=avatar_url(session.get("avatar_key"), session.get("avatar_custom_filename")),
+        cooldown_seconds=_cooldown_remaining_seconds(new_next_action_at),
     )
 
 

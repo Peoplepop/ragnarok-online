@@ -13,7 +13,7 @@
     {% if character.job_tier == 4 %}
     <form method="post" action="{{ url_for('character.character_rename') }}" style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
       <input type="text" name="new_name" placeholder="新角色名稱（最長12個字）" maxlength="{{ rename_max_len }}" style="max-width:200px;">
-      <button type="submit">改名（{{ next_rename_cost }} 諸神幣）</button>
+      <button type="submit" class="btn-primary">改名（{{ next_rename_cost }} 諸神幣）</button>
     </form>
     {% else %}
     <p class="hint" style="margin:8px 0 0;">需先四轉才能改名</p>
@@ -35,7 +35,7 @@
         <label for="avatar_file">或上傳自訂頭像</label>
         <input type="file" id="avatar_file" name="avatar_file" accept="image/png,image/jpeg,image/gif">
         <p class="hint" style="margin:4px 0 14px; font-size:12px;">{{ custom_avatar_format_hint }}</p>
-        <button type="submit">更換頭像（{{ next_avatar_change_cost }} 諸神幣）</button>
+        <button type="submit" class="btn-primary">更換頭像（{{ next_avatar_change_cost }} 諸神幣）</button>
       </form>
     </details>
     {% else %}
@@ -137,7 +137,7 @@
         <option value="{{ name }}">{{ name }}（{{ '力量' if info.primary == 'str' else '防禦' if info.primary == 'def' else '敏捷' if info.primary == 'agi' else '幸運' }}＋{{ '力量' if info.secondary == 'str' else '防禦' if info.secondary == 'def' else '敏捷' if info.secondary == 'agi' else '幸運' }}）</option>
         {% endfor %}
       </select>
-      <button type="submit">一轉</button>
+      <button type="submit" class="btn-primary">一轉</button>
     </form>
     {% elif can_promote_tier2 %}
     <form method="post" action="{{ url_for('character.character_promote_tier2') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
@@ -147,7 +147,7 @@
         <option value="{{ name }}">{{ name }}（{{ '力量' if info.primary == 'str' else '防禦' if info.primary == 'def' else '敏捷' if info.primary == 'agi' else '幸運' }}側重）</option>
         {% endfor %}
       </select>
-      <button type="submit">二轉</button>
+      <button type="submit" class="btn-primary">二轉</button>
     </form>
     {% elif can_promote_tier3 %}
     <form method="post" action="{{ url_for('character.character_promote_tier3') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
@@ -157,17 +157,17 @@
         <option value="{{ name }}">{{ name }}（{{ '力量' if info.primary == 'str' else '防禦' if info.primary == 'def' else '敏捷' if info.primary == 'agi' else '幸運' }}＋{{ '力量' if info.secondary == 'str' else '防禦' if info.secondary == 'def' else '敏捷' if info.secondary == 'agi' else '幸運' }}）</option>
         {% endfor %}
       </select>
-      <button type="submit">三轉</button>
+      <button type="submit" class="btn-primary">三轉</button>
     </form>
     {% elif can_promote_tier4 %}
     <form method="post" action="{{ url_for('character.character_promote_tier4') }}">
       <p class="hint" style="margin:0 0 10px;">四轉是職業旅程的終點，結果由你已精通的三個三轉職業之屬性權重決定，非隨機。</p>
-      <button type="submit">四轉</button>
+      <button type="submit" class="btn-primary">四轉</button>
     </form>
     {% elif can_rebirth %}
     <form method="post" action="{{ url_for('character.character_rebirth') }}">
       <p class="hint" style="margin:0 0 10px;">轉生會將等級重置為 10 級、職業回到初心者，並清除目前的屬性下限；國家、金幣、銀行存款、裝備與背包都不受影響。</p>
-      <button type="submit">轉生</button>
+      <button type="submit" class="btn-danger">轉生</button>
     </form>
     {% else %}
     <p class="hint" style="margin:0;">
@@ -176,7 +176,7 @@
     {% endif %}
 
     <form method="post" action="{{ url_for('character.character_reroll_stats') }}" onsubmit="return confirm('花費 {{ stat_reroll_cost }} 諸神幣重洗目前累積的升級屬性點，結果是隨機的，可能比目前更差，確定要繼續嗎？');" style="margin-top:12px;">
-      <button type="submit" {% if character.level <= 1 or character.currency < stat_reroll_cost %}disabled{% endif %}>花費 {{ stat_reroll_cost }} 諸神幣重洗屬性點</button>
+      <button type="submit" class="btn-danger" {% if character.level <= 1 or character.currency < stat_reroll_cost %}disabled{% endif %}>花費 {{ stat_reroll_cost }} 諸神幣重洗屬性點</button>
     </form>
   </div>
 
@@ -191,7 +191,7 @@
         <span>{{ macros.element_badge(stat_element.get(entry.skill.stat)) }} 技能{{ entry.slot }}：{{ entry.skill.name }}（MP{{ entry.skill.mp_cost }}／{{ entry.skill.trigger_chance }}%／{{ entry.skill.multiplier }}x／以{{ stat_labels[entry.skill.stat] }}計算）</span>
         <form method="post" action="{{ url_for('character.character_unequip_skill') }}">
           <input type="hidden" name="slot" value="{{ entry.slot }}">
-          <button type="submit" style="padding:4px 12px; font-size:12px;">卸下</button>
+          <button type="submit" class="btn-info" style="padding:4px 12px; font-size:12px;">卸下</button>
         </form>
       </div>
       {% endfor %}
@@ -209,12 +209,12 @@
         <form method="post" action="{{ url_for('character.character_equip_skill') }}">
           <input type="hidden" name="skill_key" value="{{ skill.key }}">
           <input type="hidden" name="slot" value="1">
-          <button type="submit" style="padding:4px 12px; font-size:12px;">配置為技能1</button>
+          <button type="submit" class="btn-success" style="padding:4px 12px; font-size:12px;">配置為技能1</button>
         </form>
         <form method="post" action="{{ url_for('character.character_equip_skill') }}">
           <input type="hidden" name="skill_key" value="{{ skill.key }}">
           <input type="hidden" name="slot" value="2">
-          <button type="submit" style="padding:4px 12px; font-size:12px;">配置為技能2</button>
+          <button type="submit" class="btn-success" style="padding:4px 12px; font-size:12px;">配置為技能2</button>
         </form>
       </div>
       {% endfor %}
@@ -229,7 +229,7 @@
         <input type="hidden" name="skill_key" value="{{ skill.key }}">
         <span>{{ macros.element_badge(stat_element.get(skill.stat)) }} {{ skill.name }}（MP{{ skill.mp_cost }}／{{ skill.trigger_chance }}%／{{ skill.multiplier }}x／以{{ stat_labels[skill.stat] }}計算）</span>
         <span>費用 {{ skill.learn_cost }} 諸神幣</span>
-        <button type="submit" {% if character.currency < skill.learn_cost %}disabled{% endif %}>學習</button>
+        <button type="submit" class="btn-primary" {% if character.currency < skill.learn_cost %}disabled{% endif %}>學習</button>
       </form>
       {% endfor %}
     </div>
@@ -243,10 +243,10 @@
         <input type="hidden" name="skill_key" value="{{ entry.skill.key }}">
         <span>{{ macros.element_badge(stat_element.get(entry.skill.stat)) }} 📖 {{ entry.skill.name }}（持有 {{ entry.quantity }} 本，MP{{ entry.skill.mp_cost }}／{{ entry.skill.trigger_chance }}%／{{ entry.skill.multiplier }}x）</span>
         {% if character.job_tier == 4 %}
-        <button type="submit">使用技能書學習</button>
+        <button type="submit" class="btn-primary">使用技能書學習</button>
         {% else %}
         <span class="hint" style="margin:0;">需先四轉才能使用</span>
-        <button type="submit" disabled>使用技能書學習</button>
+        <button type="submit" class="btn-primary" disabled>使用技能書學習</button>
         {% endif %}
       </form>
       {% endfor %}
@@ -266,15 +266,15 @@
       <form method="post" action="{{ url_for('character.character_debug_set_level') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
         <label style="margin:0; font-size:13px;">設定等級</label>
         <input type="text" inputmode="numeric" name="level" value="{{ character.level }}" style="width:80px; margin-bottom:0;">
-        <button type="submit">套用</button>
+        <button type="submit" class="btn-primary">套用</button>
       </form>
       <form method="post" action="{{ url_for('character.character_debug_set_rebirth') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
         <label style="margin:0; font-size:13px;">設定轉生次數</label>
         <input type="text" inputmode="numeric" name="rebirth_count" value="{{ character.rebirth_count }}" style="width:80px; margin-bottom:0;">
-        <button type="submit">套用</button>
+        <button type="submit" class="btn-primary">套用</button>
       </form>
       <form method="post" action="{{ url_for('character.character_debug_reset') }}" onsubmit="return confirm('確定要重置角色嗎？等級、職業、轉生次數與精通紀錄都會清空，此動作無法復原。');">
-        <button type="submit">🔄 重置為 1 級初心者</button>
+        <button type="submit" class="btn-danger">🔄 重置為 1 級初心者</button>
       </form>
     </div>
   </div>
@@ -341,7 +341,7 @@
         <form method="post" action="{{ url_for('game.game_unequip') }}">
           <input type="hidden" name="slot" value="{{ s.slot }}">
           <input type="hidden" name="next" value="character">
-          <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">卸下</button>
+          <button type="submit" class="turn-action-control btn-info" style="padding:6px 14px; font-size:13px;">卸下</button>
         </form>
         {% else %}
         <span class="hint" style="margin:0;">尚未裝備</span>
@@ -367,7 +367,7 @@
             <input type="hidden" name="next" value="character">
             {{ macros.element_badge(item_badge_element(item)) }}
             <span style="font-size:13px;">{{ item.name }}（{{ item.stat }}+{{ item.stat_bonus }}）持有 {{ item.quantity }} 件</span>
-            <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">裝備</button>
+            <button type="submit" class="turn-action-control btn-success" style="padding:6px 14px; font-size:13px;">裝備</button>
           </form>
           {% endfor %}
         </div>
@@ -380,7 +380,7 @@
     {% endif %}
   </div>
 
-  <p style="margin-top:20px;"><a href="{{ url_for('game.game') }}" class="btn">← 返回主畫面</a></p>
+  <p style="margin-top:20px;"><a href="{{ url_for('game.game') }}" class="btn btn-info">← 返回主畫面</a></p>
 
   <script>
     (function () {

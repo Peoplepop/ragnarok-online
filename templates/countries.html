@@ -25,7 +25,7 @@
     <p class="hint" style="margin:0; color:var(--danger);">國戰或城鎮戰期間無法應戰</p>
     {% else %}
     <form method="post" action="{{ url_for('game.country_challenge_official') }}">
-      <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">應戰</button>
+      <button type="submit" class="turn-action-control btn-danger" style="padding:6px 14px; font-size:13px;">應戰</button>
     </form>
     {% endif %}
   </div>
@@ -74,7 +74,7 @@
       <p class="hint" style="margin:0; color:var(--danger);">國戰或城鎮戰期間無法篡位</p>
       {% else %}
       <form method="post" action="{{ url_for('game.country_challenge_king') }}">
-        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">挑戰國王</button>
+        <button type="submit" class="turn-action-control btn-danger" style="padding:6px 14px; font-size:13px;">挑戰國王</button>
       </form>
       {% endif %}
       {% endif %}
@@ -86,7 +86,7 @@
         目前已授權 <strong>{{ c.pending_challenge.holder_name or "（角色已不存在）" }}</strong> 挑戰{{ c.pending_challenge.seat_label }}之位
       </p>
       <form method="post" action="{{ url_for('game.country_revoke_challenge') }}">
-        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">收回授權</button>
+        <button type="submit" class="turn-action-control btn-danger" style="padding:6px 14px; font-size:13px;">收回授權</button>
       </form>
       {% else %}
       <form method="post" action="{{ url_for('game.country_authorize_challenge') }}" style="display:flex; gap:8px; flex-wrap:wrap; align-items:end;">
@@ -101,7 +101,7 @@
           <label style="font-size:12px;">角色名稱</label>
           <input type="text" name="target_name" placeholder="要授權的角色名稱" required>
         </div>
-        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">授權挑戰</button>
+        <button type="submit" class="turn-action-control btn-danger" style="padding:6px 14px; font-size:13px;">授權挑戰</button>
       </form>
       {% endif %}
       {% endif %}
@@ -117,7 +117,7 @@
     <p class="hint" style="margin:0;">這週已經領取過了</p>
     {% elif is_friday %}
     <form method="post" action="{{ url_for('game.country_claim_income') }}">
-      <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">領取分潤</button>
+      <button type="submit" class="turn-action-control btn-success" style="padding:6px 14px; font-size:13px;">領取分潤</button>
     </form>
     {% else %}
     <p class="hint" style="margin:0;">只有每週五才能領取國庫分潤</p>
@@ -140,7 +140,7 @@
     <p class="hint" style="margin:0;">本次國戰時段已經施放過士氣激勵，需等下次國戰時段才能再次施放</p>
     {% else %}
     <form method="post" action="{{ url_for('game.country_cast_morale_buff') }}">
-      <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">施放士氣激勵</button>
+      <button type="submit" class="turn-action-control btn-primary" style="padding:6px 14px; font-size:13px;">施放士氣激勵</button>
     </form>
     {% endif %}
   </div>
@@ -166,7 +166,7 @@
           {% endfor %}
         </select>
       </div>
-      <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">發動攻擊</button>
+      <button type="submit" class="turn-action-control btn-danger" style="padding:6px 14px; font-size:13px;">發動攻擊</button>
     </form>
     {% endif %}
   </div>
@@ -183,7 +183,7 @@
       <form method="post" action="{{ url_for('game.country_repair_defense') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px;">
         <input type="hidden" name="target_tile_id" value="{{ t.id }}">
         <span>{{ t.name }}（防禦已削弱 {{ t.defense_reduction_percent }}%，修補費用 {{ t.repair_cost }} 諸神幣）</span>
-        <button type="submit" class="turn-action-control" style="padding:4px 10px; font-size:12px;">修補</button>
+        <button type="submit" class="turn-action-control btn-success" style="padding:4px 10px; font-size:12px;">修補</button>
       </form>
       {% endfor %}
     </div>
@@ -191,5 +191,5 @@
   </div>
   {% endif %}
 
-  <p style="margin-top:20px;"><a href="{{ url_for('game.game') }}" class="btn">← 返回主畫面</a></p>
+  <p style="margin-top:20px;"><a href="{{ url_for('game.game') }}" class="btn btn-info">← 返回主畫面</a></p>
 {% endblock %}
