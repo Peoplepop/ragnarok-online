@@ -3,7 +3,35 @@
 
 {% block content %}
   {% include "_admin_nav.html" %}
-  <h2 style="color: var(--gold-bright); font-size: 18px; margin-top:0;">怪物圖片</h2>
+
+  <h2 style="color: var(--gold-bright); font-size: 18px; margin-top:0;">網頁標籤圖示</h2>
+  <p class="hint" style="margin-top:-8px; margin-bottom:16px;">
+    瀏覽器分頁上顯示的小圖示（favicon）。圖片格式限 JPG / PNG / GIF，檔案大小上限 2MB；
+    建議使用正方形圖片，系統會自動置中裁切並縮放為 200x200。
+  </p>
+  <div class="panel" style="margin-bottom:28px; display:flex; flex-direction:column; gap:10px; align-items:flex-start;">
+    {% if has_favicon %}
+      <div style="display:flex; align-items:center; gap:10px;">
+        <img src="{{ favicon_url }}" alt="favicon" style="width:32px; height:32px; border-radius:4px; border:1px solid var(--border);">
+        <span style="font-size:12px; color:var(--gold);">已上傳自訂圖示</span>
+      </div>
+    {% else %}
+      <div style="font-size:12px; color:var(--text-dim);">尚未上傳，目前使用瀏覽器預設圖示</div>
+    {% endif %}
+    <form method="post" action="{{ url_for('admin.admin_upload_favicon') }}"
+          enctype="multipart/form-data" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+      <input type="file" name="image_file" accept="image/png,image/jpeg,image/gif" style="font-size:12px;">
+      <button type="submit" style="padding:6px 16px; font-size:13px;">上傳</button>
+    </form>
+    {% if has_favicon %}
+    <form method="post" action="{{ url_for('admin.admin_reset_favicon') }}"
+          onsubmit="return confirm('確定要移除自訂網頁標籤圖示嗎？');">
+      <button type="submit" class="btn" style="border-color:var(--danger); color:var(--danger); padding:6px 16px; font-size:13px;">移除自訂圖示</button>
+    </form>
+    {% endif %}
+  </div>
+
+  <h2 style="color: var(--gold-bright); font-size: 18px;">怪物圖片</h2>
   <p class="hint" style="margin-top:-8px; margin-bottom:16px;">
     上傳的圖片會覆蓋預設美術（僅顯示用，不影響戰鬥數值）。圖片格式限 JPG / PNG / GIF，檔案大小上限 2MB，
     系統會自動置中裁切並縮放為正方形。

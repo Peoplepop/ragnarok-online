@@ -784,6 +784,10 @@ def _avatar_custom_dir():
     return os.path.join(current_app.static_folder, "avatars", "built_in", "custom")
 
 
+def _favicon_custom_dir():
+    return os.path.join(current_app.static_folder, "favicon", "custom")
+
+
 @admin_bp.route("/admin/images")
 @admin_required
 def admin_images():
@@ -816,7 +820,40 @@ def admin_images():
 
     return render_template(
         "admin_images.html", monster_items=monster_items, avatar_items=avatar_items, active_tab="images",
+        has_favicon=os.path.isfile(os.path.join(_favicon_custom_dir(), "favicon.png")),
     )
+
+
+@admin_bp.route("/admin/images/favicon", methods=["POST"])
+@admin_required
+def admin_upload_favicon():
+    upload = request.files.get("image_file")
+    if upload is None or not upload.filename:
+        flash("請選擇一個圖片檔案")
+        return redirect(url_for("admin.admin_images"))
+
+    png_bytes, error = _process_square_image_upload(upload, CUSTOM_AVATAR_MAX_BYTES, CUSTOM_AVATAR_DIMENSION)
+    if error:
+        flash(error)
+        return redirect(url_for("admin.admin_images"))
+
+    target_dir = _favicon_custom_dir()
+    os.makedirs(target_dir, exist_ok=True)
+    with open(os.path.join(target_dir, "favicon.png"), "wb") as f:
+        f.write(png_bytes)
+
+    flash("已更新網頁標籤圖示")
+    return redirect(url_for("admin.admin_images"))
+
+
+@admin_bp.route("/admin/images/favicon/reset", methods=["POST"])
+@admin_required
+def admin_reset_favicon():
+    path = os.path.join(_favicon_custom_dir(), "favicon.png")
+    if os.path.isfile(path):
+        os.remove(path)
+    flash("已移除自訂網頁標籤圖示，回復瀏覽器預設圖示")
+    return redirect(url_for("admin.admin_images"))
 
 
 @admin_bp.route("/admin/images/monster/<image_key>", methods=["POST"])

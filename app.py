@@ -8,7 +8,7 @@ from flask import Flask, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash
 
 from db import get_db, init_db, seed_defaults, log_activity
-from web_helpers import _parse_dt, avatar_url, monster_image_url, bgm_url
+from web_helpers import _parse_dt, avatar_url, monster_image_url, bgm_url, favicon_url
 from game_data.constants import (
     IDLE_THRESHOLD_MINUTES, LEVEL_STAT_GROWTH, ELEMENT_COLORS, ELEMENT_BADGE_TEXT_COLORS,
 )
@@ -302,6 +302,7 @@ def _inject_nav_display_name():
         "nav_display_name": session.get("character_name") or session.get("username"),
         "nav_avatar_url": nav_avatar_url,
         "bgm_url": bgm_url(),
+        "favicon_url": favicon_url(),
     }
 
 

@@ -319,6 +319,17 @@ def monster_image_url(image_key):
     return url_for("static", filename=f"monsters/{image_key}.svg")
 
 
+def favicon_url():
+    """Resolves the site-wide browser-tab icon, static/favicon/custom/favicon.png
+    if an admin has uploaded one (see blueprints/admin.py's admin_upload_favicon),
+    else None so templates/base.html skips the <link rel="icon"> tag entirely and
+    the browser falls back to its own default tab icon."""
+    override_path = os.path.join(current_app.static_folder, "favicon", "custom", "favicon.png")
+    if os.path.exists(override_path):
+        return url_for("static", filename="favicon/custom/favicon.png")
+    return None
+
+
 def _process_square_image_upload(file_storage, max_bytes, dimension):
     """Validates and re-encodes an uploaded image into a fixed-size square
     PNG, returned as raw bytes -- the uploaded bytes/extension are NEVER
