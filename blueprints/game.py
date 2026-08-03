@@ -131,14 +131,14 @@ def _roll_boss_set_loot(db, settings, boss, character_id):
 
 
 def _roll_potion_drop(db, settings, character_id):
-    """Consolation-prize roll for an ordinary hunt/魔王房間 win: only reached
-    when nothing else already dropped this fight (see call sites -- no 秘境
-    loot, no 魔王套裝, no skill book), so the vast majority of "boring" fights
-    against a regular monster still have a small chance of something. Picks
-    uniformly between the two global potions (回春丹/凝神丹, country_id IS NULL
-    so this never accidentally pulls in a country-set weapon/armor row) and
-    puts it straight in the winner's inventory via the same _add_to_inventory
-    every other drop system uses.
+    """Independent post-WIN drop roll for every ordinary hunt/魔王房間 win --
+    unlike hidden-set/boss-set loot, this is never gated on whether the fight
+    already dropped something else, so a monster that also drops equipment
+    can hand out a potion in the same fight too. Picks uniformly between the
+    two global potions (回春丹/凝神丹, country_id IS NULL so this never
+    accidentally pulls in a country-set weapon/armor row) and puts it
+    straight in the winner's inventory via the same _add_to_inventory every
+    other drop system uses.
 
     Returns the dropped item row, or None when the roll failed."""
     if random.random() * 100 >= settings["potion_drop_percent"]:
@@ -778,17 +778,16 @@ def game_hunt():
                 db, session["user_id"], session["username"], "skill_book_drop",
                 detail=dropped_skill["name"], ip_address=request.remote_addr,
             )
-        # Potion consolation prize: only rolls when this fight didn't already
-        # hand out something else, so it doesn't stack with the rarer drops
-        # above rather than padding them.
-        if hidden_loot_dropped is None and boss_set_dropped is None and skill_book_dropped is None:
-            potion_dropped = _roll_potion_drop(db, settings, character["character_id"])
-            if potion_dropped is not None:
-                log_activity(
-                    db, session["user_id"], session["username"], "potion_drop",
-                    detail=f"擊敗{monster['name']}，獲得「{potion_dropped['name']}」",
-                    ip_address=request.remote_addr,
-                )
+        # Potion drop: an independent roll every win, regardless of whatever
+        # else this fight already handed out -- a hidden-set/boss-set/skill-
+        # book drop and a potion can both land in the same fight.
+        potion_dropped = _roll_potion_drop(db, settings, character["character_id"])
+        if potion_dropped is not None:
+            log_activity(
+                db, session["user_id"], session["username"], "potion_drop",
+                detail=f"擊敗{monster['name']}，獲得「{potion_dropped['name']}」",
+                ip_address=request.remote_addr,
+            )
     elif not result["timed_out"]:
         currency_lost = character["currency"] // 2
         new_currency = character["currency"] - currency_lost
@@ -976,14 +975,15 @@ def game_hunt_boss_room():
                        f"（{boss_set_dropped['hidden_set_name']}）",
                 ip_address=request.remote_addr,
             )
-        else:
-            potion_dropped = _roll_potion_drop(db, settings, character["character_id"])
-            if potion_dropped is not None:
-                log_activity(
-                    db, session["user_id"], session["username"], "potion_drop",
-                    detail=f"擊敗{boss['name']}，獲得「{potion_dropped['name']}」",
-                    ip_address=request.remote_addr,
-                )
+        # Potion drop: an independent roll every win, regardless of whether
+        # the boss set above also dropped -- both can land in the same fight.
+        potion_dropped = _roll_potion_drop(db, settings, character["character_id"])
+        if potion_dropped is not None:
+            log_activity(
+                db, session["user_id"], session["username"], "potion_drop",
+                detail=f"擊敗{boss['name']}，獲得「{potion_dropped['name']}」",
+                ip_address=request.remote_addr,
+            )
         new_level, new_exp, stat_gain = apply_exp(
             character["level"], character["exp"], exp_gain, settings,
             force_one=session.get("is_admin", False),

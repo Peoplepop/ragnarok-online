@@ -14,7 +14,7 @@
       </span>
       <form method="post" action="{{ url_for('game.game_inventory_use') }}">
         <input type="hidden" name="item_id" value="{{ item.id }}">
-        <button type="submit" style="padding:6px 14px; font-size:13px;">使用</button>
+        <button type="submit" class="turn-action-control" style="padding:6px 14px; font-size:13px;">使用</button>
       </form>
     </div>
     {% endfor %}
