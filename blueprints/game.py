@@ -361,8 +361,11 @@ def _render_game(**extra):
     # King war-defense bonus: character["character_id"] is the character's
     # own id (character["id"] is shadowed to the COUNTRY's id by the bare
     # countries.* join above -- see the 貢獻值 donate_cap note further down).
+    # in_any_war_window is also reused below by the 特殊對決 block's 篡位 tab,
+    # which is gated off exactly the same window as /country/challenge_king.
     is_reigning_king = character["character_id"] == character["king_character_id"]
-    king_war_defense_bonus = is_reigning_king and _in_any_war_window(settings)
+    in_any_war_window = _in_any_war_window(settings)
+    king_war_defense_bonus = is_reigning_king and in_any_war_window
     morale_buff_active = _morale_buff_active(character)
     stats = character_final_stats(character, equipped_items, settings, king_war_defense_bonus, morale_buff_active)
     current_hp, current_mp = _current_hp_mp(character, stats)
@@ -505,6 +508,8 @@ def _render_game(**extra):
         tournament_already_registered=tournament_already_registered,
         tournament_fee=settings["tournament_registration_fee"],
         tournament_deadline_label=tournament_deadline_label,
+        is_reigning_king=is_reigning_king,
+        in_any_war_window=in_any_war_window,
         major_events=major_events,
         chat_message_max_len=CHAT_MESSAGE_MAX_LEN,
         action_block_order=_sanitized_action_block_order(settings["action_block_order"]),

@@ -154,7 +154,7 @@ GAME_LAYOUT_BLOCKS = {
     "action": "⚡ 行動",
     "inventory": "🎒 背包",
     "conquer": "⚔️ 攻城／討伐",
-    "tournament": "🏆 天下武道大會",
+    "tournament": "⚔️ 特殊對決",
     "shop": "🏪 商店與交易",
     "bank": "🏦 銀行",
     "treasury": "🏛️ 國庫捐獻",

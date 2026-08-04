@@ -69,14 +69,7 @@
     {% if c.is_own_country %}
     <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
       {% if not c.is_own_king %}
-      <div style="font-size:12px; color:var(--gold-bright); margin-bottom:6px;">👑 篡位</div>
-      {% if in_any_war_window %}
-      <p class="hint" style="margin:0; color:var(--danger);">國戰或城鎮戰期間無法篡位</p>
-      {% else %}
-      <form method="post" action="{{ url_for('game.country_challenge_king') }}">
-        <button type="submit" class="turn-action-control btn-danger" style="padding:6px 14px; font-size:13px;">挑戰國王</button>
-      </form>
-      {% endif %}
+      <p class="hint" style="margin:0;">想篡奪王位嗎？前往 <a href="{{ url_for('game.game') }}">遊戲主畫面</a> 的「⚔️ 特殊對決」區塊挑戰國王</p>
       {% endif %}
 
       {% if c.is_own_king %}

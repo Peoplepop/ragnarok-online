@@ -1,19 +1,62 @@
-{% if current_tile.tile_type == 'fortress' %}
 <details class="panel" id="block-{{ block_key }}" open style="flex:1 1 380px;">
-  <summary><h3 style="margin:0; color:var(--gold-bright); font-size:15px;">🏆 天下武道大會</h3></summary>
+  <summary><h3 style="margin:0; color:var(--gold-bright); font-size:15px;">⚔️ 特殊對決</h3></summary>
   <div class="panel-body">
-  {% if tournament_already_registered %}
-  <p class="hint" style="margin:0;">你已經報名本屆天下武道大會，請於開賽後至 <a href="{{ url_for('tournament.tournament_page') }}">武道大會</a> 查看賽果</p>
-  {% elif tournament_registration_open %}
-  <p class="hint" style="margin:0 0 8px;">
-    報名費 {{ tournament_fee }} 諸神幣，報名截止：{{ tournament_deadline_label }}（台灣時間）
-  </p>
-  <form method="post" action="{{ url_for('tournament.tournament_register') }}">
-    <button type="submit" class="btn-primary" style="padding:6px 14px; font-size:13px;">🏆 報名天下武道大會</button>
-  </form>
-  {% else %}
-  <p class="hint" style="margin:0;">目前不是報名時間，請至 <a href="{{ url_for('tournament.tournament_page') }}">武道大會</a> 查看賽程與歷代優勝者</p>
-  {% endif %}
+    <div style="display:flex; gap:8px; margin-bottom:12px;">
+      <button type="button" class="special-duel-tab-btn btn-primary" data-tab="tournament" style="padding:6px 14px; font-size:13px;">🏆 天下武道大會</button>
+      <button type="button" class="special-duel-tab-btn btn-info" data-tab="usurp" style="padding:6px 14px; font-size:13px;">👑 國家篡位</button>
+    </div>
+
+    <div class="special-duel-tab-panel" data-tab-panel="tournament">
+      {% if current_tile.tile_type == 'fortress' %}
+        {% if tournament_already_registered %}
+        <p class="hint" style="margin:0;">你已經報名本屆天下武道大會，請於開賽後至 <a href="{{ url_for('tournament.tournament_page') }}">武道大會</a> 查看賽果</p>
+        {% elif tournament_registration_open %}
+        <p class="hint" style="margin:0 0 8px;">
+          報名費 {{ tournament_fee }} 諸神幣，報名截止：{{ tournament_deadline_label }}（台灣時間）
+        </p>
+        <form method="post" action="{{ url_for('tournament.tournament_register') }}">
+          <button type="submit" class="btn-primary" style="padding:6px 14px; font-size:13px;">🏆 報名天下武道大會</button>
+        </form>
+        {% else %}
+        <p class="hint" style="margin:0;">目前不是報名時間，請至 <a href="{{ url_for('tournament.tournament_page') }}">武道大會</a> 查看賽程與歷代優勝者</p>
+        {% endif %}
+      {% else %}
+      <p class="hint" style="margin:0;">請在任一國家要塞內才能報名天下武道大會，可至 <a href="{{ url_for('tournament.tournament_page') }}">武道大會</a> 查看賽程與歷代優勝者</p>
+      {% endif %}
+    </div>
+
+    <div class="special-duel-tab-panel" data-tab-panel="usurp" style="display:none;">
+      {% if character.king_character_id is none %}
+      <p class="hint" style="margin:0;">你的國家目前沒有國王，無法篡位</p>
+      {% elif is_reigning_king %}
+      <p class="hint" style="margin:0;">你已經是本國國王了，前往 <a href="{{ url_for('game.countries_page') }}">國家詳情</a> 可以指派挑戰者應戰參謀／大將軍之位</p>
+      {% elif in_any_war_window %}
+      <p class="hint" style="margin:0; color:var(--danger);">國戰或城鎮戰期間無法篡位</p>
+      {% else %}
+      <p class="hint" style="margin:0 0 8px;">挑戰你所屬國家目前的國王，獲勝即可奪得王位；戰敗將損失身上一半諸神幣</p>
+      <form method="post" action="{{ url_for('game.country_challenge_king') }}">
+        <button type="submit" class="turn-action-control btn-danger" style="padding:6px 14px; font-size:13px;">👑 挑戰國王</button>
+      </form>
+      {% endif %}
+    </div>
   </div>
 </details>
-{% endif %}
+
+<script>
+  (function () {
+    var block = document.getElementById("block-{{ block_key }}");
+    if (!block) return;
+    var buttons = block.querySelectorAll(".special-duel-tab-btn");
+    var panels = block.querySelectorAll(".special-duel-tab-panel");
+    buttons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var tab = btn.dataset.tab;
+        panels.forEach(function (p) { p.style.display = p.dataset.tabPanel === tab ? "" : "none"; });
+        buttons.forEach(function (b) {
+          b.classList.toggle("btn-primary", b === btn);
+          b.classList.toggle("btn-info", b !== btn);
+        });
+      });
+    });
+  })();
+</script>
