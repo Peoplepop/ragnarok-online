@@ -721,6 +721,28 @@ def admin_update_layout():
     return redirect(url_for("admin.admin_settings"))
 
 
+@admin_bp.route("/admin/announcement", methods=["POST"])
+@admin_required
+def admin_update_announcement():
+    text = request.form.get("announcement_text", "").strip()
+    enabled = 1 if request.form.get("announcement_enabled") == "on" else 0
+
+    if len(text) > 300:
+        flash("公告內容請控制在 300 字以內")
+        return redirect(url_for("admin.admin_settings"))
+
+    db = get_db()
+    db.execute(
+        "UPDATE game_settings SET announcement_text = ?, announcement_enabled = ? WHERE id = 1",
+        (text, enabled),
+    )
+    db.commit()
+    db.close()
+
+    flash("已更新公告設定")
+    return redirect(url_for("admin.admin_settings"))
+
+
 @admin_bp.route("/admin/settings/hunting/<int:ground_id>", methods=["POST"])
 @admin_required
 def admin_update_hunting_ground(ground_id):

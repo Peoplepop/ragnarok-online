@@ -233,6 +233,41 @@
     .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .table-scroll table { min-width: 480px; }
 
+    .announcement-bar {
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      width: 100vw;
+      margin-left: calc(50% - 50vw);
+      overflow: hidden;
+      background: linear-gradient(90deg, #1a1408, #2a2010, #1a1408);
+      border-bottom: 1px solid var(--border);
+      box-shadow: 0 2px 12px rgba(212, 175, 55, 0.15);
+      padding: 8px 0;
+    }
+    .announcement-bar__track {
+      display: flex;
+      width: max-content;
+      animation: announcement-scroll 22s linear infinite;
+    }
+    .announcement-bar__item {
+      flex: none;
+      padding-right: 64px;
+      white-space: nowrap;
+      color: var(--gold-bright);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    @keyframes announcement-scroll {
+      from { transform: translateX(0); }
+      to { transform: translateX(-50%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .announcement-bar__track { animation: none; }
+      .announcement-bar { overflow-x: auto; }
+    }
+
     @media (max-width: 640px) {
       body { margin: 20px auto; padding: 0 14px; }
 
@@ -278,6 +313,14 @@
   {% endif %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
+  {% if announcement_text %}
+  <div class="announcement-bar" role="region" aria-label="公告">
+    <div class="announcement-bar__track">
+      <span class="announcement-bar__item">📢 {{ announcement_text }}</span>
+      <span class="announcement-bar__item">📢 {{ announcement_text }}</span>
+    </div>
+  </div>
+  {% endif %}
   {% if bgm_url %}
   <audio id="bgm-player" src="{{ bgm_url }}" loop preload="auto"></audio>
   {% endif %}

@@ -3,6 +3,21 @@
 
 {% block content %}
   {% include "_admin_nav.html" %}
+
+  <div class="panel" style="margin-bottom: 18px;">
+    <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">📢 公告設定</h3>
+    <p class="hint" style="margin:0 0 12px;">開啟後，公告文字會以跑馬燈的形式顯示在網站最上方（所有頁面都看得到）</p>
+    <form method="post" action="{{ url_for('admin.admin_update_announcement') }}">
+      <label style="display:flex; align-items:center; gap:8px; margin-bottom:12px; cursor:pointer;">
+        <input type="checkbox" name="announcement_enabled" style="width:auto; margin:0;" {% if settings.announcement_enabled %}checked{% endif %}>
+        <span style="color:var(--text); font-size:14px;">啟用公告跑馬燈</span>
+      </label>
+      <label>公告內容（最多 300 字）</label>
+      <input type="text" name="announcement_text" maxlength="300" value="{{ settings.announcement_text }}" placeholder="例如：伺服器將於今晚 22:00 進行維護，預計 30 分鐘">
+      <button type="submit">儲存公告</button>
+    </form>
+  </div>
+
   <h2 style="color: var(--gold-bright); font-size: 18px; margin-top:0;">回合與升級設定</h2>
   <p class="hint" style="margin-top:-8px; margin-bottom:20px;">調整每回合等待秒數，以及升級所需經驗的成長曲線</p>
 

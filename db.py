@@ -1356,6 +1356,10 @@ def _ensure_game_settings_columns(conn):
             "ALTER TABLE game_settings ADD COLUMN action_block_order TEXT NOT NULL "
             "DEFAULT 'action,inventory,conquer,tournament,shop,bank,treasury'"
         )
+    if "announcement_text" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN announcement_text TEXT NOT NULL DEFAULT ''")
+    if "announcement_enabled" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN announcement_enabled INTEGER NOT NULL DEFAULT 0")
 
 
 def init_db():

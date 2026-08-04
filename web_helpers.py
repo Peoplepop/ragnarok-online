@@ -466,6 +466,20 @@ def bgm_url():
     return None
 
 
+def active_announcement():
+    """The admin-set site-wide announcement text, or None if disabled/empty
+    so templates/base.html can skip rendering the marquee bar entirely."""
+    db = get_db()
+    row = db.execute(
+        "SELECT announcement_text, announcement_enabled FROM game_settings WHERE id = 1"
+    ).fetchone()
+    db.close()
+    if row is None or not row["announcement_enabled"]:
+        return None
+    text = row["announcement_text"].strip()
+    return text or None
+
+
 def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
