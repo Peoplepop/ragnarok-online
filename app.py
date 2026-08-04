@@ -8,7 +8,9 @@ from flask import Flask, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash
 
 from db import get_db, init_db, seed_defaults, log_activity
-from web_helpers import _parse_dt, avatar_url, monster_image_url, bgm_url, favicon_url, active_announcement
+from web_helpers import (
+    _parse_dt, avatar_url, monster_image_url, official_image_url, bgm_url, favicon_url, active_announcement,
+)
 from game_data.constants import (
     IDLE_THRESHOLD_MINUTES, LEVEL_STAT_GROWTH, ELEMENT_COLORS, ELEMENT_BADGE_TEXT_COLORS,
 )
@@ -330,6 +332,7 @@ app.register_blueprint(feedback_bp)
 # every route threading the URL through render_template kwargs.
 app.jinja_env.globals["avatar_url"] = avatar_url
 app.jinja_env.globals["monster_image_url"] = monster_image_url
+app.jinja_env.globals["official_image_url"] = official_image_url
 
 # Element badge support (see templates/_macros.html's element_badge): the
 # color maps stay single-sourced in game_data/constants.py, and

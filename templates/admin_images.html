@@ -101,4 +101,38 @@
     </div>
     {% endfor %}
   </div>
+
+  <h2 style="color: var(--gold-bright); font-size: 18px;">國王／參謀／大將軍圖片</h2>
+  <p class="hint" style="margin-top:-8px; margin-bottom:16px;">
+    每個國家的國王、參謀、大將軍 NPC 各自的專屬圖片，用於篡位／切磋的戰鬥畫面。
+    未上傳前不會顯示圖片（沒有預設美術）。圖片格式限 JPG / PNG / GIF，檔案大小上限 2MB，系統會自動置中裁切並縮放為正方形。
+  </p>
+
+  <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:12px;">
+    {% for item in official_items %}
+    <div class="panel" style="display:flex; flex-direction:column; gap:8px; align-items:center; text-align:center;">
+      {% if item.preview_url %}
+      <img src="{{ item.preview_url }}" alt="{{ item.country_name }}{{ item.seat_label }}" style="width:64px; height:64px; border-radius:50%; border:2px solid var(--border); object-fit:cover;">
+      {% else %}
+      <div style="width:64px; height:64px; border-radius:50%; border:2px dashed var(--border); display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--text-dim);">尚未上傳</div>
+      {% endif %}
+      <div style="font-size:12px; color:var(--gold-bright);">{{ item.country_name }}</div>
+      <div style="font-size:11px; color:var(--text-dim);">{{ item.seat_label }}</div>
+      {% if item.has_override %}<div style="font-size:11px; color:var(--gold);">已自訂</div>{% endif %}
+
+      <form method="post" action="{{ url_for('admin.admin_upload_official_image', key=item.key) }}"
+            enctype="multipart/form-data" style="display:flex; flex-direction:column; gap:6px; width:100%;">
+        <input type="file" name="image_file" accept="image/png,image/jpeg,image/gif" style="font-size:11px;">
+        <button type="submit" style="padding:4px 10px; font-size:12px;">上傳</button>
+      </form>
+
+      {% if item.has_override %}
+      <form method="post" action="{{ url_for('admin.admin_reset_official_image', key=item.key) }}"
+            onsubmit="return confirm('確定要移除「{{ item.country_name }}{{ item.seat_label }}」的自訂圖片嗎？');" style="width:100%;">
+        <button type="submit" class="btn" style="padding:4px 10px; font-size:12px; width:100%;">移除圖片</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
 {% endblock %}

@@ -13,7 +13,7 @@ from werkzeug.security import generate_password_hash
 from db import get_db, LEVEL_CAP, log_activity, DEFAULT_MONSTERS, HIDDEN_MONSTERS, _bump_monster_combat_stats
 from web_helpers import (
     admin_required, _parse_dt, _valid_war_time, _format_duration, _sanitized_action_block_order,
-    avatar_url, monster_image_url, _process_square_image_upload,
+    avatar_url, monster_image_url, official_image_url, _process_square_image_upload,
     background_url, bgm_url, _process_background_image_upload, _sniff_audio_format,
 )
 from game_data.constants import (
@@ -826,6 +826,24 @@ def _favicon_custom_dir():
     return os.path.join(current_app.static_folder, "favicon", "custom")
 
 
+def _official_dir():
+    return os.path.join(current_app.static_folder, "officials")
+
+
+_OFFICIAL_SEAT_LABELS = {"king": "國王", "advisor": "參謀", "general": "大將軍"}
+
+
+def _known_official_image_keys(db):
+    # Unlike monster/avatar keys (a fixed Python list) this depends on the
+    # DB's actual countries -- built fresh each call rather than cached,
+    # since it's cheap and countries never change after seeding anyway.
+    country_rows = db.execute("SELECT id, name FROM countries ORDER BY id").fetchall()
+    return {
+        f"{c['id']}_{seat}": {"country_id": c["id"], "country_name": c["name"], "seat": seat}
+        for c in country_rows for seat in _OFFICIAL_SEAT_LABELS
+    }
+
+
 @admin_bp.route("/admin/images")
 @admin_required
 def admin_images():
@@ -856,8 +874,23 @@ def admin_images():
             "preview_url": avatar_url(key, None),
         })
 
+    db = get_db()
+    official_catalog = _known_official_image_keys(db)
+    db.close()
+    official_dir = _official_dir()
+    official_items = []
+    for key, entry in official_catalog.items():
+        official_items.append({
+            "key": key,
+            "country_name": entry["country_name"],
+            "seat_label": _OFFICIAL_SEAT_LABELS[entry["seat"]],
+            "has_override": os.path.isfile(os.path.join(official_dir, f"{key}.png")),
+            "preview_url": official_image_url(entry["country_id"], entry["seat"]),
+        })
+
     return render_template(
-        "admin_images.html", monster_items=monster_items, avatar_items=avatar_items, active_tab="images",
+        "admin_images.html", monster_items=monster_items, avatar_items=avatar_items,
+        official_items=official_items, active_tab="images",
         has_favicon=os.path.isfile(os.path.join(_favicon_custom_dir(), "favicon.png")),
     )
 
@@ -947,6 +980,57 @@ def admin_reset_all_monster_images():
             if os.path.isfile(path):
                 os.remove(path)
     flash("已將所有怪物圖片重置為預設")
+    return redirect(url_for("admin.admin_images"))
+
+
+@admin_bp.route("/admin/images/official/<key>", methods=["POST"])
+@admin_required
+def admin_upload_official_image(key):
+    # key becomes part of a filesystem path below -- validated against the
+    # DB's actual countries × 3 seats rather than sanitized, same
+    # allow-list-only rule as the monster/avatar uploads above.
+    db = get_db()
+    known_keys = _known_official_image_keys(db)
+    db.close()
+    if key not in known_keys:
+        flash("無效的官員圖片代碼")
+        return redirect(url_for("admin.admin_images"))
+
+    upload = request.files.get("image_file")
+    if upload is None or not upload.filename:
+        flash("請選擇一個圖片檔案")
+        return redirect(url_for("admin.admin_images"))
+
+    png_bytes, error = _process_square_image_upload(upload, CUSTOM_AVATAR_MAX_BYTES, CUSTOM_AVATAR_DIMENSION)
+    if error:
+        flash(error)
+        return redirect(url_for("admin.admin_images"))
+
+    target_dir = _official_dir()
+    os.makedirs(target_dir, exist_ok=True)
+    with open(os.path.join(target_dir, f"{key}.png"), "wb") as f:
+        f.write(png_bytes)
+
+    entry = known_keys[key]
+    flash(f"已更新「{entry['country_name']} {_OFFICIAL_SEAT_LABELS[entry['seat']]}」的圖片")
+    return redirect(url_for("admin.admin_images"))
+
+
+@admin_bp.route("/admin/images/official/<key>/reset", methods=["POST"])
+@admin_required
+def admin_reset_official_image(key):
+    db = get_db()
+    known_keys = _known_official_image_keys(db)
+    db.close()
+    if key not in known_keys:
+        flash("無效的官員圖片代碼")
+        return redirect(url_for("admin.admin_images"))
+
+    path = os.path.join(_official_dir(), f"{key}.png")
+    if os.path.isfile(path):
+        os.remove(path)
+    entry = known_keys[key]
+    flash(f"已移除「{entry['country_name']} {_OFFICIAL_SEAT_LABELS[entry['seat']]}」的自訂圖片")
     return redirect(url_for("admin.admin_images"))
 
 

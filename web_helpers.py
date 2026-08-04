@@ -328,6 +328,21 @@ def monster_image_url(image_key):
     return url_for("static", filename=f"monsters/{image_key}.svg")
 
 
+def official_image_url(country_id, seat):
+    """Admin-uploaded portrait for a country's King/Advisor/General NPC (see
+    blueprints/admin.py's /admin/images/official routes), keyed by
+    "{country_id}_{seat}". Unlike monsters/avatars there's no shipped
+    default art for these -- returns None if nothing has been uploaded, so
+    callers (templates/battle.html) only render an <img> when this is
+    truthy, same guard pattern as monster.image_key."""
+    if not country_id or not seat:
+        return None
+    path = os.path.join(current_app.static_folder, "officials", f"{country_id}_{seat}.png")
+    if os.path.exists(path):
+        return url_for("static", filename=f"officials/{country_id}_{seat}.png")
+    return None
+
+
 def favicon_url():
     """Resolves the site-wide browser-tab icon, static/favicon/custom/favicon.png
     if an admin has uploaded one (see blueprints/admin.py's admin_upload_favicon),

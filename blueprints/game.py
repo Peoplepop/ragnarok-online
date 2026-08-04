@@ -12,7 +12,7 @@ from web_helpers import (
     _remove_from_inventory, _in_any_war_window, _taipei_now, _parse_dt,
     _current_war_window_end, _morale_buff_active, _tournament_registration_open,
     _taipei_time_label, ACTION_DT_FORMAT, _major_event_feed, _sanitized_action_block_order,
-    avatar_url, background_url,
+    avatar_url, background_url, official_image_url,
 )
 from game_data.constants import (
     SHOP_TYPE_LABELS, SLOT_LABELS, EQUIP_SLOT_COLUMNS, GOVERNMENT_ROLES, tile_display_name,
@@ -2888,6 +2888,7 @@ def country_challenge_king():
         "hp": king_stats["hp"], "atk": king_stats["str"],
         "def": king_stats["def"], "agi": king_stats["agi"],
         "element": king_row["element"],
+        "portrait_url": official_image_url(king_row["id"], "king"),
     }
 
     result = run_battle(
@@ -2920,11 +2921,9 @@ def country_challenge_king():
             (character["character_id"], country_id),
         )
         outcome_detail = f"擊敗國王{king_row['defender_name']}，篡位成功，成為「{country_name}」新任國王"
-        flash(f"篡位成功！你已成為「{country_name}」的新任國王")
     elif result["timed_out"]:
         new_currency = character["currency"]
         outcome_detail = "篡位挑戰回合已滿，未分勝負，沒有任何諸神幣損失"
-        flash("篡位挑戰未分勝負（戰鬥回合已滿），沒有任何諸神幣損失")
     else:
         currency_lost = character["currency"] // 2
         new_currency = character["currency"] - currency_lost
@@ -2932,7 +2931,6 @@ def country_challenge_king():
             "UPDATE countries SET treasury = treasury + ? WHERE id = ?", (currency_lost, country_id)
         )
         outcome_detail = f"篡位失敗，身上 {currency_lost} 諸神幣被沒入「{country_name}」國庫"
-        flash(f"篡位失敗，身上 {currency_lost} 諸神幣被沒入國庫")
 
     db.execute(
         """UPDATE characters
@@ -2951,7 +2949,26 @@ def country_challenge_king():
     )
     db.commit()
     db.close()
-    return redirect(url_for("game.game"))
+
+    return render_template(
+        "battle.html",
+        usurp_duel=True,
+        opponent_seat_label="國王",
+        opponent_country_name=country_name,
+        page_background_url=_battle_bg_url(king_row["element"]),
+        monster=king_monster,
+        log=result["log"],
+        won=result["won"],
+        timed_out=result["timed_out"],
+        currency_lost=currency_lost,
+        player_hp=result["player_hp"],
+        max_hp=challenger_stats["hp"],
+        player_mp=result["player_mp"],
+        max_mp=challenger_stats["mp"],
+        player_stats=challenger_stats,
+        player_level=character["level"],
+        player_avatar_url=avatar_url(session.get("avatar_key"), session.get("avatar_custom_filename")),
+    )
 
 
 # 切磋 (advisor/general sparring) -- unlike 篡位/官職挑戰 this is explicitly
@@ -3036,6 +3053,7 @@ def country_spar_official(seat):
         "hp": opponent_stats["hp"], "atk": opponent_stats["str"],
         "def": opponent_stats["def"], "agi": opponent_stats["agi"],
         "element": opponent_row["element"],
+        "portrait_url": official_image_url(opponent_row["id"], seat),
     }
 
     result = run_battle(
@@ -3062,20 +3080,35 @@ def country_spar_official(seat):
     )
     if result["won"]:
         outcome_detail = f"切磋擊敗{seat_label}{opponent_row['defender_name']}"
-        flash(f"切磋勝利！擊敗了{seat_label}{opponent_row['defender_name']}")
     elif result["timed_out"]:
         outcome_detail = f"與{seat_label}{opponent_row['defender_name']}切磋回合已滿，未分勝負"
-        flash("切磋未分勝負（戰鬥回合已滿）")
     else:
         outcome_detail = f"切磋輸給{seat_label}{opponent_row['defender_name']}"
-        flash(f"切磋落敗，輸給了{seat_label}{opponent_row['defender_name']}")
     log_activity(
         db, session["user_id"], session["username"], "spar_official",
         detail=outcome_detail, ip_address=request.remote_addr,
     )
     db.commit()
     db.close()
-    return redirect(url_for("game.game"))
+
+    return render_template(
+        "battle.html",
+        spar_duel=True,
+        opponent_seat_label=seat_label,
+        opponent_country_name=opponent_row["name"],  # bare countries.* -> own country's name
+        page_background_url=_battle_bg_url(opponent_row["element"]),
+        monster=opponent_monster,
+        log=result["log"],
+        won=result["won"],
+        timed_out=result["timed_out"],
+        player_hp=result["player_hp"],
+        max_hp=challenger_stats["hp"],
+        player_mp=result["player_mp"],
+        max_mp=challenger_stats["mp"],
+        player_stats=challenger_stats,
+        player_level=character["level"],
+        player_avatar_url=avatar_url(session.get("avatar_key"), session.get("avatar_custom_filename")),
+    )
 
 
 @game_bp.route("/country/authorize_challenge", methods=["POST"])
