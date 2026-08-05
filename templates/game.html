@@ -6,7 +6,11 @@
 <style>
   .quick-jump-nav {
     position: sticky;
-    top: 0;
+    /* Stacks directly below the announcement marquee (base.html sets
+       --announcement-h once it measures the bar's real height) instead of
+       both sticking to top:0 and having the marquee's higher z-index cover
+       these buttons. Falls back to 0px when there's no announcement. */
+    top: var(--announcement-h, 0px);
     z-index: 5;
     display: flex;
     flex-wrap: wrap;

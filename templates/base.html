@@ -397,6 +397,17 @@
       };
       syncBgm();
 
+      // Exposes the announcement marquee's real rendered height as a CSS
+      // var so other sticky elements (e.g. game.html's quick-jump-nav) can
+      // sit "top: var(--announcement-h, 0px)" and stack directly below it
+      // instead of both sticking to top:0 and overlapping -- see the
+      // .announcement-bar rule above (z-index 200, so without this it wins
+      // and visually covers whatever else is stuck at the top).
+      var announcementBar = document.querySelector('.announcement-bar');
+      if (announcementBar) {
+        document.documentElement.style.setProperty('--announcement-h', announcementBar.offsetHeight + 'px');
+      }
+
       document.querySelectorAll('.password-toggle').forEach(function (btn) {
         var input = document.getElementById(btn.dataset.target);
         if (!input) return;
