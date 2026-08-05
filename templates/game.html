@@ -367,10 +367,11 @@
 
   <script>
     (function () {
-      // Auto-hunt potion resume: battle.html's auto-loop, when HP runs low
-      // mid-auto-hunt and a healing potion is available, uses it (POST
-      // /game/inventory/use) instead of just stopping -- that route redirects
-      // here, not back to battle.html, so this picks the trail back up: once
+      // Auto-hunt potion resume: battle.html's auto-loop, when HP or MP runs
+      // low mid-auto-hunt and the matching 自動補血/自動補魔 toggle is on with
+      // a potion available, uses it (POST /game/inventory/use) instead of
+      // just stopping -- that route redirects here, not back to battle.html,
+      // so this picks the trail back up: once
       // the same cooldown that use-item action just started has cleared,
       // re-submit the hunt form for the same ground the player was auto-
       // hunting at. Landing back on battle.html re-arms "autoHunt" itself

@@ -1026,6 +1026,16 @@ def game_hunt():
            ORDER BY items.consumable_amount DESC LIMIT 1""",
         (character["character_id"],),
     ).fetchone()
+    # Same idea, MP side -- both are independently opt-in toggles in
+    # battle.html (自動補血/自動補魔), not tied to whether the other is on.
+    mp_potion = db.execute(
+        """SELECT items.id AS item_id, items.name, items.consumable_amount, inventory.quantity
+           FROM inventory JOIN items ON items.id = inventory.item_id
+           WHERE inventory.character_id = ? AND items.consumable_effect = 'heal_mp'
+                 AND inventory.quantity > 0
+           ORDER BY items.consumable_amount DESC LIMIT 1""",
+        (character["character_id"],),
+    ).fetchone()
 
     db.commit()
     db.close()
@@ -1034,6 +1044,7 @@ def game_hunt():
         "battle.html",
         ground=ground,
         hp_potion=dict(hp_potion) if hp_potion else None,
+        mp_potion=dict(mp_potion) if mp_potion else None,
         page_background_url=_battle_bg_url(tile_element),
         # The DEBUFFED copy is what the player actually fought, so the
         # "敵方" stat panel must show those numbers, not the pristine row's.

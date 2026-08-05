@@ -270,6 +270,12 @@
       <button type="submit" class="turn-action-control btn-primary" id="continue-hunt-btn">⚔️ 繼續挑戰</button>
     </form>
     <button type="button" id="auto-hunt-toggle" class="btn-info" style="margin-right:10px;">🔁 自動連續挑戰</button>
+    <label style="display:inline-flex; align-items:center; gap:4px; margin-right:10px; font-size:13px; color:var(--text-dim); cursor:pointer;">
+      <input type="checkbox" id="auto-heal-hp-toggle"> 自動補血
+    </label>
+    <label style="display:inline-flex; align-items:center; gap:4px; margin-right:10px; font-size:13px; color:var(--text-dim); cursor:pointer;">
+      <input type="checkbox" id="auto-heal-mp-toggle"> 自動補魔
+    </label>
     {% endif %}
     <a href="{{ url_for('game.game') }}" class="btn btn-info">← 返回主畫面</a>
     {% if can_continue_hunt %}
@@ -518,21 +524,58 @@
       var cooldownRemaining = {{ cooldown_seconds | default(0) }};
       var maxHpAfter = {{ max_hp | default(0) }};
       var playerHpAfter = {{ player_hp | default(0) }};
+      var maxMpAfter = {{ max_mp | default(0) }};
+      var playerMpAfter = {{ player_mp | default(0) }};
       var bossRoomAvailable = {{ 'true' if boss_room_available else 'false' }};
       var hpPotion = {{ hp_potion | tojson if hp_potion else 'null' }};
+      var mpPotion = {{ mp_potion | tojson if mp_potion else 'null' }};
       var LOW_HP_RATIO = 0.2;
-      // How full to top HP back up to when auto-drinking a potion -- clears
-      // LOW_HP_RATIO with a comfortable margin so it doesn't immediately
-      // re-trigger next fight if the potion is a small one.
+      var LOW_MP_RATIO = 0.2;
+      // How full to top HP/MP back up to when auto-drinking a potion --
+      // clears the LOW_*_RATIO trigger with a comfortable margin so it
+      // doesn't immediately re-trigger next fight if the potion is a small
+      // one.
       var AUTO_POTION_TARGET_RATIO = 0.6;
 
       var continueForm = document.getElementById("continue-hunt-form");
       var autoToggle = document.getElementById("auto-hunt-toggle");
+      var autoHealHpToggle = document.getElementById("auto-heal-hp-toggle");
+      var autoHealMpToggle = document.getElementById("auto-heal-mp-toggle");
       var statusEl = document.getElementById("auto-hunt-status");
       var autoHuntBar = document.getElementById("auto-hunt-bar");
       var autoHuntBarStatus = document.getElementById("auto-hunt-bar-status");
       var pauseTopBtn = document.getElementById("auto-hunt-pause-top");
       var controls = document.querySelectorAll(".turn-action-control");
+      // 自動補血/自動補魔 are independent, per-browser opt-in preferences
+      // (localStorage, same persistence pattern as the existing 🔊 sound
+      // toggle and 🐢/▶/⏩ battle-speed toggle) -- OFF by default, since
+      // auto-battle alone must keep behaving exactly as before (stop at low
+      // HP, never touch MP) unless the player explicitly turns a potion
+      // toggle on.
+      function readBoolPref(key) {
+        try {
+          return localStorage.getItem(key) === "1";
+        } catch (e) {
+          return false;
+        }
+      }
+      function writeBoolPref(key, value) {
+        try {
+          localStorage.setItem(key, value ? "1" : "0");
+        } catch (e) {}
+      }
+      if (autoHealHpToggle) {
+        autoHealHpToggle.checked = readBoolPref("autoHealHp");
+        autoHealHpToggle.addEventListener("change", function () {
+          writeBoolPref("autoHealHp", autoHealHpToggle.checked);
+        });
+      }
+      if (autoHealMpToggle) {
+        autoHealMpToggle.checked = readBoolPref("autoHealMp");
+        autoHealMpToggle.addEventListener("change", function () {
+          writeBoolPref("autoHealMp", autoHealMpToggle.checked);
+        });
+      }
       // Grace period before the very first auto-submit on a freshly loaded
       // page: if the server-computed cooldown has already elapsed by the
       // time this page renders (very common -- the previous fight's log
@@ -594,19 +637,18 @@
         return;
       }
 
-      var armed = readArmed();
-      var lowHp = maxHpAfter > 0 && (playerHpAfter / maxHpAfter) < LOW_HP_RATIO;
-      if (armed && lowHp && hpPotion && hpPotion.quantity > 0) {
-        // Auto-drink instead of stopping: submit a hidden POST to the
-        // existing use-item route (same route/cooldown as a manual use),
-        // which redirects to /game -- a small resume script there (see
-        // game.html) picks the sessionStorage flag back up once the
-        // cooldown clears and re-submits the hunt form for this same
-        // ground, landing back here with "autoHunt" still armed.
-        var missing = Math.round(maxHpAfter * AUTO_POTION_TARGET_RATIO) - playerHpAfter;
-        var qty = Math.max(1, Math.ceil(missing / hpPotion.consumable_amount));
-        qty = Math.min(qty, hpPotion.quantity);
-        setStatus("HP 過低，自動使用「" + hpPotion.name + "」x" + qty + "...");
+      // Auto-drink instead of stopping/idling: submit a hidden POST to the
+      // existing use-item route (same route/cooldown as a manual use), which
+      // redirects to /game -- a small resume script there (see game.html)
+      // picks the sessionStorage flag back up once the cooldown clears and
+      // re-submits the hunt form for this same ground, landing back here
+      // with "autoHunt" still armed. Shared by both the HP and MP branches
+      // below -- only which potion/amount differs.
+      function usePotionAndResume(potion, current, max, label) {
+        var missing = Math.round(max * AUTO_POTION_TARGET_RATIO) - current;
+        var qty = Math.max(1, Math.ceil(missing / potion.consumable_amount));
+        qty = Math.min(qty, potion.quantity);
+        setStatus(label + "過低，自動使用「" + potion.name + "」x" + qty + "...");
         try {
           sessionStorage.setItem(
             "autoHuntPotionResume",
@@ -620,7 +662,7 @@
           potionForm.style.display = "none";
           var itemField = document.createElement("input");
           itemField.name = "item_id";
-          itemField.value = hpPotion.item_id;
+          itemField.value = potion.item_id;
           potionForm.appendChild(itemField);
           var qtyField = document.createElement("input");
           qtyField.name = "quantity";
@@ -629,11 +671,29 @@
           document.body.appendChild(potionForm);
           potionForm.submit();
         }, FIRST_SUBMIT_GRACE_MS);
+      }
+
+      var armed = readArmed();
+      var autoHealHp = !!(autoHealHpToggle && autoHealHpToggle.checked);
+      var autoHealMp = !!(autoHealMpToggle && autoHealMpToggle.checked);
+      var lowHp = maxHpAfter > 0 && (playerHpAfter / maxHpAfter) < LOW_HP_RATIO;
+      var lowMp = maxMpAfter > 0 && (playerMpAfter / maxMpAfter) < LOW_MP_RATIO;
+      if (armed && lowHp && autoHealHp && hpPotion && hpPotion.quantity > 0) {
+        usePotionAndResume(hpPotion, playerHpAfter, maxHpAfter, "HP ");
         return;
       } else if (armed && lowHp) {
+        // Low HP always stops the loop as a safety net when 自動補血 is off
+        // or no potion is owned -- unlike MP, this is never silently
+        // ignored, since fighting on could lose the fight/currency.
         armed = false;
         persistArmed(false);
-        setStatus("已停止自動挑戰：HP 過低（低於上限 " + Math.round(LOW_HP_RATIO * 100) + "%），且背包沒有補血藥品");
+        setStatus(
+          "已停止自動挑戰：HP 過低（低於上限 " + Math.round(LOW_HP_RATIO * 100) + "%）" +
+          (autoHealHp ? "，且背包沒有補血藥品" : "")
+        );
+      } else if (armed && lowMp && autoHealMp && mpPotion && mpPotion.quantity > 0) {
+        usePotionAndResume(mpPotion, playerMpAfter, maxMpAfter, "MP ");
+        return;
       } else if (armed && bossRoomAvailable) {
         // A guardian win just unlocked a one-time boss-room invitation
         // (server-side `pending_boss_monster_id`); continuing the auto-loop
