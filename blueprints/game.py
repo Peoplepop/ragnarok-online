@@ -538,6 +538,7 @@ def _render_game(**extra):
         current_tile=current_tile,
         move_targets=move_targets,
         hunting_grounds=hunting_grounds,
+        last_ground_id=session.get("last_ground_id"),
         admin_monsters=admin_monsters,
         cooldown_seconds=cooldown_seconds,
         recover_cost=recover_cost,
@@ -706,6 +707,10 @@ def game_hunt():
         db.close()
         flash("請選擇一個有效的打怪場")
         return redirect(url_for("game.game"))
+    # Remembered so the next visit to /game pre-selects this ground instead
+    # of always defaulting back to the first <option> -- see last_ground_id
+    # in _render_game/action.html.
+    session["last_ground_id"] = ground["id"]
 
     settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
 
@@ -1008,12 +1013,27 @@ def game_hunt():
             "SELECT element FROM countries WHERE id = ?", (character["tile_country_id"],)
         ).fetchone()["element"]
 
+    # Best owned HP-healing consumable (if any) -- lets battle.html's
+    # auto-hunt loop drink a potion and resume instead of just stopping when
+    # HP runs low. Highest consumable_amount first so one auto-use restores
+    # as much as possible per action (each item-use still costs its own
+    # cooldown cycle, same as every other world action).
+    hp_potion = db.execute(
+        """SELECT items.id AS item_id, items.name, items.consumable_amount, inventory.quantity
+           FROM inventory JOIN items ON items.id = inventory.item_id
+           WHERE inventory.character_id = ? AND items.consumable_effect = 'heal_hp'
+                 AND inventory.quantity > 0
+           ORDER BY items.consumable_amount DESC LIMIT 1""",
+        (character["character_id"],),
+    ).fetchone()
+
     db.commit()
     db.close()
 
     return render_template(
         "battle.html",
         ground=ground,
+        hp_potion=dict(hp_potion) if hp_potion else None,
         page_background_url=_battle_bg_url(tile_element),
         # The DEBUFFED copy is what the player actually fought, so the
         # "敵方" stat panel must show those numbers, not the pristine row's.

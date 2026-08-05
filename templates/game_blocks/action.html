@@ -56,10 +56,10 @@
     {% elif current_tile.tile_type == 'fortress' %}
     <p class="hint" style="margin:0;">要塞內只有商店，沒有打怪地點，請先移動到要塞外</p>
     {% else %}
-    <form method="post" action="{{ url_for('game.game_hunt') }}" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-      <select name="ground_id" class="turn-action-control">
+    <form method="post" action="{{ url_for('game.game_hunt') }}" id="hunt-form" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+      <select name="ground_id" id="hunt-ground-select" class="turn-action-control">
         {% for g in hunting_grounds %}
-        <option value="{{ g.id }}">{{ g.name }}（Lv.{{ g.min_level }}-{{ g.max_level }}）</option>
+        <option value="{{ g.id }}" {% if last_ground_id and g.id == last_ground_id %}selected{% endif %}>{{ g.name }}（Lv.{{ g.min_level }}-{{ g.max_level }}）</option>
         {% endfor %}
       </select>
       <button type="submit" class="turn-action-control btn-primary" style="padding:6px 14px; font-size:13px;">前往打怪</button>

@@ -367,6 +367,51 @@
 
   <script>
     (function () {
+      // Auto-hunt potion resume: battle.html's auto-loop, when HP runs low
+      // mid-auto-hunt and a healing potion is available, uses it (POST
+      // /game/inventory/use) instead of just stopping -- that route redirects
+      // here, not back to battle.html, so this picks the trail back up: once
+      // the same cooldown that use-item action just started has cleared,
+      // re-submit the hunt form for the same ground the player was auto-
+      // hunting at. Landing back on battle.html re-arms "autoHunt" itself
+      // (still present in sessionStorage, never touched by this step).
+      var RESUME_MAX_AGE_MS = 5 * 60 * 1000; // ignore a stale flag from a long-abandoned session
+      var raw = null;
+      try {
+        raw = sessionStorage.getItem("autoHuntPotionResume");
+      } catch (e) {}
+      if (!raw) return;
+      try {
+        sessionStorage.removeItem("autoHuntPotionResume");
+      } catch (e) {}
+      var resume;
+      try {
+        resume = JSON.parse(raw);
+      } catch (e) {
+        return;
+      }
+      if (!resume || Date.now() - resume.armedAt > RESUME_MAX_AGE_MS) return;
+
+      var huntForm = document.getElementById("hunt-form");
+      var groundSelect = document.getElementById("hunt-ground-select");
+      if (!huntForm || !groundSelect) return;
+      groundSelect.value = String(resume.groundId);
+      if (groundSelect.value !== String(resume.groundId)) return; // ground no longer offered
+
+      var remaining = {{ cooldown_seconds }};
+      (function tick() {
+        if (remaining <= 0) {
+          huntForm.submit();
+          return;
+        }
+        remaining -= 1;
+        setTimeout(tick, 1000);
+      })();
+    })();
+  </script>
+
+  <script>
+    (function () {
       // Quick-jump nav: built from the DOM (not the raw action_block_order
       // list) so a block that didn't actually render this request (e.g.
       // shop/tournament/bank/treasury are conditional on current_tile) is
