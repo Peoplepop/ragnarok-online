@@ -1408,6 +1408,58 @@ def _ensure_game_settings_columns(conn):
         conn.execute("ALTER TABLE game_settings ADD COLUMN announcement_text TEXT NOT NULL DEFAULT ''")
     if "announcement_enabled" not in cols:
         conn.execute("ALTER TABLE game_settings ADD COLUMN announcement_enabled INTEGER NOT NULL DEFAULT 0")
+    # 戰鬥傷害公式 (player-vs-monster/PvP damage formula) -- these 18 values were
+    # previously hardcoded module-level constants in game_data/combat.py; the
+    # DEFAULTs here exactly match those old constants so migrating an existing
+    # DB changes nothing about live battle math until an admin edits them.
+    if "str_damage_range_min" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN str_damage_range_min REAL NOT NULL DEFAULT 0.85")
+    if "str_damage_range_max" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN str_damage_range_max REAL NOT NULL DEFAULT 1.15")
+    if "def_reduction_k" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN def_reduction_k REAL NOT NULL DEFAULT 120")
+    if "def_reduction_jitter_min" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN def_reduction_jitter_min REAL NOT NULL DEFAULT 0.9")
+    if "def_reduction_jitter_max" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN def_reduction_jitter_max REAL NOT NULL DEFAULT 1.1")
+    if "def_reduction_hard_cap_percent" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN def_reduction_hard_cap_percent REAL NOT NULL DEFAULT 90"
+        )
+    if "crit_chance_k" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN crit_chance_k REAL NOT NULL DEFAULT 150")
+    if "crit_chance_hard_cap_percent" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN crit_chance_hard_cap_percent REAL NOT NULL DEFAULT 70"
+        )
+    if "crit_damage_min" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN crit_damage_min REAL NOT NULL DEFAULT 1.3")
+    if "crit_damage_max" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN crit_damage_max REAL NOT NULL DEFAULT 1.7")
+    if "hit_chance_base_percent" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN hit_chance_base_percent REAL NOT NULL DEFAULT 90")
+    if "hit_chance_max_bonus_percent" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN hit_chance_max_bonus_percent REAL NOT NULL DEFAULT 10"
+        )
+    if "hit_chance_k" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN hit_chance_k REAL NOT NULL DEFAULT 100")
+    if "dodge_chance_base_percent" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN dodge_chance_base_percent REAL NOT NULL DEFAULT 5")
+    if "dodge_chance_max_bonus_percent" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN dodge_chance_max_bonus_percent REAL NOT NULL DEFAULT 55"
+        )
+    if "dodge_chance_k" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN dodge_chance_k REAL NOT NULL DEFAULT 150")
+    if "element_overcome_bonus_percent" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN element_overcome_bonus_percent REAL NOT NULL DEFAULT 25"
+        )
+    if "element_overcome_penalty_percent" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN element_overcome_penalty_percent REAL NOT NULL DEFAULT 20"
+        )
 
 
 def init_db():

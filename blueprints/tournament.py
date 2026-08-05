@@ -148,13 +148,13 @@ def _insert_match(db, tournament_id, round_number, match_index, game_number,
     )
 
 
-def _resolve_game(db, tournament_id, round_number, match_index, game_number, a, b):
+def _resolve_game(db, tournament_id, round_number, match_index, game_number, a, b, settings):
     """Resolves exactly one game and writes exactly one tournament_matches
     row. Both sides always start from their full snapshotted HP/MP -- damage
     never carries across games, including between the games of a final."""
     result = run_pvp_duel(
         a["character_name"], a["stats"], a["snap_element"], a["skills"],
-        b["character_name"], b["stats"], b["snap_element"], b["skills"],
+        b["character_name"], b["stats"], b["snap_element"], b["skills"], settings,
         # 獨立傷害/減傷% from each side's frozen snapshot, like every other
         # combat input here -- gear swapped after signup deliberately has no
         # effect on the bracket.
@@ -191,13 +191,13 @@ def _resolve_game(db, tournament_id, round_number, match_index, game_number, a, 
     return winner
 
 
-def _resolve_best_of_3(db, tournament_id, round_number, match_index, a, b):
+def _resolve_best_of_3(db, tournament_id, round_number, match_index, a, b, settings):
     """The final only. Plays up to 3 independent games (each its own
     tournament_matches row) and returns whoever wins 2 first."""
     wins = {a["id"]: 0, b["id"]: 0}
     winner = None
     for game_number in (1, 2, 3):
-        winner = _resolve_game(db, tournament_id, round_number, match_index, game_number, a, b)
+        winner = _resolve_game(db, tournament_id, round_number, match_index, game_number, a, b, settings)
         wins[winner["id"]] += 1
         if wins[winner["id"]] == 2:
             return winner
@@ -207,6 +207,7 @@ def _resolve_best_of_3(db, tournament_id, round_number, match_index, a, b):
 def _settle_tournament(db, tournament):
     """Runs the complete bracket for one cycle, in one shot, and pays out."""
     tournament_id = tournament["id"]
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
     rows = db.execute(
         "SELECT * FROM tournament_registrations WHERE tournament_id = ? ORDER BY id",
         (tournament_id,),
@@ -246,9 +247,9 @@ def _settle_tournament(db, tournament):
                 _insert_match(db, tournament_id, round_number, match_index, 1, a, None, a, is_bye=True)
                 winners.append(a)
             elif is_final:
-                winners.append(_resolve_best_of_3(db, tournament_id, round_number, match_index, a, b))
+                winners.append(_resolve_best_of_3(db, tournament_id, round_number, match_index, a, b, settings))
             else:
-                winners.append(_resolve_game(db, tournament_id, round_number, match_index, 1, a, b))
+                winners.append(_resolve_game(db, tournament_id, round_number, match_index, 1, a, b, settings))
         if len(winners) == 1:
             champion = winners[0]
             break
@@ -256,7 +257,6 @@ def _settle_tournament(db, tournament):
         current = [(winners[i], winners[i + 1]) for i in range(0, len(winners), 2)]
         round_number += 1
 
-    settings = db.execute("SELECT tournament_treasury_cut_percent FROM game_settings WHERE id = 1").fetchone()
     prize_pool = sum(r["fee_paid"] for r in registrations)
     treasury_cut = round(prize_pool * settings["tournament_treasury_cut_percent"] / 100)
     # Deliberately the remainder, not a second independent round(): the two

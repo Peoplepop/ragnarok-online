@@ -178,7 +178,28 @@ CREATE TABLE IF NOT EXISTS game_settings (
     hidden_wuji_trigger_percent REAL NOT NULL DEFAULT 0.02,
     hidden_taiji_drop_percent REAL NOT NULL DEFAULT 50,
     hidden_wuji_drop_percent REAL NOT NULL DEFAULT 30,
-    avatar_change_base_cost INTEGER NOT NULL DEFAULT 5000
+    avatar_change_base_cost INTEGER NOT NULL DEFAULT 5000,
+    -- 戰鬥傷害公式 (player-vs-monster/PvP damage formula), admin-configurable --
+    -- previously hardcoded module constants in game_data/combat.py. Defaults
+    -- below match those old constants exactly.
+    str_damage_range_min REAL NOT NULL DEFAULT 0.85,
+    str_damage_range_max REAL NOT NULL DEFAULT 1.15,
+    def_reduction_k REAL NOT NULL DEFAULT 120,
+    def_reduction_jitter_min REAL NOT NULL DEFAULT 0.9,
+    def_reduction_jitter_max REAL NOT NULL DEFAULT 1.1,
+    def_reduction_hard_cap_percent REAL NOT NULL DEFAULT 90,
+    crit_chance_k REAL NOT NULL DEFAULT 150,
+    crit_chance_hard_cap_percent REAL NOT NULL DEFAULT 70,
+    crit_damage_min REAL NOT NULL DEFAULT 1.3,
+    crit_damage_max REAL NOT NULL DEFAULT 1.7,
+    hit_chance_base_percent REAL NOT NULL DEFAULT 90,
+    hit_chance_max_bonus_percent REAL NOT NULL DEFAULT 10,
+    hit_chance_k REAL NOT NULL DEFAULT 100,
+    dodge_chance_base_percent REAL NOT NULL DEFAULT 5,
+    dodge_chance_max_bonus_percent REAL NOT NULL DEFAULT 55,
+    dodge_chance_k REAL NOT NULL DEFAULT 150,
+    element_overcome_bonus_percent REAL NOT NULL DEFAULT 25,
+    element_overcome_penalty_percent REAL NOT NULL DEFAULT 20
 );
 
 CREATE TABLE IF NOT EXISTS site_visits (

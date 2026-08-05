@@ -35,7 +35,7 @@ from game_data.stats import STAT_FLOOR_COLUMNS, character_final_stats, _current_
 from game_data.progression import (
     exp_required_for_level, LEVEL_UP_POINT_VALUE, _roll_level_up_stat_points,
 )
-from game_data.combat import ELEMENT_OVERCOME_BONUS, ELEMENT_OVERCOME_PENALTY, derived_combat_stats
+from game_data.combat import derived_combat_stats
 
 character_bp = Blueprint("character", __name__)
 
@@ -294,7 +294,7 @@ def character_page():
         key=lambda entry: entry["skill"]["name"],
     )
 
-    combat_stats = derived_combat_stats(stats)
+    combat_stats = derived_combat_stats(stats, settings)
     special_effects = character_special_effects(equipped_items)
     combat_stats["independent_damage_percent"] = special_effects.get("independent_damage", 0)
     combat_stats["damage_reduction_percent"] = special_effects.get("damage_reduction_percent", 0)
@@ -308,8 +308,8 @@ def character_page():
         pvp_win_rate=pvp_win_rate,
         overcomes=overcomes,
         overcome_by=overcome_by,
-        element_overcome_bonus=round((ELEMENT_OVERCOME_BONUS - 1) * 100),
-        element_overcome_penalty=round((1 - ELEMENT_OVERCOME_PENALTY) * 100),
+        element_overcome_bonus=settings["element_overcome_bonus_percent"],
+        element_overcome_penalty=settings["element_overcome_penalty_percent"],
         current_hp=current_hp,
         current_mp=current_mp,
         level_cap=LEVEL_CAP,

@@ -284,6 +284,104 @@
         時間格式須為 HH:MM（24 小時制），並請將開賽時間設定在報名截止之後
       </p>
 
+      <h3 style="color: var(--gold-bright); font-size: 15px; margin-bottom:8px;">戰鬥傷害公式</h3>
+      <div class="admin-grid" style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom:16px;">
+        <div>
+          <label>力量傷害區間下限</label>
+          <input type="text" inputmode="decimal" name="str_damage_range_min" value="{{ settings.str_damage_range_min }}">
+          <p class="hint" style="margin:4px 0 0;">力量轉換傷害的隨機區間下限（例：0.85 代表最低打出 85% 力量的傷害）</p>
+        </div>
+        <div>
+          <label>力量傷害區間上限</label>
+          <input type="text" inputmode="decimal" name="str_damage_range_max" value="{{ settings.str_damage_range_max }}">
+          <p class="hint" style="margin:4px 0 0;">力量轉換傷害的隨機區間上限</p>
+        </div>
+        <div></div>
+        <div>
+          <label>防禦減傷 K 值</label>
+          <input type="text" inputmode="decimal" name="def_reduction_k" value="{{ settings.def_reduction_k }}">
+          <p class="hint" style="margin:4px 0 0;">防禦減傷公式 DEF/(DEF+K) 的 K 值，數值越大代表同樣防禦力换算到的減傷效果越弱（爬升越慢）</p>
+        </div>
+        <div>
+          <label>防禦減傷浮動下限</label>
+          <input type="text" inputmode="decimal" name="def_reduction_jitter_min" value="{{ settings.def_reduction_jitter_min }}">
+          <p class="hint" style="margin:4px 0 0;">防禦減傷的隨機浮動區間下限</p>
+        </div>
+        <div>
+          <label>防禦減傷浮動上限</label>
+          <input type="text" inputmode="decimal" name="def_reduction_jitter_max" value="{{ settings.def_reduction_jitter_max }}">
+          <p class="hint" style="margin:4px 0 0;">防禦減傷的隨機浮動區間上限</p>
+        </div>
+        <div>
+          <label>防禦減傷上限 (%)</label>
+          <input type="text" inputmode="decimal" name="def_reduction_hard_cap_percent" value="{{ settings.def_reduction_hard_cap_percent }}">
+          <p class="hint" style="margin:4px 0 0;">防禦減傷的最高上限（%），無論防禦多高都不會超過這個減傷比例</p>
+        </div>
+        <div>
+          <label>爆擊率 K 值</label>
+          <input type="text" inputmode="decimal" name="crit_chance_k" value="{{ settings.crit_chance_k }}">
+          <p class="hint" style="margin:4px 0 0;">爆擊率公式 AGI/(AGI+K) 的 K 值，數值越大代表同樣敏捷换算到的爆擊率越低</p>
+        </div>
+        <div>
+          <label>爆擊率上限 (%)</label>
+          <input type="text" inputmode="decimal" name="crit_chance_hard_cap_percent" value="{{ settings.crit_chance_hard_cap_percent }}">
+          <p class="hint" style="margin:4px 0 0;">爆擊率上限（%）</p>
+        </div>
+        <div>
+          <label>爆擊傷害倍率下限</label>
+          <input type="text" inputmode="decimal" name="crit_damage_min" value="{{ settings.crit_damage_min }}">
+          <p class="hint" style="margin:4px 0 0;">爆擊傷害倍率的隨機區間下限</p>
+        </div>
+        <div>
+          <label>爆擊傷害倍率上限</label>
+          <input type="text" inputmode="decimal" name="crit_damage_max" value="{{ settings.crit_damage_max }}">
+          <p class="hint" style="margin:4px 0 0;">爆擊傷害倍率的隨機區間上限</p>
+        </div>
+        <div>
+          <label>基礎命中率 (%)</label>
+          <input type="text" inputmode="decimal" name="hit_chance_base_percent" value="{{ settings.hit_chance_base_percent }}">
+          <p class="hint" style="margin:4px 0 0;">基礎命中率（%），幸運為0時的命中率</p>
+        </div>
+        <div>
+          <label>命中率加成上限 (%)</label>
+          <input type="text" inputmode="decimal" name="hit_chance_max_bonus_percent" value="{{ settings.hit_chance_max_bonus_percent }}">
+          <p class="hint" style="margin:4px 0 0;">幸運可以額外加成的命中率上限（%）</p>
+        </div>
+        <div>
+          <label>命中率加成 K 值</label>
+          <input type="text" inputmode="decimal" name="hit_chance_k" value="{{ settings.hit_chance_k }}">
+          <p class="hint" style="margin:4px 0 0;">命中率加成公式的 K 值</p>
+        </div>
+        <div>
+          <label>基礎閃避率 (%)</label>
+          <input type="text" inputmode="decimal" name="dodge_chance_base_percent" value="{{ settings.dodge_chance_base_percent }}">
+          <p class="hint" style="margin:4px 0 0;">基礎閃避率（%），幸運為0時的閃避率</p>
+        </div>
+        <div>
+          <label>閃避率加成上限 (%)</label>
+          <input type="text" inputmode="decimal" name="dodge_chance_max_bonus_percent" value="{{ settings.dodge_chance_max_bonus_percent }}">
+          <p class="hint" style="margin:4px 0 0;">幸運可以額外加成的閃避率上限（%）</p>
+        </div>
+        <div>
+          <label>閃避率加成 K 值</label>
+          <input type="text" inputmode="decimal" name="dodge_chance_k" value="{{ settings.dodge_chance_k }}">
+          <p class="hint" style="margin:4px 0 0;">閃避率加成公式的 K 值</p>
+        </div>
+        <div>
+          <label>五行相剋傷害加成 (%)</label>
+          <input type="text" inputmode="decimal" name="element_overcome_bonus_percent" value="{{ settings.element_overcome_bonus_percent }}">
+          <p class="hint" style="margin:4px 0 0;">五行相剋時的傷害加成（%），例如 25 代表造成 +25% 傷害</p>
+        </div>
+        <div>
+          <label>五行被剋傷害減少 (%)</label>
+          <input type="text" inputmode="decimal" name="element_overcome_penalty_percent" value="{{ settings.element_overcome_penalty_percent }}">
+          <p class="hint" style="margin:4px 0 0;">五行被剋時的傷害減少（%），例如 20 代表只造成 -20% 傷害（即打出 80%）</p>
+        </div>
+      </div>
+      <p class="hint" style="margin-bottom:16px;">
+        以上為玩家對怪物／玩家對玩家戰鬥的傷害計算公式，調整後會立即套用到之後的每一場戰鬥；請小心調整以免破壞遊戲平衡
+      </p>
+
       <h3 style="color: var(--gold-bright); font-size: 15px; margin-bottom:8px;">頭像設定</h3>
       <div class="admin-grid" style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom:16px;">
         <div>

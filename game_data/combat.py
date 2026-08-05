@@ -8,34 +8,26 @@ from game_data.skills import _roll_job_skill, _skill_damage_stat_value
 # curve: it keeps climbing but only asymptotically approaches its ceiling, so no
 # stat combination can ever push it to a literal 100% (guaranteed unhittable /
 # undodgeable / uncritable outcome).
-STR_DAMAGE_RANGE = (0.85, 1.15)      # 1 STR point -> 0.85~1.15 raw damage, rolled per hit
-DEF_REDUCTION_K = 120                # DEF/(DEF+K) -> reduction fraction, asymptotic to 1
-DEF_REDUCTION_JITTER = (0.9, 1.1)    # per-hit jitter on the reduction fraction itself
-DEF_REDUCTION_HARD_CAP = 0.90        # extra safety net alongside the asymptote
+#
+# The formula's tunable knobs (STR damage range, DEF reduction, crit, hit,
+# dodge, elemental bonus/penalty) live in the game_settings DB row and are
+# admin-editable -- see db.py's _ensure_game_settings_columns and
+# templates/admin_settings.html's "戰鬥傷害公式" section. Every function below
+# that used to read a module-level constant for one of those now takes the
+# `settings` row (sqlite3.Row from `SELECT * FROM game_settings`) instead.
 SPEED_PER_AGI = 1                    # 1 AGI -> 1 attack-speed point (speed IS raw AGI)
 EXTRA_ATTACK_SPEED_STEP = 50         # every 50 AGI of lead = +1 attack per round
-CRIT_CHANCE_K = 150                  # AGI/(AGI+K) -> crit chance, asymptotic
-CRIT_CHANCE_HARD_CAP = 70            # percent
-CRIT_DAMAGE_RANGE = (1.3, 1.7)       # crit multiplier rolled per crit
-HIT_CHANCE_BASE = 90                 # percent, at LUK=0 (so monsters w/o LUK still swing)
-HIT_CHANCE_MAX_BONUS = 10            # + up to this many percent, asymptotic w/ LUK
-HIT_CHANCE_K = 100
-DODGE_CHANCE_BASE = 5                # percent, baseline evasion even at LUK=0
-DODGE_CHANCE_MAX_BONUS = 55          # + up to this many percent, asymptotic w/ LUK
-DODGE_CHANCE_K = 150
 GOLD_LUK_BONUS_PER_POINT = 0.05      # percent of currency reward per LUK point
 GOLD_LUK_BONUS_CAP = 15              # percent
-ELEMENT_OVERCOME_BONUS = 1.25        # attacker's element 剋 defender's -> +25% damage
-ELEMENT_OVERCOME_PENALTY = 0.8       # attacker's element 被剋 by defender's -> -20% damage
 
 
-def elemental_multiplier(attacker_element, defender_element):
+def elemental_multiplier(attacker_element, defender_element, settings):
     if not attacker_element or not defender_element or attacker_element == defender_element:
         return 1.0
     if ELEMENT_OVERCOMES.get(attacker_element) == defender_element:
-        return ELEMENT_OVERCOME_BONUS
+        return 1 + settings["element_overcome_bonus_percent"] / 100
     if ELEMENT_OVERCOMES.get(defender_element) == attacker_element:
-        return ELEMENT_OVERCOME_PENALTY
+        return 1 - settings["element_overcome_penalty_percent"] / 100
     return 1.0
 
 
@@ -55,48 +47,60 @@ def _resolve_battle_element(monster):
     return random.choice(WU_XING_ELEMENTS)
 
 
-def _hit_chance_pct(attacker_luk):
-    return HIT_CHANCE_BASE + HIT_CHANCE_MAX_BONUS * attacker_luk / (attacker_luk + HIT_CHANCE_K)
+def _hit_chance_pct(attacker_luk, settings):
+    return settings["hit_chance_base_percent"] + settings["hit_chance_max_bonus_percent"] * attacker_luk / (
+        attacker_luk + settings["hit_chance_k"]
+    )
 
 
-def _dodge_chance_pct(defender_luk):
-    return DODGE_CHANCE_BASE + DODGE_CHANCE_MAX_BONUS * defender_luk / (defender_luk + DODGE_CHANCE_K)
+def _dodge_chance_pct(defender_luk, settings):
+    return settings["dodge_chance_base_percent"] + settings["dodge_chance_max_bonus_percent"] * defender_luk / (
+        defender_luk + settings["dodge_chance_k"]
+    )
 
 
-def _crit_chance_pct(attacker_agi):
-    return min(CRIT_CHANCE_HARD_CAP, 100 * attacker_agi / (attacker_agi + CRIT_CHANCE_K))
+def _crit_chance_pct(attacker_agi, settings):
+    return min(
+        settings["crit_chance_hard_cap_percent"],
+        100 * attacker_agi / (attacker_agi + settings["crit_chance_k"]),
+    )
 
 
-def _def_reduction_fraction(defender_def):
-    return defender_def / (defender_def + DEF_REDUCTION_K)
+def _def_reduction_fraction(defender_def, settings):
+    return defender_def / (defender_def + settings["def_reduction_k"])
 
 
 def gold_luk_bonus_pct(luk):
     return min(GOLD_LUK_BONUS_CAP, luk * GOLD_LUK_BONUS_PER_POINT)
 
 
-def derived_combat_stats(stats):
+def derived_combat_stats(stats, settings):
     """Same formulas as combat, minus the per-hit dice rolls -- for display
     on the character sheet (shows the range a stat translates into)."""
-    reduction = _def_reduction_fraction(stats["def"])
+    reduction = _def_reduction_fraction(stats["def"], settings)
+    def_reduction_hard_cap = settings["def_reduction_hard_cap_percent"] / 100
     return {
-        "damage_min": round(stats["str"] * STR_DAMAGE_RANGE[0]),
-        "damage_max": round(stats["str"] * STR_DAMAGE_RANGE[1]),
-        "reduction_min": round(min(DEF_REDUCTION_HARD_CAP, reduction * DEF_REDUCTION_JITTER[0]) * 100, 1),
-        "reduction_max": round(min(DEF_REDUCTION_HARD_CAP, reduction * DEF_REDUCTION_JITTER[1]) * 100, 1),
+        "damage_min": round(stats["str"] * settings["str_damage_range_min"]),
+        "damage_max": round(stats["str"] * settings["str_damage_range_max"]),
+        "reduction_min": round(
+            min(def_reduction_hard_cap, reduction * settings["def_reduction_jitter_min"]) * 100, 1
+        ),
+        "reduction_max": round(
+            min(def_reduction_hard_cap, reduction * settings["def_reduction_jitter_max"]) * 100, 1
+        ),
         "speed": stats["agi"] * SPEED_PER_AGI,
-        "crit_chance": round(_crit_chance_pct(stats["agi"]), 1),
-        "crit_damage_min": CRIT_DAMAGE_RANGE[0],
-        "crit_damage_max": CRIT_DAMAGE_RANGE[1],
-        "hit_chance": round(_hit_chance_pct(stats["luk"]), 1),
-        "dodge_chance": round(_dodge_chance_pct(stats["luk"]), 1),
+        "crit_chance": round(_crit_chance_pct(stats["agi"], settings), 1),
+        "crit_damage_min": settings["crit_damage_min"],
+        "crit_damage_max": settings["crit_damage_max"],
+        "hit_chance": round(_hit_chance_pct(stats["luk"], settings), 1),
+        "dodge_chance": round(_dodge_chance_pct(stats["luk"], settings), 1),
         "gold_bonus": round(gold_luk_bonus_pct(stats["luk"]), 1),
     }
 
 
 def _combat_hit(
     attacker_name, attacker_atk, attacker_agi, attacker_luk, attacker_element,
-    defender_name, defender_def, defender_luk, defender_element,
+    defender_name, defender_def, defender_luk, defender_element, settings,
     damage_multiplier=1.0, skill_name=None, attacker_independent_damage_percent=0,
     defender_damage_reduction_percent=0,
 ):
@@ -115,18 +119,25 @@ def _combat_hit(
     value by that percent and flooring at 1 (same floor as the existing
     max(1, ...) pattern below) -- it can reduce a hit but never fully negate
     it."""
-    if random.random() * 100 >= _hit_chance_pct(attacker_luk):
+    if random.random() * 100 >= _hit_chance_pct(attacker_luk, settings):
         return 0, f"{attacker_name} 的攻擊沒有命中"
 
-    if random.random() * 100 < _dodge_chance_pct(defender_luk):
+    if random.random() * 100 < _dodge_chance_pct(defender_luk, settings):
         return 0, f"{defender_name} 閃避了 {attacker_name} 的攻擊！"
 
-    is_crit = random.random() * 100 < _crit_chance_pct(attacker_agi)
-    crit_mult = random.uniform(*CRIT_DAMAGE_RANGE) if is_crit else 1.0
-    elem_mult = elemental_multiplier(attacker_element, defender_element)
-    raw_damage = attacker_atk * random.uniform(*STR_DAMAGE_RANGE) * crit_mult * elem_mult * damage_multiplier
+    is_crit = random.random() * 100 < _crit_chance_pct(attacker_agi, settings)
+    crit_mult = random.uniform(settings["crit_damage_min"], settings["crit_damage_max"]) if is_crit else 1.0
+    elem_mult = elemental_multiplier(attacker_element, defender_element, settings)
+    raw_damage = attacker_atk * random.uniform(
+        settings["str_damage_range_min"], settings["str_damage_range_max"]
+    ) * crit_mult * elem_mult * damage_multiplier
 
-    reduction = min(DEF_REDUCTION_HARD_CAP, _def_reduction_fraction(defender_def) * random.uniform(*DEF_REDUCTION_JITTER))
+    def_reduction_hard_cap = settings["def_reduction_hard_cap_percent"] / 100
+    reduction = min(
+        def_reduction_hard_cap,
+        _def_reduction_fraction(defender_def, settings)
+        * random.uniform(settings["def_reduction_jitter_min"], settings["def_reduction_jitter_max"]),
+    )
     damage = max(1, round(raw_damage * (1 - reduction)))
     independent_bonus = (
         round(damage * attacker_independent_damage_percent / 100)
@@ -155,7 +166,7 @@ BATTLE_ROUND_CAP = 15
 
 
 def run_battle(
-    player_name, player_stats, player_element, player_hp, monster, player_mp=0, usable_skills=(),
+    player_name, player_stats, player_element, player_hp, monster, settings, player_mp=0, usable_skills=(),
     player_independent_damage_percent=0, player_damage_reduction_percent=0,
 ):
     """Resolves an entire fight in one shot. Turn order is driven purely by
@@ -211,14 +222,14 @@ def run_battle(
                 atk_value = _skill_damage_stat_value(player_stats, skill["stat"])
                 dmg, line = _combat_hit(
                     player_name, atk_value, player_stats["agi"], player_stats["luk"], player_element,
-                    monster["name"], monster["def"], monster.get("luk", 0), monster["element"],
+                    monster["name"], monster["def"], monster.get("luk", 0), monster["element"], settings,
                     damage_multiplier=skill["multiplier"], skill_name=skill["name"],
                     attacker_independent_damage_percent=player_independent_damage_percent,
                 )
             else:
                 dmg, line = _combat_hit(
                     player_name, player_stats["str"], player_stats["agi"], player_stats["luk"], player_element,
-                    monster["name"], monster["def"], monster.get("luk", 0), monster["element"],
+                    monster["name"], monster["def"], monster.get("luk", 0), monster["element"], settings,
                     attacker_independent_damage_percent=player_independent_damage_percent,
                 )
             m_hp = max(0, m_hp - dmg)
@@ -226,7 +237,7 @@ def run_battle(
         else:
             dmg, line = _combat_hit(
                 monster["name"], monster["atk"], monster["agi"], monster.get("luk", 0), monster["element"],
-                player_name, player_stats["def"], player_stats["luk"], player_element,
+                player_name, player_stats["def"], player_stats["luk"], player_element, settings,
                 defender_damage_reduction_percent=player_damage_reduction_percent,
             )
             p_hp = max(0, p_hp - dmg)
@@ -258,7 +269,7 @@ def run_battle(
 
 
 def run_pvp_duel(
-    a_name, a_stats, a_element, a_skills, b_name, b_stats, b_element, b_skills,
+    a_name, a_stats, a_element, a_skills, b_name, b_stats, b_element, b_skills, settings,
     a_independent_damage_percent=0, b_independent_damage_percent=0,
     a_damage_reduction_percent=0, b_damage_reduction_percent=0,
 ):
@@ -315,7 +326,7 @@ def run_pvp_duel(
                 atk_value = _skill_damage_stat_value(a_stats, skill["stat"])
                 dmg, line = _combat_hit(
                     a_name, atk_value, a_stats["agi"], a_stats["luk"], a_element,
-                    b_name, b_stats["def"], b_stats["luk"], b_element,
+                    b_name, b_stats["def"], b_stats["luk"], b_element, settings,
                     damage_multiplier=skill["multiplier"], skill_name=skill["name"],
                     attacker_independent_damage_percent=a_independent_damage_percent,
                     defender_damage_reduction_percent=b_damage_reduction_percent,
@@ -323,7 +334,7 @@ def run_pvp_duel(
             else:
                 dmg, line = _combat_hit(
                     a_name, a_stats["str"], a_stats["agi"], a_stats["luk"], a_element,
-                    b_name, b_stats["def"], b_stats["luk"], b_element,
+                    b_name, b_stats["def"], b_stats["luk"], b_element, settings,
                     attacker_independent_damage_percent=a_independent_damage_percent,
                     defender_damage_reduction_percent=b_damage_reduction_percent,
                 )
@@ -336,7 +347,7 @@ def run_pvp_duel(
                 atk_value = _skill_damage_stat_value(b_stats, skill["stat"])
                 dmg, line = _combat_hit(
                     b_name, atk_value, b_stats["agi"], b_stats["luk"], b_element,
-                    a_name, a_stats["def"], a_stats["luk"], a_element,
+                    a_name, a_stats["def"], a_stats["luk"], a_element, settings,
                     damage_multiplier=skill["multiplier"], skill_name=skill["name"],
                     attacker_independent_damage_percent=b_independent_damage_percent,
                     defender_damage_reduction_percent=a_damage_reduction_percent,
@@ -344,7 +355,7 @@ def run_pvp_duel(
             else:
                 dmg, line = _combat_hit(
                     b_name, b_stats["str"], b_stats["agi"], b_stats["luk"], b_element,
-                    a_name, a_stats["def"], a_stats["luk"], a_element,
+                    a_name, a_stats["def"], a_stats["luk"], a_element, settings,
                     attacker_independent_damage_percent=b_independent_damage_percent,
                     defender_damage_reduction_percent=a_damage_reduction_percent,
                 )

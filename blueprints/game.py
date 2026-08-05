@@ -796,7 +796,7 @@ def game_hunt():
 
     usable_skills = _character_usable_skills(db, character)
     result = run_battle(
-        character["character_name"], stats, character["element"], current_hp, fought_monster,
+        character["character_name"], stats, character["element"], current_hp, fought_monster, settings,
         player_mp=current_mp, usable_skills=usable_skills,
         player_independent_damage_percent=special_effects.get("independent_damage", 0),
         player_damage_reduction_percent=special_effects.get("damage_reduction_percent", 0),
@@ -1109,7 +1109,7 @@ def game_hunt_boss_room():
     fought_boss["element"] = _resolve_battle_element(fought_boss)
     usable_skills = _character_usable_skills(db, character)
     result = run_battle(
-        character["character_name"], stats, character["element"], current_hp, fought_boss,
+        character["character_name"], stats, character["element"], current_hp, fought_boss, settings,
         player_mp=current_mp, usable_skills=usable_skills,
         player_independent_damage_percent=special_effects.get("independent_damage", 0),
         player_damage_reduction_percent=special_effects.get("damage_reduction_percent", 0),
@@ -1309,7 +1309,7 @@ def _resolve_bandit_conquest(
     bandit_monster["hp"] = bandit_hp_before
 
     result = run_battle(
-        character["character_name"], stats, character["element"], current_hp, bandit_monster,
+        character["character_name"], stats, character["element"], current_hp, bandit_monster, settings,
         player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
         player_independent_damage_percent=independent_damage_percent,
         player_damage_reduction_percent=damage_reduction_percent,
@@ -1446,13 +1446,7 @@ def game_conquer():
         flash("這裡沒有可以攻打的敵方據點")
         return redirect(url_for("game.game"))
 
-    settings = db.execute(
-        """SELECT turn_wait_seconds, town_defense_level, fortress_defense_level, rebirth_stat_bonus_percent,
-                  war_town_weekday, war_town_start_time, war_town_end_time,
-                  war_fortress_weekday, war_fortress_start_time, war_fortress_end_time,
-                  king_war_defense_bonus_percent, morale_buff_bonus_percent
-           FROM game_settings WHERE id = 1"""
-    ).fetchone()
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
 
     # War-window gate: must run before the garrison-withdrawal-confirmation
     # gate below, so a player outside the window gets the "not war time"
@@ -1596,7 +1590,7 @@ def game_conquer():
         }
 
         result = run_battle(
-            character["character_name"], stats, character["element"], current_hp, defender_monster,
+            character["character_name"], stats, character["element"], current_hp, defender_monster, settings,
             player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
             player_independent_damage_percent=attacker_independent_damage,
             player_damage_reduction_percent=attacker_damage_reduction,
@@ -1726,7 +1720,7 @@ def game_conquer():
     )
 
     result = run_battle(
-        character["character_name"], stats, character["element"], current_hp, tower,
+        character["character_name"], stats, character["element"], current_hp, tower, settings,
         player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
         player_independent_damage_percent=attacker_independent_damage,
         player_damage_reduction_percent=attacker_damage_reduction,
@@ -3008,7 +3002,7 @@ def country_challenge_king():
 
     challenger_special_effects = character_special_effects(equipped_items)
     result = run_battle(
-        character["character_name"], challenger_stats, character["element"], current_hp, king_monster,
+        character["character_name"], challenger_stats, character["element"], current_hp, king_monster, settings,
         player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
         player_independent_damage_percent=challenger_special_effects.get("independent_damage", 0),
         player_damage_reduction_percent=challenger_special_effects.get("damage_reduction_percent", 0),
@@ -3175,7 +3169,7 @@ def country_spar_official(seat):
 
     challenger_special_effects = character_special_effects(equipped_items)
     result = run_battle(
-        character["character_name"], challenger_stats, character["element"], current_hp, opponent_monster,
+        character["character_name"], challenger_stats, character["element"], current_hp, opponent_monster, settings,
         player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
         player_independent_damage_percent=challenger_special_effects.get("independent_damage", 0),
         player_damage_reduction_percent=challenger_special_effects.get("damage_reduction_percent", 0),
@@ -3436,7 +3430,7 @@ def country_challenge_official():
 
     challenger_special_effects = character_special_effects(equipped_items)
     result = run_battle(
-        character["character_name"], challenger_stats, character["element"], current_hp, defender_monster,
+        character["character_name"], challenger_stats, character["element"], current_hp, defender_monster, settings,
         player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
         player_independent_damage_percent=challenger_special_effects.get("independent_damage", 0),
         player_damage_reduction_percent=challenger_special_effects.get("damage_reduction_percent", 0),

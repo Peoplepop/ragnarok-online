@@ -515,6 +515,24 @@ def admin_update_game_settings():
         tournament_start_weekday = int(request.form.get("tournament_start_weekday", ""))
         tournament_start_time = request.form.get("tournament_start_time", "").strip()
         avatar_change_base_cost = int(request.form.get("avatar_change_base_cost", ""))
+        str_damage_range_min = float(request.form.get("str_damage_range_min", ""))
+        str_damage_range_max = float(request.form.get("str_damage_range_max", ""))
+        def_reduction_k = float(request.form.get("def_reduction_k", ""))
+        def_reduction_jitter_min = float(request.form.get("def_reduction_jitter_min", ""))
+        def_reduction_jitter_max = float(request.form.get("def_reduction_jitter_max", ""))
+        def_reduction_hard_cap_percent = float(request.form.get("def_reduction_hard_cap_percent", ""))
+        crit_chance_k = float(request.form.get("crit_chance_k", ""))
+        crit_chance_hard_cap_percent = float(request.form.get("crit_chance_hard_cap_percent", ""))
+        crit_damage_min = float(request.form.get("crit_damage_min", ""))
+        crit_damage_max = float(request.form.get("crit_damage_max", ""))
+        hit_chance_base_percent = float(request.form.get("hit_chance_base_percent", ""))
+        hit_chance_max_bonus_percent = float(request.form.get("hit_chance_max_bonus_percent", ""))
+        hit_chance_k = float(request.form.get("hit_chance_k", ""))
+        dodge_chance_base_percent = float(request.form.get("dodge_chance_base_percent", ""))
+        dodge_chance_max_bonus_percent = float(request.form.get("dodge_chance_max_bonus_percent", ""))
+        dodge_chance_k = float(request.form.get("dodge_chance_k", ""))
+        element_overcome_bonus_percent = float(request.form.get("element_overcome_bonus_percent", ""))
+        element_overcome_penalty_percent = float(request.form.get("element_overcome_penalty_percent", ""))
     except ValueError:
         flash("設定值格式不正確")
         return redirect(url_for("admin.admin_settings"))
@@ -642,6 +660,32 @@ def admin_update_game_settings():
         flash("頭像更換基礎費用不可為負數")
         return redirect(url_for("admin.admin_settings"))
 
+    if str_damage_range_min > str_damage_range_max:
+        flash("力量傷害區間下限不可大於上限")
+        return redirect(url_for("admin.admin_settings"))
+
+    if def_reduction_jitter_min > def_reduction_jitter_max:
+        flash("防禦減傷浮動區間下限不可大於上限")
+        return redirect(url_for("admin.admin_settings"))
+
+    if crit_damage_min > crit_damage_max:
+        flash("爆擊傷害倍率區間下限不可大於上限")
+        return redirect(url_for("admin.admin_settings"))
+
+    if (
+        str_damage_range_min < 0 or def_reduction_k < 0
+        or def_reduction_jitter_min < 0 or def_reduction_hard_cap_percent < 0
+        or def_reduction_hard_cap_percent > 100 or crit_chance_k < 0
+        or crit_chance_hard_cap_percent < 0 or crit_chance_hard_cap_percent > 100
+        or crit_damage_min < 0 or hit_chance_base_percent < 0
+        or hit_chance_max_bonus_percent < 0 or hit_chance_k < 0
+        or dodge_chance_base_percent < 0 or dodge_chance_max_bonus_percent < 0
+        or dodge_chance_k < 0 or element_overcome_bonus_percent < 0
+        or element_overcome_penalty_percent < 0
+    ):
+        flash("戰鬥傷害公式的設定值不可為負數，且百分比上限相關數值須介於 0 到 100 之間")
+        return redirect(url_for("admin.admin_settings"))
+
     db = get_db()
     db.execute(
         """UPDATE game_settings
@@ -667,7 +711,15 @@ def admin_update_game_settings():
                hidden_taiji_drop_percent = ?, hidden_wuji_drop_percent = ?,
                avatar_change_base_cost = ?, same_bracket_encounter_percent = ?,
                potion_drop_percent = ?, small_money_pouch_drop_percent = ?,
-               large_money_pouch_drop_percent = ?, monster_combat_stat_bump = ?
+               large_money_pouch_drop_percent = ?, monster_combat_stat_bump = ?,
+               str_damage_range_min = ?, str_damage_range_max = ?,
+               def_reduction_k = ?, def_reduction_jitter_min = ?, def_reduction_jitter_max = ?,
+               def_reduction_hard_cap_percent = ?,
+               crit_chance_k = ?, crit_chance_hard_cap_percent = ?,
+               crit_damage_min = ?, crit_damage_max = ?,
+               hit_chance_base_percent = ?, hit_chance_max_bonus_percent = ?, hit_chance_k = ?,
+               dodge_chance_base_percent = ?, dodge_chance_max_bonus_percent = ?, dodge_chance_k = ?,
+               element_overcome_bonus_percent = ?, element_overcome_penalty_percent = ?
            WHERE id = 1""",
         (
             turn_wait_seconds, exp_base, exp_growth_novice_percent,
@@ -693,6 +745,14 @@ def admin_update_game_settings():
             avatar_change_base_cost, same_bracket_encounter_percent,
             potion_drop_percent, small_money_pouch_drop_percent,
             large_money_pouch_drop_percent, monster_combat_stat_bump,
+            str_damage_range_min, str_damage_range_max,
+            def_reduction_k, def_reduction_jitter_min, def_reduction_jitter_max,
+            def_reduction_hard_cap_percent,
+            crit_chance_k, crit_chance_hard_cap_percent,
+            crit_damage_min, crit_damage_max,
+            hit_chance_base_percent, hit_chance_max_bonus_percent, hit_chance_k,
+            dodge_chance_base_percent, dodge_chance_max_bonus_percent, dodge_chance_k,
+            element_overcome_bonus_percent, element_overcome_penalty_percent,
         ),
     )
     # Applied immediately rather than waiting for the next server restart --
