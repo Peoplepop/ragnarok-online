@@ -12,7 +12,7 @@ from web_helpers import (
     _process_square_image_upload,
 )
 from game_data.constants import (
-    SHOP_TYPE_LABELS, SLOT_LABELS, EQUIP_SLOT_COLUMNS, LEVEL_STAT_GROWTH, STAT_LABELS,
+    SLOT_LABELS, EQUIP_SLOT_COLUMNS, LEVEL_STAT_GROWTH, STAT_LABELS,
     RENAME_MAX_CHARACTER_NAME_LEN,
 )
 from game_data.avatars import (
@@ -209,19 +209,6 @@ def character_page():
         )
         equipped_slots.append({"slot": shop_type, "label": label, "item": item})
 
-    inventory_rows = db.execute(
-        """SELECT items.*, inventory.quantity AS quantity,
-                  countries.element AS set_element, countries.name AS set_country_name
-           FROM inventory JOIN items ON items.id = inventory.item_id
-           LEFT JOIN countries ON countries.id = items.country_id
-           WHERE inventory.character_id = ?
-           ORDER BY items.shop_type, items.price""",
-        (character["character_id"],),
-    ).fetchall()
-    inventory_items = {shop_type: [] for shop_type in SHOP_TYPE_LABELS}
-    for row in inventory_rows:
-        inventory_items[row["shop_type"]].append(row)
-
     skill_book_rows = db.execute(
         "SELECT skill_key, quantity FROM character_skill_books WHERE character_id = ? AND quantity > 0",
         (character["character_id"],),
@@ -327,8 +314,6 @@ def character_page():
         active_sets=active_sets,
         own_element_bonus=own_element_bonus,
         hidden_sets=hidden_sets,
-        inventory_items=inventory_items,
-        shop_type_labels=SHOP_TYPE_LABELS,
         cooldown_seconds=_cooldown_remaining_seconds(character["next_action_at"]),
         job_tier_label=JOB_TIER_LABELS.get(character["job_tier"], ""),
         mastery_names=mastery_names,
