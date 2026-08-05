@@ -113,11 +113,13 @@
       {% endif %}
       <div>
         <div style="color:var(--gold-bright); margin-bottom:4px;">我方{% if player_level %}　Lv.{{ player_level }}{% endif %}</div>
+        {% set player_hp_max_display = max_hp | default(player_stats.hp) %}
+        {% set player_hp_start_display = player_hp_start | default(player_hp_max_display) %}
         <div style="width:120px; margin-bottom:4px;">
           <div style="background:var(--panel-2); border:1px solid var(--border); border-radius:6px; height:8px; overflow:hidden;">
-            <div id="player-hp-fill" style="width:100%; height:100%; background:linear-gradient(90deg, var(--danger), var(--danger-bright)); transition: width 0.3s;"></div>
+            <div id="player-hp-fill" style="width:{{ ((player_hp_start_display / player_hp_max_display * 100) if player_hp_max_display else 0) | round(1) }}%; height:100%; background:linear-gradient(90deg, var(--danger), var(--danger-bright)); transition: width 0.3s;"></div>
           </div>
-          <div id="player-hp-label" style="font-size:11px; color:var(--text-dim); margin-top:2px;">HP {{ max_hp | default(player_stats.hp) }}/{{ max_hp | default(player_stats.hp) }}</div>
+          <div id="player-hp-label" style="font-size:11px; color:var(--text-dim); margin-top:2px;">HP {{ player_hp_start_display }}/{{ player_hp_max_display }}</div>
         </div>
         <div style="width:120px; margin-bottom:4px;">
           <div style="background:var(--panel-2); border:1px solid var(--border); border-radius:6px; height:8px; overflow:hidden;">
