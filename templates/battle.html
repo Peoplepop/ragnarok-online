@@ -121,11 +121,13 @@
           </div>
           <div id="player-hp-label" style="font-size:11px; color:var(--text-dim); margin-top:2px;">HP {{ player_hp_start_display }}/{{ player_hp_max_display }}</div>
         </div>
+        {% set player_mp_max_display = max_mp | default(player_stats.mp) %}
+        {% set player_mp_start_display = player_mp_start | default(player_mp_max_display) %}
         <div style="width:120px; margin-bottom:4px;">
           <div style="background:var(--panel-2); border:1px solid var(--border); border-radius:6px; height:8px; overflow:hidden;">
-            <div id="player-mp-fill" style="width:100%; height:100%; background:linear-gradient(90deg, var(--mp), var(--mp-bright)); transition: width 0.3s;"></div>
+            <div id="player-mp-fill" style="width:{{ ((player_mp_start_display / player_mp_max_display * 100) if player_mp_max_display else 0) | round(1) }}%; height:100%; background:linear-gradient(90deg, var(--mp), var(--mp-bright)); transition: width 0.3s;"></div>
           </div>
-          <div id="player-mp-label" style="font-size:11px; color:var(--text-dim); margin-top:2px;">MP {{ max_mp | default(player_stats.mp) }}/{{ max_mp | default(player_stats.mp) }}</div>
+          <div id="player-mp-label" style="font-size:11px; color:var(--text-dim); margin-top:2px;">MP {{ player_mp_start_display }}/{{ player_mp_max_display }}</div>
         </div>
         <div style="color:var(--text-dim);">力量 {{ player_stats.str }}　防禦 {{ player_stats.def }}　敏捷 {{ player_stats.agi }}　幸運 {{ player_stats.luk }}</div>
       </div>
