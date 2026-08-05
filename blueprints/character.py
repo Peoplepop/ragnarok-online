@@ -29,7 +29,7 @@ from game_data.skills import (
 )
 from game_data.equipment import (
     _active_set_summaries, _own_element_bonus_summary, _fetch_equipped_items,
-    _hidden_set_summaries,
+    _hidden_set_summaries, character_special_effects,
 )
 from game_data.stats import STAT_FLOOR_COLUMNS, character_final_stats, _current_hp_mp
 from game_data.progression import (
@@ -294,11 +294,16 @@ def character_page():
         key=lambda entry: entry["skill"]["name"],
     )
 
+    combat_stats = derived_combat_stats(stats)
+    special_effects = character_special_effects(equipped_items)
+    combat_stats["independent_damage_percent"] = special_effects.get("independent_damage", 0)
+    combat_stats["damage_reduction_percent"] = special_effects.get("damage_reduction_percent", 0)
+
     return render_template(
         "character.html",
         character=character,
         stats=stats,
-        combat_stats=derived_combat_stats(stats),
+        combat_stats=combat_stats,
         win_rate=win_rate,
         pvp_win_rate=pvp_win_rate,
         overcomes=overcomes,

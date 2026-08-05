@@ -313,9 +313,17 @@
           <td style="padding:6px 4px; color:var(--text-dim);">閃避率</td>
           <td style="padding:6px 4px; text-align:right;">{{ combat_stats.dodge_chance }}%</td>
         </tr>
-        <tr>
+        <tr style="border-bottom:1px solid var(--border);">
           <td style="padding:6px 4px; color:var(--text-dim);">幸運金幣加成</td>
           <td style="padding:6px 4px; text-align:right;">+{{ combat_stats.gold_bonus }}%</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:6px 4px; color:var(--text-dim);">獨立傷害加成</td>
+          <td style="padding:6px 4px; text-align:right;">+{{ combat_stats.independent_damage_percent }}%</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 4px; color:var(--text-dim);">減傷加成</td>
+          <td style="padding:6px 4px; text-align:right;">+{{ combat_stats.damage_reduction_percent }}%</td>
         </tr>
       </tbody>
     </table>
