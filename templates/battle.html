@@ -155,6 +155,9 @@
   {% endif %}
 
   <div class="panel" style="margin-bottom:20px;">
+    <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+      <button type="button" id="battle-speed-toggle" class="btn btn-info" style="padding:4px 12px; font-size:12px;" title="切換戰鬥動畫播放速度，關鍵一擊（血量歸零那行）不論速度都會多停留一下"></button>
+    </div>
     <div id="battle-log" style="max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; font-size:15px;"></div>
   </div>
 
@@ -311,6 +314,42 @@
       var skillElementByName = {{ skill_element_by_name | tojson }};
       var CRIT_COLOR = "#c78cf2";
 
+      // Playback speed: a per-browser preference (localStorage, like the
+      // 🔊 sound toggle) so a grinder can speed through fights while
+      // someone who wants to read what killed them can slow down --
+      // independent of DEATH_PAUSE_MS below, which always adds a beat on
+      // the line where either side's HP actually hits 0, regardless of
+      // speed, so the fatal blow never flies by unreadably even at 快轉.
+      var BATTLE_SPEEDS = {
+        normal: { label: "▶ 一般速度", lineDelay: 220 },
+        fast: { label: "⏩ 快轉", lineDelay: 70 },
+        slow: { label: "🐢 慢速", lineDelay: 650 },
+      };
+      var SPEED_CYCLE = ["normal", "fast", "slow"];
+      var DEATH_PAUSE_MS = 1000;
+
+      function getBattleSpeed() {
+        try {
+          var v = localStorage.getItem("battleSpeed");
+          return BATTLE_SPEEDS[v] ? v : "normal";
+        } catch (e) {
+          return "normal";
+        }
+      }
+
+      var speedToggle = document.getElementById("battle-speed-toggle");
+      function renderSpeedToggle() {
+        if (speedToggle) speedToggle.textContent = BATTLE_SPEEDS[getBattleSpeed()].label;
+      }
+      renderSpeedToggle();
+      if (speedToggle) {
+        speedToggle.addEventListener("click", function () {
+          var next = SPEED_CYCLE[(SPEED_CYCLE.indexOf(getBattleSpeed()) + 1) % SPEED_CYCLE.length];
+          try { localStorage.setItem("battleSpeed", next); } catch (e) {}
+          renderSpeedToggle();
+        });
+      }
+
       function escapeHtml(s) {
         return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       }
@@ -451,8 +490,11 @@
           }
         }
 
+        var delay = BATTLE_SPEEDS[getBattleSpeed()].lineDelay;
+        if (hpMatch && hpValue === 0) delay += DEATH_PAUSE_MS;
+
         i += 1;
-        setTimeout(appendLine, 220);
+        setTimeout(appendLine, delay);
       }
 
       appendLine();
