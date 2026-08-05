@@ -1862,29 +1862,51 @@ def game_recover():
     stats = character_final_stats(character, equipped_items, settings)
     current_hp, current_mp = _current_hp_mp(character, stats)
 
-    missing = (stats["hp"] - current_hp) + (stats["mp"] - current_mp)
-    cost = round(missing * settings["heal_cost_per_point"])
-    # 回復費用折扣 from a fully-equipped 秘境 水 set. Applied to the computed
-    # bill before anything is charged, so both the affordability check below
-    # and the treasury credit further down see the discounted number.
+    missing_hp = stats["hp"] - current_hp
+    missing_mp = stats["mp"] - current_mp
+    missing = missing_hp + missing_mp
+    # 回復費用折扣 from a fully-equipped 秘境 水 set, folded straight into the
+    # per-point rate (rather than applied to the total afterwards) so the
+    # afford-shortfall math below stays a single consistent rate.
     recovery_discount = character_special_effects(equipped_items).get("recovery_discount", 0)
+    rate = settings["heal_cost_per_point"]
     if recovery_discount:
-        cost = max(0, round(cost * (1 - recovery_discount / 100)))
-    if cost > character["currency"]:
-        if current_hp <= 0:
-            # Stuck-safety valve: HP is fully gone and can't afford a full
-            # heal -- still heal, just take every last coin instead of
-            # blocking the player from ever recovering.
-            cost = character["currency"]
-        else:
-            db.close()
-            flash(f"諸神幣不足，完全回復需要 {cost} 諸神幣")
-            return redirect(url_for("game.game"))
+        rate = max(0.0, rate * (1 - recovery_discount / 100))
+    full_cost = round(missing * rate)
+
+    if full_cost <= character["currency"]:
+        cost = full_cost
+        heal_hp, heal_mp = missing_hp, missing_mp
+    else:
+        # Can't afford a full heal -- spend every last coin and heal as many
+        # HP/MP points as that buys (HP first, since it's what gates every
+        # other action) instead of an all-or-nothing block. This intentionally
+        # replaces the old "if you're at 0 HP, heal fully for whatever you
+        # have" safety valve: that made dying the CHEAPER way to recover when
+        # broke (full heal for pocket change) versus staying alive with the
+        # same little money (hard-blocked, no partial heal at all). Being
+        # broke now costs the same partial heal whether you're alive or dead.
+        cost = character["currency"]
+        affordable_points = min(missing, int(cost / rate)) if rate > 0 else missing
+        if affordable_points == 0 and current_hp <= 0:
+            # Last-resort unstick: HP is fully gone and there isn't even
+            # enough currency for a single point -- grant 1 free HP so a
+            # totally broke character can still act (fight, trade, etc.) to
+            # earn its way back, rather than being permanently locked out of
+            # every HP-gated action.
+            affordable_points = 1
+            cost = 0
+        heal_hp = min(missing_hp, affordable_points)
+        heal_mp = min(missing_mp, affordable_points - heal_hp)
+
+    new_hp = current_hp + heal_hp
+    new_mp = current_mp + heal_mp
+    fully_healed = heal_hp >= missing_hp and heal_mp >= missing_mp
 
     db.execute(
         """UPDATE characters SET current_hp = ?, current_mp = ?, currency = currency - ?,
                next_action_at = ?, pending_boss_monster_id = NULL WHERE id = ?""",
-        (stats["hp"], stats["mp"], cost, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+        (new_hp, new_mp, cost, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
     )
     if cost and character["tile_country_id"] is not None:
         db.execute(
@@ -1893,12 +1915,15 @@ def game_recover():
         )
     log_activity(
         db, session["user_id"], session["username"], "recover",
-        detail=f"花費 {cost} 諸神幣", ip_address=request.remote_addr,
+        detail=f"花費 {cost} 諸神幣，回復 {heal_hp} HP／{heal_mp} MP", ip_address=request.remote_addr,
     )
     db.commit()
     db.close()
 
-    flash(f"HP／MP 已完全回復，花費 {cost} 諸神幣")
+    if fully_healed:
+        flash(f"HP／MP 已完全回復，花費 {cost} 諸神幣")
+    else:
+        flash(f"諸神幣不足以完全回復，已用僅有的 {cost} 諸神幣回復 {heal_hp} HP／{heal_mp} MP")
     return redirect(url_for("game.game"))
 
 
