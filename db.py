@@ -839,6 +839,45 @@ def _ensure_hunting_ground_columns(conn):
         conn.execute("ALTER TABLE hunting_grounds ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0")
 
 
+# --- Admin-managed item catalog (/admin/items) ------------------------------
+# A SEPARATE, newer mechanism layered on top of the legacy items table: every
+# new column below is nullable/defaulted so the ~40+ legacy rows (country
+# sets, 秘境 sets, boss sets, plain shop gear) are completely unaffected --
+# they all default to is_admin_managed=0 and never touch these columns.
+# is_admin_managed=1 is the single flag that scopes the new /admin/items CRUD
+# (editable list, delete permission, legacy read-only viewer split) -- see
+# blueprints/admin.py's admin_items family of routes.
+ITEM_STAT_BONUS_COLUMNS = ("str", "def", "agi", "luk", "hp", "mp")
+
+
+def _ensure_item_admin_columns(conn):
+    cols = [row["name"] for row in conn.execute("PRAGMA table_info(items)")]
+    if "element" not in cols:
+        # 金/木/水/火/土 or NULL -- only meaningful for admin-managed items;
+        # legacy items keep deriving their displayed badge element via
+        # item_badge_element's existing country-join / special_effect_key
+        # reverse-lookup, untouched.
+        conn.execute("ALTER TABLE items ADD COLUMN element TEXT")
+    for stat in ITEM_STAT_BONUS_COLUMNS:
+        col = f"stat_bonus_{stat}"
+        if col not in cols:
+            conn.execute(f"ALTER TABLE items ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+    if "acquisition_method" not in cols:
+        # 'shop' (default, matches every legacy purchasable row) or
+        # 'monster_drop'. Legacy hidden/boss-set rows are still 'shop' by this
+        # default even though they aren't really purchasable (hidden_set_key
+        # already handles that exclusion in game_shop's listing query) --
+        # acquisition_method is only ever actually read for is_admin_managed=1
+        # rows.
+        conn.execute("ALTER TABLE items ADD COLUMN acquisition_method TEXT NOT NULL DEFAULT 'shop'")
+    if "drop_hunting_ground_id" not in cols:
+        conn.execute("ALTER TABLE items ADD COLUMN drop_hunting_ground_id INTEGER")
+    if "drop_chance_percent" not in cols:
+        conn.execute("ALTER TABLE items ADD COLUMN drop_chance_percent REAL")
+    if "is_admin_managed" not in cols:
+        conn.execute("ALTER TABLE items ADD COLUMN is_admin_managed INTEGER NOT NULL DEFAULT 0")
+
+
 def _ensure_tournament_registration_columns(conn):
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(tournament_registrations)")]
     if not cols:
@@ -855,6 +894,15 @@ def _ensure_tournament_registration_columns(conn):
     if "snap_avatar_custom_filename" not in cols:
         conn.execute(
             "ALTER TABLE tournament_registrations ADD COLUMN snap_avatar_custom_filename TEXT"
+        )
+    if "snap_damage_reduction_percent" not in cols:
+        # Mirrors snap_independent_damage_percent exactly (same freeze-at-
+        # signup convention) -- the 減傷% admin-item special effect, frozen
+        # from each registrant's live gear at signup time. See
+        # tournament_register's INSERT and _resolve_game's run_pvp_duel call.
+        conn.execute(
+            "ALTER TABLE tournament_registrations "
+            "ADD COLUMN snap_damage_reduction_percent INTEGER NOT NULL DEFAULT 0"
         )
 
 
@@ -1373,6 +1421,7 @@ def init_db():
     _ensure_country_columns(conn)
     _ensure_monster_columns(conn)
     _ensure_item_columns(conn)
+    _ensure_item_admin_columns(conn)
     _ensure_hunting_ground_columns(conn)
     _ensure_map_tile_columns(conn)
     _ensure_game_settings_columns(conn)

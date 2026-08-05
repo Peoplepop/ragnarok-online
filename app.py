@@ -15,7 +15,10 @@ from game_data.constants import (
     IDLE_THRESHOLD_MINUTES, LEVEL_STAT_GROWTH, ELEMENT_COLORS, ELEMENT_BADGE_TEXT_COLORS,
 )
 from game_data.skills import SKILL_CATALOG, SKILL_ELEMENT_BY_NAME
-from game_data.equipment import item_badge_element, item_set_effect_text, STAT_ELEMENT
+from game_data.equipment import (
+    item_badge_element, item_set_effect_text, STAT_ELEMENT,
+    item_stat_bonus_text, item_own_special_effects_text,
+)
 
 from blueprints.auth import auth_bp
 from blueprints.character import character_bp
@@ -344,6 +347,14 @@ app.jinja_env.globals["item_badge_element"] = item_badge_element
 app.jinja_env.globals["item_set_effect_text"] = item_set_effect_text
 app.jinja_env.globals["stat_element"] = STAT_ELEMENT
 app.jinja_env.globals["skill_element_by_name"] = SKILL_ELEMENT_BY_NAME
+
+# /admin/items support: item_stat_bonus_text combines the legacy single
+# stat/stat_bonus field with an admin-managed item's six stat_bonus_* columns
+# into one display string; item_own_special_effects_text lists an
+# admin-managed item's own (unconditional, no set-completion gating)
+# item_special_effects rows. See game_data/equipment.py.
+app.jinja_env.globals["item_stat_bonus_text"] = item_stat_bonus_text
+app.jinja_env.globals["item_own_special_effects_text"] = item_own_special_effects_text
 
 
 if __name__ == "__main__":

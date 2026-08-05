@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+{% block title %}裝備管理 - 五行爭鋒{% endblock %}
+{% block body_class %}wide{% endblock %}
+
+{% block content %}
+  {% include "_admin_nav.html" %}
+
+  <div class="panel" style="margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+    <h2 style="margin:0; color:var(--gold-bright); font-size:18px;">🗡️ 裝備管理</h2>
+    <a href="{{ url_for('admin.admin_item_new') }}" class="btn" style="padding:6px 16px; font-size:13px; border-color:var(--gold-bright); color:var(--gold-bright);">＋ 新增裝備</a>
+  </div>
+
+  <div style="display:flex; gap:10px; margin-bottom:16px;">
+    <a href="{{ url_for('admin.admin_items') }}" style="text-decoration:none; font-size:13px; padding:6px 14px; border-radius:6px; border:1px solid var(--border); color: {{ 'var(--gold-bright)' if view=='admin' else 'var(--text-dim)' }}; {% if view=='admin' %}border-color:var(--gold-bright);{% endif %}">管理裝備</a>
+    <a href="{{ url_for('admin.admin_items', view='legacy') }}" style="text-decoration:none; font-size:13px; padding:6px 14px; border-radius:6px; border:1px solid var(--border); color: {{ 'var(--gold-bright)' if view=='legacy' else 'var(--text-dim)' }}; {% if view=='legacy' %}border-color:var(--gold-bright);{% endif %}">既有裝備（唯讀）</a>
+  </div>
+
+  {% if view == 'admin' %}
+  <p class="hint" style="margin-top:0; margin-bottom:16px;">
+    這裡管理的裝備是全新獨立的裝備目錄，不會影響既有的國家套裝／秘境套裝／魔王套裝（可切換到「既有裝備」分頁唯讀查看）。
+    「商店」裝備會自動出現在對應商店（不限國家，或限定某國家）；「打怪」裝備只會在指定的打怪地點、依機率掉落。
+  </p>
+  {% if admin_managed_items %}
+  <div style="display:flex; flex-direction:column; gap:12px;">
+    {% for item in admin_managed_items %}
+    <div class="panel" style="display:flex; flex-direction:column; gap:6px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          {{ macros.element_badge(item.element) }}
+          <span style="font-size:15px; color:var(--gold-bright); font-weight:600;">{{ item.name }}</span>
+          <span class="hint" style="margin:0;">{{ slot_labels.get(item.shop_type, item.shop_type) }}{% if item.element %}／{{ item.element }}屬性{% endif %}</span>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <a href="{{ url_for('admin.admin_item_edit', item_id=item.id) }}" class="btn" style="padding:4px 12px; font-size:12px;">✏️ 編輯</a>
+          <form method="post" action="{{ url_for('admin.admin_item_delete', item_id=item.id) }}"
+                onsubmit="return confirm('確定要刪除「{{ item.name }}」嗎？若目前有角色裝備中或背包持有將無法刪除。');">
+            <button type="submit" class="btn" style="padding:4px 12px; font-size:12px; border-color:var(--danger); color:var(--danger);">🗑️ 刪除</button>
+          </form>
+        </div>
+      </div>
+      <div style="font-size:13px; color:var(--text);">
+        六圍加成：{{ item_stat_bonus_text(item) }}
+      </div>
+      <div style="font-size:13px; color:var(--text-dim);">
+        {% if item.acquisition_method == 'shop' %}
+        🏪 取得方式：商店販售，{{ item.price }} 諸神幣{% if item.set_country_name %}（限定「{{ item.set_country_name }}」）{% else %}（所有國家商店皆有販售）{% endif %}
+        {% else %}
+        ⚔️ 取得方式：打怪掉落，地點「{{ item.drop_ground_name or '（打怪地點已被刪除）' }}」，機率 {{ item.drop_chance_percent or 0 }}%
+        {% endif %}
+      </div>
+      {% if item.special_effects %}
+      <div style="font-size:13px; color:var(--gold);">
+        ✨ 特殊能力：{% for eff in item.special_effects %}{{ special_effect_labels.get(eff.effect_key, eff.effect_key) }}+{{ eff.effect_percent }}%{% if not loop.last %}、{% endif %}{% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="hint">目前還沒有任何管理裝備，點右上角「＋ 新增裝備」開始建立。</p>
+  {% endif %}
+
+  {% else %}
+  <p class="hint" style="margin-top:0; margin-bottom:16px;">
+    以下是遊戲既有的裝備（國家套裝／秘境套裝／魔王套裝／基本裝備／消耗品），僅供查看，無法在此編輯或刪除。
+  </p>
+
+  <h3 style="color:var(--gold-bright); font-size:15px;">國家套裝</h3>
+  {% for country_name, items in legacy_groups.country_set.items() %}
+  <div class="panel" style="margin-bottom:12px;">
+    <div style="font-size:13px; color:var(--gold-bright); margin-bottom:8px;">{{ country_name }}</div>
+    <div style="display:flex; flex-direction:column; gap:4px;">
+      {% for item in items %}
+      <div style="font-size:13px;">{{ item.name }}（{{ item_stat_bonus_text(item) }}，{{ item.price }} 諸神幣）</div>
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <p class="hint">無資料</p>
+  {% endfor %}
+
+  <h3 style="color:var(--gold-bright); font-size:15px;">秘境套裝</h3>
+  <div class="panel" style="margin-bottom:12px;">
+    <div style="display:flex; flex-direction:column; gap:4px;">
+      {% for item in legacy_groups.hidden %}
+      <div style="font-size:13px;">{{ item.name }}（{{ item.hidden_set_name }}，{{ item_stat_bonus_text(item) }}）{{ item_set_effect_text(item) }}</div>
+      {% else %}
+      <p class="hint" style="margin:0;">無資料</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <h3 style="color:var(--gold-bright); font-size:15px;">魔王套裝</h3>
+  <div class="panel" style="margin-bottom:12px;">
+    <div style="display:flex; flex-direction:column; gap:4px;">
+      {% for item in legacy_groups.boss %}
+      <div style="font-size:13px;">{{ item.name }}（{{ item.hidden_set_name }}，{{ item_stat_bonus_text(item) }}）{{ item_set_effect_text(item) }}</div>
+      {% else %}
+      <p class="hint" style="margin:0;">無資料</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <h3 style="color:var(--gold-bright); font-size:15px;">基本裝備</h3>
+  <div class="panel" style="margin-bottom:12px;">
+    <div style="display:flex; flex-direction:column; gap:4px;">
+      {% for item in legacy_groups.basic %}
+      <div style="font-size:13px;">{{ item.name }}（{{ item_stat_bonus_text(item) }}，{{ item.price }} 諸神幣）</div>
+      {% else %}
+      <p class="hint" style="margin:0;">無資料</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <h3 style="color:var(--gold-bright); font-size:15px;">消耗品</h3>
+  <div class="panel" style="margin-bottom:12px;">
+    <div style="display:flex; flex-direction:column; gap:4px;">
+      {% for item in legacy_groups.consumable %}
+      <div style="font-size:13px;">{{ item.name }}（{{ item.price }} 諸神幣）</div>
+      {% else %}
+      <p class="hint" style="margin:0;">無資料</p>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+{% endblock %}

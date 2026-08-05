@@ -337,9 +337,11 @@
         <span style="font-size:13px; color:var(--text-dim); min-width:40px;">{{ s.label }}</span>
         {% if s.item %}
         {{ macros.element_badge(item_badge_element(s.item)) }}
-        <span style="font-size:13px;">{{ s.item.name }}（{{ s.item.stat }}+{{ s.item.stat_bonus }}）</span>
+        <span style="font-size:13px;">{{ s.item.name }}（{{ item_stat_bonus_text(s.item) }}）</span>
         {% set effect_text = item_set_effect_text(s.item) %}
         {% if effect_text %}<span class="hint" style="margin:0;">{{ effect_text }}</span>{% endif %}
+        {% set own_effect_text = item_own_special_effects_text(s.item) %}
+        {% if own_effect_text %}<span class="hint" style="margin:0;">{{ own_effect_text }}</span>{% endif %}
         <form method="post" action="{{ url_for('game.game_unequip') }}">
           <input type="hidden" name="slot" value="{{ s.slot }}">
           <input type="hidden" name="next" value="character">

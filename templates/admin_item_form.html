@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}{{ form_title }} - 五行爭鋒{% endblock %}
+{% block body_class %}wide{% endblock %}
+
+{% block content %}
+  {% include "_admin_nav.html" %}
+
+  <div class="panel" style="margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+    <h2 style="margin:0; color:var(--gold-bright); font-size:18px;">{{ form_title }}</h2>
+    <a href="{{ url_for('admin.admin_items') }}" class="btn" style="padding:6px 14px; font-size:13px;">← 返回裝備管理</a>
+  </div>
+
+  <form method="post" action="{{ form_action }}" class="panel" style="display:flex; flex-direction:column; gap:18px;">
+
+    <div>
+      <div style="font-size:13px; color:var(--gold-bright); margin-bottom:8px;">基本資料</div>
+      <div style="display:flex; flex-wrap:wrap; gap:14px;">
+        <label style="display:flex; flex-direction:column; gap:4px; font-size:13px;">
+          裝備名稱
+          <input type="text" name="name" required maxlength="40" value="{{ item.name if item else '' }}" style="padding:6px 8px;">
+        </label>
+        <label style="display:flex; flex-direction:column; gap:4px; font-size:13px;">
+          裝備部位
+          <select name="shop_type" style="padding:6px 8px;">
+            {% for slot, label in slot_labels.items() %}
+            <option value="{{ slot }}" {% if item and item.shop_type == slot %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label style="display:flex; flex-direction:column; gap:4px; font-size:13px;">
+          屬性
+          <select name="element" style="padding:6px 8px;">
+            <option value="" {% if not item or not item.element %}selected{% endif %}>（無屬性）</option>
+            {% for el in elements %}
+            <option value="{{ el }}" {% if item and item.element == el %}selected{% endif %}>{{ el }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:13px; color:var(--gold-bright); margin-bottom:8px;">六圍加成（可同時加成多項，預設 0）</div>
+      <div style="display:flex; flex-wrap:wrap; gap:12px;">
+        <label style="display:flex; flex-direction:column; gap:4px; font-size:12px;">力量
+          <input type="number" name="stat_bonus_str" value="{{ item.stat_bonus_str if item else 0 }}" style="width:80px; padding:6px 8px;">
+        </label>
+        <label style="display:flex; flex-direction:column; gap:4px; font-size:12px;">防禦
+          <input type="number" name="stat_bonus_def" value="{{ item.stat_bonus_def if item else 0 }}" style="width:80px; padding:6px 8px;">
+        </label>
+        <label style="display:flex; flex-direction:column; gap:4px; font-size:12px;">敏捷
+          <input type="number" name="stat_bonus_agi" value="{{ item.stat_bonus_agi if item else 0 }}" style="width:80px; padding:6px 8px;">
+        </label>
+        <label style="display:flex; flex-direction:column; gap:4px; font-size:12px;">幸運
+          <input type="number" name="stat_bonus_luk" value="{{ item.stat_bonus_luk if item else 0 }}" style="width:80px; padding:6px 8px;">
+        </label>
+        <label style="display:flex; flex-direction:column; gap:4px; font-size:12px;">HP
+          <input type="number" name="stat_bonus_hp" value="{{ item.stat_bonus_hp if item else 0 }}" style="width:80px; padding:6px 8px;">
+        </label>
+        <label style="display:flex; flex-direction:column; gap:4px; font-size:12px;">MP
+          <input type="number" name="stat_bonus_mp" value="{{ item.stat_bonus_mp if item else 0 }}" style="width:80px; padding:6px 8px;">
+        </label>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:13px; color:var(--gold-bright); margin-bottom:8px;">取得方式</div>
+      <div style="display:flex; gap:18px; margin-bottom:10px;">
+        <label style="font-size:13px; display:flex; align-items:center; gap:6px;">
+          <input type="radio" name="acquisition_method" value="shop" class="acq-radio"
+                 {% if not item or item.acquisition_method == 'shop' %}checked{% endif %}> 商店販售
+        </label>
+        <label style="font-size:13px; display:flex; align-items:center; gap:6px;">
+          <input type="radio" name="acquisition_method" value="monster_drop" class="acq-radio"
+                 {% if item and item.acquisition_method == 'monster_drop' %}checked{% endif %}> 打怪掉落
+        </label>
+      </div>
+
+      <div id="acq-shop-fields" style="display:flex; flex-wrap:wrap; gap:14px;">
+        <label style="display:flex; flex-direction:column; gap:4px; font-size:13px;">
+          價格（諸神幣）
+          <input type="number" name="price" min="0" value="{{ item.price if item else 0 }}" style="width:120px; padding:6px 8px;">
+        </label>
+        <label style="display:flex; flex-direction:column; gap:4px; font-size:13px;">
+          限定國家（不選則所有國家商店皆有販售）
+          <select name="country_id" style="padding:6px 8px;">
+            <option value="" {% if not item or not item.country_id %}selected{% endif %}>（不限）</option>
+            {% for c in countries %}
+            <option value="{{ c.id }}" {% if item and item.country_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+
+      <div id="acq-drop-fields" style="display:flex; flex-wrap:wrap; gap:14px;">
+        <label style="display:flex; flex-direction:column; gap:4px; font-size:13px;">
+          打怪地點
+          <select name="drop_hunting_ground_id" style="padding:6px 8px;">
+            <option value="">（請選擇）</option>
+            {% for g in hunting_grounds %}
+            <option value="{{ g.id }}" {% if item and item.drop_hunting_ground_id == g.id %}selected{% endif %}>{{ g.name }}{% if g.is_hidden %}（秘境）{% endif %}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label style="display:flex; flex-direction:column; gap:4px; font-size:13px;">
+          掉落機率（%，勝利後獨立roll一次）
+          <input type="number" name="drop_chance_percent" min="0" max="100" step="0.01"
+                 value="{{ item.drop_chance_percent if item and item.drop_chance_percent is not none else 0 }}" style="width:120px; padding:6px 8px;">
+        </label>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:13px; color:var(--gold-bright); margin-bottom:4px;">特殊能力（可同時填寫多項，裝備上即生效，0 表示不啟用）</div>
+      <p class="hint" style="margin-top:0; margin-bottom:8px;">傷害% 與掉寶率提升 / 經驗取得提升 / 金錢獲得提升 / 減傷% 皆為百分比數值。</p>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        {% for key in effect_keys %}
+        <label style="display:flex; align-items:center; gap:10px; font-size:13px;">
+          <span style="min-width:130px;">{{ effect_labels.get(key, key) }}</span>
+          <input type="number" name="effect_{{ key }}" step="0.01" value="{{ special_effects.get(key, 0) }}" style="width:100px; padding:6px 8px;"> %
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div>
+      <button type="submit" class="btn" style="padding:8px 20px; font-size:14px; border-color:var(--gold-bright); color:var(--gold-bright);">💾 儲存</button>
+      <a href="{{ url_for('admin.admin_items') }}" class="btn" style="padding:8px 20px; font-size:14px;">取消</a>
+    </div>
+  </form>
+
+  <script>
+    (function () {
+      var radios = document.querySelectorAll(".acq-radio");
+      var shopFields = document.getElementById("acq-shop-fields");
+      var dropFields = document.getElementById("acq-drop-fields");
+
+      function sync() {
+        var selected = document.querySelector(".acq-radio:checked");
+        var isShop = !selected || selected.value === "shop";
+        shopFields.style.display = isShop ? "flex" : "none";
+        dropFields.style.display = isShop ? "none" : "flex";
+      }
+
+      radios.forEach(function (r) { r.addEventListener("change", sync); });
+      sync();
+    })();
+  </script>
+{% endblock %}

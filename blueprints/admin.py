@@ -10,7 +10,10 @@ from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
 from werkzeug.security import generate_password_hash
 
-from db import get_db, LEVEL_CAP, log_activity, DEFAULT_MONSTERS, HIDDEN_MONSTERS, _bump_monster_combat_stats
+from db import (
+    get_db, LEVEL_CAP, log_activity, DEFAULT_MONSTERS, HIDDEN_MONSTERS, _bump_monster_combat_stats,
+    ITEM_STAT_BONUS_COLUMNS,
+)
 from web_helpers import (
     admin_required, _parse_dt, _valid_war_time, _format_duration, _sanitized_action_block_order,
     avatar_url, monster_image_url, official_image_url, _process_square_image_upload,
@@ -18,7 +21,7 @@ from web_helpers import (
 )
 from game_data.constants import (
     STAT_FIELDS, IDLE_THRESHOLD_MINUTES, ACTION_LABELS, GOVERNMENT_ROLES,
-    FEEDBACK_STATUSES, FEEDBACK_STATUS_LABELS, GAME_LAYOUT_BLOCKS,
+    FEEDBACK_STATUSES, FEEDBACK_STATUS_LABELS, GAME_LAYOUT_BLOCKS, SLOT_LABELS,
 )
 from game_data.avatars import (
     BUILT_IN_AVATARS, BUILT_IN_AVATAR_KEYS, CUSTOM_AVATAR_MAX_BYTES, CUSTOM_AVATAR_DIMENSION,
@@ -27,6 +30,8 @@ from game_data.backgrounds import (
     BACKGROUND_KEYS, BACKGROUND_CUSTOM_DIR, BACKGROUND_MAX_BYTES, BACKGROUND_MAX_WIDTH, BACKGROUND_MAX_HEIGHT,
     BGM_DIR, BGM_MAX_BYTES, BGM_EXTENSIONS, BGM_FORMAT_HINT,
 )
+from game_data.equipment import SPECIAL_EFFECT_LABELS, ADMIN_ITEM_SPECIAL_EFFECT_KEYS
+from game_data.combat import WU_XING_ELEMENTS
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -1226,3 +1231,351 @@ def admin_reset_bgm():
             os.remove(path)
     flash("已移除背景音樂")
     return redirect(url_for("admin.admin_backgrounds"))
+
+
+# ---------------------------------------------------------------------------
+# /admin/items -- a NEW, separately-managed item catalog (is_admin_managed=1
+# rows), fully independent of the ~40+ legacy hardcoded items (country sets/
+# 秘境 sets/boss sets in db.py's DEFAULT_SET_ITEMS/HIDDEN_SET_ITEMS/
+# BOSS_SET_ITEMS -- never touched, editable, or delete-able here). A second
+# read-only tab (view=legacy) lists those legacy rows grouped by origin so an
+# admin can see what already exists without any risk of touching it.
+#
+# Equippable gear only (weapon/armor/accessory) -- consumables aren't
+# included in this new system (see the report for why).
+# ---------------------------------------------------------------------------
+
+def _group_legacy_items(rows):
+    """Groups is_admin_managed=0 rows by their existing origin, purely by
+    inspecting hidden_set_key/country_id/shop_type -- no new DB column is
+    needed since these are exactly the signals db.py's own seeding functions
+    already use to distinguish the four legacy families."""
+    groups = {"country_set": {}, "hidden": [], "boss": [], "consumable": [], "basic": []}
+    for item in rows:
+        hidden_key = item["hidden_set_key"] or ""
+        if hidden_key.startswith("boss_"):
+            groups["boss"].append(item)
+        elif hidden_key.startswith("taiji_") or hidden_key.startswith("wuji_"):
+            groups["hidden"].append(item)
+        elif item["country_id"]:
+            groups["country_set"].setdefault(item["set_country_name"], []).append(item)
+        elif item["shop_type"] == "consumable":
+            groups["consumable"].append(item)
+        else:
+            groups["basic"].append(item)
+    return groups
+
+
+@admin_bp.route("/admin/items")
+@admin_required
+def admin_items():
+    db = get_db()
+    view = "legacy" if request.args.get("view") == "legacy" else "admin"
+
+    admin_managed_items = []
+    legacy_groups = None
+
+    if view == "legacy":
+        rows = db.execute(
+            """SELECT items.*, countries.name AS set_country_name
+               FROM items LEFT JOIN countries ON countries.id = items.country_id
+               WHERE items.is_admin_managed = 0
+               ORDER BY items.shop_type, items.price""",
+        ).fetchall()
+        legacy_groups = _group_legacy_items(rows)
+    else:
+        rows = db.execute(
+            """SELECT items.*, countries.name AS set_country_name,
+                      hunting_grounds.name AS drop_ground_name
+               FROM items
+               LEFT JOIN countries ON countries.id = items.country_id
+               LEFT JOIN hunting_grounds ON hunting_grounds.id = items.drop_hunting_ground_id
+               WHERE items.is_admin_managed = 1
+               ORDER BY items.id DESC""",
+        ).fetchall()
+        item_ids = [row["id"] for row in rows]
+        effects_by_item = {item_id: [] for item_id in item_ids}
+        if item_ids:
+            placeholders = ",".join("?" for _ in item_ids)
+            for effect_row in db.execute(
+                f"SELECT * FROM item_special_effects WHERE item_id IN ({placeholders}) ORDER BY id",
+                item_ids,
+            ).fetchall():
+                effects_by_item[effect_row["item_id"]].append(effect_row)
+        admin_managed_items = [
+            dict(row, special_effects=effects_by_item[row["id"]]) for row in rows
+        ]
+
+    db.close()
+    return render_template(
+        "admin_items.html",
+        active_tab="items",
+        view=view,
+        admin_managed_items=admin_managed_items,
+        legacy_groups=legacy_groups,
+        special_effect_labels=SPECIAL_EFFECT_LABELS,
+        slot_labels=SLOT_LABELS,
+    )
+
+
+def _admin_item_form_context(db, item=None, special_effects=None):
+    countries = db.execute("SELECT id, name FROM countries ORDER BY id").fetchall()
+    hunting_grounds = db.execute(
+        "SELECT id, name, tier, is_hidden FROM hunting_grounds ORDER BY min_level"
+    ).fetchall()
+    return {
+        "item": item,
+        "special_effects": special_effects or {},
+        "countries": countries,
+        "hunting_grounds": hunting_grounds,
+        "slot_labels": SLOT_LABELS,
+        "elements": WU_XING_ELEMENTS,
+        "effect_keys": ADMIN_ITEM_SPECIAL_EFFECT_KEYS,
+        "effect_labels": SPECIAL_EFFECT_LABELS,
+        "active_tab": "items",
+    }
+
+
+def _parse_admin_item_form(form):
+    """Parses+validates the create/edit form's POST body. Returns
+    (fields_dict, special_effects_dict, error_message) -- exactly one of
+    (fields_dict, error_message) is None."""
+    name = form.get("name", "").strip()
+    if not name:
+        return None, None, "請輸入裝備名稱"
+    if len(name) > 40:
+        return None, None, "裝備名稱過長（上限 40 字）"
+
+    shop_type = form.get("shop_type", "")
+    if shop_type not in SLOT_LABELS:
+        return None, None, "請選擇有效的裝備部位"
+
+    element = form.get("element", "").strip()
+    if element and element not in WU_XING_ELEMENTS:
+        return None, None, "無效的屬性"
+    element = element or None
+
+    stat_bonuses = {}
+    for stat in ITEM_STAT_BONUS_COLUMNS:
+        raw = form.get(f"stat_bonus_{stat}", "0").strip()
+        try:
+            stat_bonuses[stat] = int(raw or "0")
+        except ValueError:
+            return None, None, "六圍加成必須是整數"
+
+    acquisition_method = form.get("acquisition_method", "shop")
+    if acquisition_method not in ("shop", "monster_drop"):
+        return None, None, "請選擇有效的取得方式"
+
+    price = 0
+    country_id = None
+    drop_hunting_ground_id = None
+    drop_chance_percent = None
+
+    if acquisition_method == "shop":
+        try:
+            price = int(form.get("price", "0") or "0")
+        except ValueError:
+            return None, None, "價格必須是整數"
+        if price < 0:
+            return None, None, "價格不能是負數"
+        raw_country_id = form.get("country_id", "").strip()
+        if raw_country_id:
+            try:
+                country_id = int(raw_country_id)
+            except ValueError:
+                return None, None, "無效的國家"
+    else:
+        raw_ground_id = form.get("drop_hunting_ground_id", "").strip()
+        try:
+            drop_hunting_ground_id = int(raw_ground_id)
+        except (TypeError, ValueError):
+            return None, None, "請選擇一個打怪地點"
+        try:
+            drop_chance_percent = float(form.get("drop_chance_percent", "0") or "0")
+        except ValueError:
+            return None, None, "掉落機率必須是數字"
+        if drop_chance_percent < 0 or drop_chance_percent > 100:
+            return None, None, "掉落機率必須介於 0～100 之間"
+
+    special_effects = {}
+    for key in ADMIN_ITEM_SPECIAL_EFFECT_KEYS:
+        raw = form.get(f"effect_{key}", "0").strip()
+        try:
+            percent = float(raw or "0")
+        except ValueError:
+            return None, None, "特殊能力數值必須是數字"
+        if percent:
+            special_effects[key] = percent
+
+    fields = {
+        "name": name, "shop_type": shop_type, "element": element,
+        "price": price, "country_id": country_id,
+        "acquisition_method": acquisition_method,
+        "drop_hunting_ground_id": drop_hunting_ground_id, "drop_chance_percent": drop_chance_percent,
+        "stat_bonus_str": stat_bonuses["str"], "stat_bonus_def": stat_bonuses["def"],
+        "stat_bonus_agi": stat_bonuses["agi"], "stat_bonus_luk": stat_bonuses["luk"],
+        "stat_bonus_hp": stat_bonuses["hp"], "stat_bonus_mp": stat_bonuses["mp"],
+    }
+    return fields, special_effects, None
+
+
+@admin_bp.route("/admin/items/new", methods=["GET", "POST"])
+@admin_required
+def admin_item_new():
+    db = get_db()
+    if request.method == "GET":
+        context = _admin_item_form_context(db)
+        db.close()
+        return render_template(
+            "admin_item_form.html", form_title="新增裝備",
+            form_action=url_for("admin.admin_item_new"), **context
+        )
+
+    fields, special_effects, error = _parse_admin_item_form(request.form)
+    if error:
+        context = _admin_item_form_context(db)
+        db.close()
+        flash(error)
+        return render_template(
+            "admin_item_form.html", form_title="新增裝備",
+            form_action=url_for("admin.admin_item_new"), **context
+        )
+
+    cur = db.execute(
+        """INSERT INTO items
+           (shop_type, name, price, stat, stat_bonus, country_id, element,
+            stat_bonus_str, stat_bonus_def, stat_bonus_agi, stat_bonus_luk, stat_bonus_hp, stat_bonus_mp,
+            acquisition_method, drop_hunting_ground_id, drop_chance_percent, is_admin_managed)
+           VALUES (?, ?, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)""",
+        (
+            fields["shop_type"], fields["name"], fields["price"], fields["country_id"], fields["element"],
+            fields["stat_bonus_str"], fields["stat_bonus_def"], fields["stat_bonus_agi"],
+            fields["stat_bonus_luk"], fields["stat_bonus_hp"], fields["stat_bonus_mp"],
+            fields["acquisition_method"], fields["drop_hunting_ground_id"], fields["drop_chance_percent"],
+        ),
+    )
+    item_id = cur.lastrowid
+    for key, percent in special_effects.items():
+        db.execute(
+            "INSERT INTO item_special_effects (item_id, effect_key, effect_percent) VALUES (?, ?, ?)",
+            (item_id, key, percent),
+        )
+    log_activity(
+        db, session["user_id"], session["username"], "admin_item_create",
+        detail=f"新增管理裝備「{fields['name']}」", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+    flash(f"已新增裝備「{fields['name']}」")
+    return redirect(url_for("admin.admin_items"))
+
+
+@admin_bp.route("/admin/items/<int:item_id>/edit", methods=["GET", "POST"])
+@admin_required
+def admin_item_edit(item_id):
+    db = get_db()
+    item = db.execute(
+        "SELECT * FROM items WHERE id = ? AND is_admin_managed = 1", (item_id,)
+    ).fetchone()
+    if item is None:
+        db.close()
+        flash("找不到這個管理裝備，或它不是這個系統建立的裝備")
+        return redirect(url_for("admin.admin_items"))
+
+    if request.method == "GET":
+        effect_rows = db.execute(
+            "SELECT effect_key, effect_percent FROM item_special_effects WHERE item_id = ?", (item_id,)
+        ).fetchall()
+        special_effects = {row["effect_key"]: row["effect_percent"] for row in effect_rows}
+        context = _admin_item_form_context(db, item=item, special_effects=special_effects)
+        db.close()
+        return render_template(
+            "admin_item_form.html", form_title=f"編輯裝備「{item['name']}」",
+            form_action=url_for("admin.admin_item_edit", item_id=item_id), **context
+        )
+
+    fields, special_effects, error = _parse_admin_item_form(request.form)
+    if error:
+        context = _admin_item_form_context(db, item=item)
+        db.close()
+        flash(error)
+        return render_template(
+            "admin_item_form.html", form_title=f"編輯裝備「{item['name']}」",
+            form_action=url_for("admin.admin_item_edit", item_id=item_id), **context
+        )
+
+    db.execute(
+        """UPDATE items SET
+               shop_type = ?, name = ?, price = ?, country_id = ?, element = ?,
+               stat_bonus_str = ?, stat_bonus_def = ?, stat_bonus_agi = ?,
+               stat_bonus_luk = ?, stat_bonus_hp = ?, stat_bonus_mp = ?,
+               acquisition_method = ?, drop_hunting_ground_id = ?, drop_chance_percent = ?
+           WHERE id = ?""",
+        (
+            fields["shop_type"], fields["name"], fields["price"], fields["country_id"], fields["element"],
+            fields["stat_bonus_str"], fields["stat_bonus_def"], fields["stat_bonus_agi"],
+            fields["stat_bonus_luk"], fields["stat_bonus_hp"], fields["stat_bonus_mp"],
+            fields["acquisition_method"], fields["drop_hunting_ground_id"], fields["drop_chance_percent"],
+            item_id,
+        ),
+    )
+    db.execute("DELETE FROM item_special_effects WHERE item_id = ?", (item_id,))
+    for key, percent in special_effects.items():
+        db.execute(
+            "INSERT INTO item_special_effects (item_id, effect_key, effect_percent) VALUES (?, ?, ?)",
+            (item_id, key, percent),
+        )
+    log_activity(
+        db, session["user_id"], session["username"], "admin_item_update",
+        detail=f"編輯管理裝備「{fields['name']}」", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+    flash(f"已更新裝備「{fields['name']}」")
+    return redirect(url_for("admin.admin_items"))
+
+
+@admin_bp.route("/admin/items/<int:item_id>/delete", methods=["POST"])
+@admin_required
+def admin_item_delete(item_id):
+    db = get_db()
+    item = db.execute(
+        "SELECT * FROM items WHERE id = ? AND is_admin_managed = 1", (item_id,)
+    ).fetchone()
+    if item is None:
+        db.close()
+        flash("找不到這個管理裝備，或它不是這個系統建立的裝備")
+        return redirect(url_for("admin.admin_items"))
+
+    # Delete policy (confirmed choice, matching this codebase's general
+    # caution around destructive admin actions): block the delete entirely,
+    # with a flash message, if any character currently has the item equipped
+    # OR holds it in inventory -- rather than silently unequipping/removing it
+    # out from under a player.
+    equipped_count = db.execute(
+        """SELECT COUNT(*) AS c FROM characters
+           WHERE equipped_weapon_id = ? OR equipped_armor_id = ? OR equipped_accessory_id = ?""",
+        (item_id, item_id, item_id),
+    ).fetchone()["c"]
+    inventory_count = db.execute(
+        "SELECT COALESCE(SUM(quantity), 0) AS c FROM inventory WHERE item_id = ?", (item_id,)
+    ).fetchone()["c"]
+    if equipped_count or inventory_count:
+        db.close()
+        flash(
+            f"無法刪除「{item['name']}」：目前有 {equipped_count} 位角色裝備中、"
+            f"背包內共 {inventory_count} 件，請先確認沒有人持有或裝備後再刪除"
+        )
+        return redirect(url_for("admin.admin_items"))
+
+    db.execute("DELETE FROM item_special_effects WHERE item_id = ?", (item_id,))
+    db.execute("DELETE FROM items WHERE id = ?", (item_id,))
+    log_activity(
+        db, session["user_id"], session["username"], "admin_item_delete",
+        detail=f"刪除管理裝備「{item['name']}」", ip_address=request.remote_addr,
+    )
+    db.commit()
+    db.close()
+    flash(f"已刪除裝備「{item['name']}」")
+    return redirect(url_for("admin.admin_items"))

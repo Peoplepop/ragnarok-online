@@ -1,4 +1,4 @@
-from db import HIDDEN_SET_EFFECT_BY_ELEMENT
+from db import HIDDEN_SET_EFFECT_BY_ELEMENT, ITEM_STAT_BONUS_COLUMNS, get_db
 from game_data.constants import STAT_LABELS
 
 # Country-themed equipment sets (db.py's DEFAULT_SET_ITEMS): items carry a
@@ -35,7 +35,9 @@ def item_badge_element(item):
     for gear with no element affiliation. Ordinary country-set gear carries
     set_element (via the countries LEFT JOIN in _fetch_equipped_items and
     friends); hidden/boss-set pieces carry no country instead, so their
-    special_effect_key is reverse-mapped through EFFECT_KEY_ELEMENT."""
+    special_effect_key is reverse-mapped through EFFECT_KEY_ELEMENT; an
+    admin-managed item (see /admin/items) carries its own `element` column
+    directly, checked last since it's the newest/least common source."""
     if item is None:
         return None
     try:
@@ -47,8 +49,15 @@ def item_badge_element(item):
     try:
         effect_key = item["special_effect_key"]
     except (IndexError, KeyError):
+        effect_key = None
+    if effect_key:
+        mapped = EFFECT_KEY_ELEMENT.get(effect_key)
+        if mapped:
+            return mapped
+    try:
+        return item["element"] or None
+    except (IndexError, KeyError):
         return None
-    return EFFECT_KEY_ELEMENT.get(effect_key)
 
 # Separate, smaller bonus for equipment whose origin country matches the
 # *wearer's own* country -- unlike the set bonus above (which only cares
@@ -164,7 +173,23 @@ SPECIAL_EFFECT_LABELS = {
     "recovery_discount": "回復費用折扣",
     "independent_damage": "獨立傷害",
     "enemy_debuff": "怪物弱化",
+    # The two new admin-item-only effect keys (see /admin/items):
+    # loot_drop_rate boosts the roll chance of NEW admin-managed monster-drop
+    # items only (blueprints/game.py's _roll_admin_monster_drops) -- it does
+    # NOT touch the existing potion/money-pouch/hidden-loot/skill-book/
+    # boss-set drop systems. damage_reduction_percent reduces incoming damage
+    # -- see game_data/combat.py's _combat_hit defender_damage_reduction_percent.
+    "loot_drop_rate": "掉寶率提升",
+    "damage_reduction_percent": "減傷%",
 }
+
+# The 5 effect keys an admin-managed item's OWN item_special_effects rows may
+# use (see /admin/items' create/edit form). gold_rate/exp_rate/independent_damage
+# are reused as-is from the legacy hidden-set mechanism above (same keys, same
+# consumption sites) -- loot_drop_rate/damage_reduction_percent are new.
+ADMIN_ITEM_SPECIAL_EFFECT_KEYS = (
+    "gold_rate", "exp_rate", "independent_damage", "loot_drop_rate", "damage_reduction_percent",
+)
 
 
 def _hidden_set_counts(equipped_items):
@@ -193,25 +218,51 @@ def _hidden_set_counts(equipped_items):
 
 
 def character_special_effects(equipped_items):
-    """{special_effect_key: total percent} for every hidden set the wearer has
-    FULLY equipped (all 3 pieces). Returns {} for an ordinary loadout, and
-    also for a 1/3 or 2/3 partial -- see the all-or-nothing note above.
+    """{special_effect_key: total percent} combining TWO independent
+    mechanisms: the legacy hidden-set gating below (only counts once a set is
+    fully 3/3 equipped) PLUS every equipped admin-managed item's OWN
+    item_special_effects rows (unconditional -- active the instant that
+    single item is equipped, no set-completion gating at all). Both
+    mechanisms share the same effect-key namespace and are simply summed
+    together into one dict, so every existing call site (game_hunt,
+    game_hunt_boss_room, game_recover, every run_battle/run_pvp_duel call)
+    automatically benefits from both with no per-call-site changes needed.
 
-    The five keys and where each is consumed:
-      gold_rate          -- game_hunt / game_hunt_boss_room currency payout
-      exp_rate           -- game_hunt / game_hunt_boss_room exp payout
-      recovery_discount  -- game_recover's HP/MP heal bill
-      enemy_debuff       -- scales the fought monster's hp/atk/def/agi down
-                            (hunts only -- never towers, garrison defenders
-                            or tournament opponents)
-      independent_damage -- bonus post-mitigation damage in _combat_hit,
-                            active in EVERY fight the character takes part in
+    The keys and where each is consumed:
+      gold_rate                 -- game_hunt / game_hunt_boss_room currency payout
+      exp_rate                  -- game_hunt / game_hunt_boss_room exp payout
+      recovery_discount         -- game_recover's HP/MP heal bill (legacy hidden-set only)
+      enemy_debuff               -- scales the fought monster's hp/atk/def/agi down
+                                    (hunts only -- legacy hidden-set only)
+      independent_damage        -- bonus post-mitigation damage in _combat_hit,
+                                    active in EVERY fight the character takes part in
+      loot_drop_rate             -- admin-item-only: boosts the roll chance of
+                                    admin-managed monster_drop items (see
+                                    blueprints/game.py's _roll_admin_monster_drops)
+      damage_reduction_percent   -- admin-item-only: reduces incoming damage,
+                                    see game_data/combat.py's _combat_hit
     """
     effects = {}
     for entry in _hidden_set_counts(equipped_items).values():
         if entry["count"] < HIDDEN_SET_PIECES_REQUIRED or not entry["effect_key"]:
             continue
         effects[entry["effect_key"]] = effects.get(entry["effect_key"], 0) + entry["effect_percent"]
+    # Per-item admin-managed special effects: unconditional, no set-completion
+    # gating. Tolerates equipped_items entries that don't carry a
+    # "special_effects" key at all (e.g. a caller passing a plain dict built
+    # ad hoc without going through _fetch_equipped_items) by simply skipping
+    # them, same tolerance convention as _hidden_set_counts above.
+    for item in equipped_items:
+        if item is None:
+            continue
+        try:
+            own_effects = item["special_effects"]
+        except (IndexError, KeyError):
+            own_effects = None
+        if not own_effects:
+            continue
+        for eff in own_effects:
+            effects[eff["effect_key"]] = effects.get(eff["effect_key"], 0) + eff["effect_percent"]
     return effects
 
 
@@ -283,12 +334,24 @@ def _fetch_equipped_items(db, character):
     compute_final_stats can tally equipment-set bonuses. The bare `items.*`
     also brings along hidden_set_key/hidden_set_name/special_effect_key/
     special_effect_percent (all NULL on ordinary gear) for
-    character_special_effects."""
+    character_special_effects, plus the six new stat_bonus_* columns (also
+    covered by the bare `items.*`, zero SELECT changes needed for those).
+
+    Each returned entry is a plain dict (not a sqlite3.Row) with one extra
+    key, "special_effects": that item's own item_special_effects rows (a list
+    of {effect_key, effect_percent} dicts, [] for a legacy item with none) --
+    this is what character_special_effects' new unconditional per-item loop
+    reads. sqlite3.Row is immutable, so attaching this extra key requires the
+    dict conversion; every existing caller only ever does item["field"]-style
+    access, which works identically on a plain dict."""
     equipped_ids = [
         character["equipped_weapon_id"], character["equipped_armor_id"], character["equipped_accessory_id"],
     ]
-    return [
-        db.execute(
+    items = []
+    for item_id in equipped_ids:
+        if not item_id:
+            continue
+        row = db.execute(
             """SELECT items.*, items.hidden_set_key, items.hidden_set_name,
                       items.special_effect_key, items.special_effect_percent,
                       countries.element AS set_element, countries.name AS set_country_name
@@ -296,5 +359,84 @@ def _fetch_equipped_items(db, character):
                WHERE items.id = ?""",
             (item_id,),
         ).fetchone()
-        for item_id in equipped_ids if item_id
+        if row is None:
+            continue
+        item = dict(row)
+        item["special_effects"] = [
+            dict(effect_row)
+            for effect_row in db.execute(
+                "SELECT effect_key, effect_percent FROM item_special_effects WHERE item_id = ?",
+                (item_id,),
+            ).fetchall()
+        ]
+        items.append(item)
+    return items
+
+
+STAT_BONUS_DISPLAY_LABELS = {
+    "str": "力量", "def": "防禦", "agi": "敏捷", "luk": "幸運", "hp": "HP", "mp": "MP",
+}
+
+
+def item_stat_bonus_text(item):
+    """Combined stat-bonus display string for an item, covering BOTH the
+    legacy single stat/stat_bonus field (every pre-existing item) AND the six
+    stat_bonus_* columns an admin-managed item can carry simultaneously (see
+    /admin/items), e.g. "力量+5、防禦+3". Registered as a Jinja global
+    (app.py) and used everywhere a template used to inline
+    `{{ item.stat }}+{{ item.stat_bonus }}`.
+
+    A legacy item's `stat` is a real value ("str"/"def"/"agi"/"luk", or
+    "none" for a consumable placeholder -- consumables are never routed
+    through this helper by any template) so its half is unconditional; a new
+    admin item leaves `stat` as '' (guarded here so it never produces a bogus
+    ''+0 entry) and carries its bonuses in the six new columns instead."""
+    if item is None:
+        return ""
+    parts = []
+    try:
+        legacy_stat = item["stat"]
+    except (IndexError, KeyError):
+        legacy_stat = None
+    if legacy_stat:
+        label = STAT_BONUS_DISPLAY_LABELS.get(legacy_stat, legacy_stat)
+        parts.append(f"{label}+{item['stat_bonus']}")
+    for key in ITEM_STAT_BONUS_COLUMNS:
+        try:
+            bonus = item[f"stat_bonus_{key}"]
+        except (IndexError, KeyError):
+            bonus = 0
+        if bonus:
+            parts.append(f"{STAT_BONUS_DISPLAY_LABELS[key]}+{bonus}")
+    return "、".join(parts) if parts else "-"
+
+
+def item_own_special_effects_text(item):
+    """Short Chinese description of an ADMIN-MANAGED item's own
+    item_special_effects rows, e.g. "傷害%+5%、減傷%+10%" -- these apply
+    unconditionally the instant the single item is equipped, unlike
+    item_set_effect_text's legacy hidden-set (集滿 3 件) gating. Returns None
+    for a legacy (is_admin_managed=0) item, or an admin item with no special
+    effects rows. Registered as a Jinja global (app.py); opens its own DB
+    connection (same pattern as web_helpers.active_announcement) since
+    templates don't have one to hand it."""
+    if item is None:
+        return None
+    try:
+        is_admin_managed = item["is_admin_managed"]
+    except (IndexError, KeyError):
+        return None
+    if not is_admin_managed:
+        return None
+    db = get_db()
+    rows = db.execute(
+        "SELECT effect_key, effect_percent FROM item_special_effects WHERE item_id = ?", (item["id"],)
+    ).fetchall()
+    db.close()
+    if not rows:
+        return None
+    parts = [
+        f"{SPECIAL_EFFECT_LABELS.get(row['effect_key'], row['effect_key'])}+{row['effect_percent']}%"
+        for row in rows
     ]
+    return "、".join(parts)

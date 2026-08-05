@@ -267,6 +267,21 @@ CREATE TABLE IF NOT EXISTS items (
     FOREIGN KEY (country_id) REFERENCES countries(id)
 );
 
+-- New, separately-managed admin item catalog's own special effects (multiple
+-- simultaneous effects per item, each active unconditionally the instant that
+-- single item is equipped -- unlike the legacy hidden_set_key/special_effect_*
+-- columns on items itself, which stay all-or-nothing at a full 3-piece set).
+-- effect_key is one of: gold_rate, exp_rate, independent_damage,
+-- loot_drop_rate, damage_reduction_percent. Rows are deleted alongside their
+-- parent item on /admin/items delete (see blueprints/admin.py).
+CREATE TABLE IF NOT EXISTS item_special_effects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id INTEGER NOT NULL,
+    effect_key TEXT NOT NULL,
+    effect_percent REAL NOT NULL,
+    FOREIGN KEY (item_id) REFERENCES items(id)
+);
+
 CREATE TABLE IF NOT EXISTS inventory (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     character_id INTEGER NOT NULL,

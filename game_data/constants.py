@@ -72,6 +72,10 @@ ACTION_LABELS = {
     "repair_defense": "修補防禦",
     "tournament_register": "報名天下武道大會",
     "use_item": "使用道具",
+    "admin_item_drop": "掉落裝備",
+    "admin_item_create": "新增管理裝備",
+    "admin_item_update": "編輯管理裝備",
+    "admin_item_delete": "刪除管理裝備",
 }
 
 SHOP_TYPE_LABELS = {
@@ -144,7 +148,16 @@ BASE_STATS = {
 # actually harder/beatable -- gear alone was the only source of growth before.
 LEVEL_STAT_GROWTH = {"hp": 5, "mp": 5, "str": 1, "def": 1, "agi": 1, "luk": 1}
 
-STAT_LABELS = {"str": "力量", "def": "防禦", "agi": "敏捷", "luk": "幸運", "avg": "六圍平均"}
+STAT_LABELS = {
+    "str": "力量", "def": "防禦", "agi": "敏捷", "luk": "幸運", "avg": "六圍平均",
+    # hp/mp weren't part of the original 4-stat set-bonus system (which only
+    # ever targets str/def/agi/luk), but admin-managed items (see
+    # game_data/equipment.py's item_stat_bonus_text) can grant hp/mp bonuses
+    # too -- matches the "HP"/"MP" English abbreviation already shown
+    # everywhere else on the character sheet rather than inventing a Chinese
+    # term nowhere else in the UI uses.
+    "hp": "HP", "mp": "MP",
+}
 
 # /game action-panel display order (admin-configurable, one global order for
 # all players -- see admin.admin_update_layout). Key set + default order here

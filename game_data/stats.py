@@ -22,7 +22,23 @@ def compute_final_stats(
     equip_bonus = {}
     for item in equipped_items:
         if item:
-            equip_bonus[item["stat"]] = equip_bonus.get(item["stat"], 0) + item["stat_bonus"]
+            # Legacy single-stat field: guarded on truthiness so an
+            # admin-managed item (whose `stat` is left as '' -- it carries its
+            # bonuses in the six stat_bonus_* columns below instead) never
+            # creates a bogus equip_bonus[''] entry.
+            if item["stat"]:
+                equip_bonus[item["stat"]] = equip_bonus.get(item["stat"], 0) + item["stat_bonus"]
+            # New multi-stat columns (admin-managed items, see /admin/items):
+            # an item can boost any/all of the six stats simultaneously.
+            # Legacy items also carry these columns (ALTER TABLE default 0),
+            # so this loop is a no-op for every pre-existing item.
+            for key in ("str", "def", "agi", "luk", "hp", "mp"):
+                try:
+                    bonus = item[f"stat_bonus_{key}"]
+                except (IndexError, KeyError):
+                    bonus = 0
+                if bonus:
+                    equip_bonus[key] = equip_bonus.get(key, 0) + bonus
     for stat, amount in _equipment_set_bonus(equipped_items).items():
         equip_bonus[stat] = equip_bonus.get(stat, 0) + amount
     for stat, amount in _own_element_bonus(equipped_items, own_element).items():

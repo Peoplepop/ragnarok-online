@@ -155,6 +155,40 @@ def _roll_potion_drop(db, settings, character_id):
     return dropped
 
 
+def _roll_admin_monster_drops(db, ground_id, character_id, special_effects):
+    """Independent post-WIN drop roll for every admin-managed 'monster_drop'
+    item tied to THIS specific hunting ground (see /admin/items) -- mirrors
+    the _roll_potion_drop/_roll_money_pouch_drop convention (never gated on
+    whatever else the fight already dropped, so several admin items at the
+    same ground can all land in one fight) rather than the single-pick-from-
+    a-pool convention _roll_hidden_loot/_roll_boss_set_loot use, since each
+    admin item has its OWN independent drop_chance_percent rather than
+    sharing one pool.
+
+    Each item's roll chance is drop_chance_percent boosted by the wearer's
+    loot_drop_rate% (from character_special_effects) -- deliberately scoped
+    to ONLY these admin-managed items, per the confirmed narrow scope: it
+    does not touch the existing potion/money-pouch/hidden-loot/skill-book/
+    boss-set drop systems at all.
+
+    Returns the list of dropped item rows (possibly empty, possibly more than
+    one)."""
+    loot_bonus_percent = special_effects.get("loot_drop_rate", 0)
+    pool = db.execute(
+        """SELECT * FROM items
+           WHERE is_admin_managed = 1 AND acquisition_method = 'monster_drop'
+             AND drop_hunting_ground_id = ?""",
+        (ground_id,),
+    ).fetchall()
+    dropped = []
+    for item in pool:
+        chance = (item["drop_chance_percent"] or 0) * (1 + loot_bonus_percent / 100)
+        if random.random() * 100 < chance:
+            _add_to_inventory(db, character_id, item["id"], 1)
+            dropped.append(item)
+    return dropped
+
+
 def _roll_money_pouch_drop(db, drop_percent, item_name, character_id):
     """Independent post-WIN drop roll for every ordinary hunt/魔王房間 win,
     same convention as _roll_potion_drop -- never gated on whatever else the
@@ -765,11 +799,13 @@ def game_hunt():
         character["character_name"], stats, character["element"], current_hp, fought_monster,
         player_mp=current_mp, usable_skills=usable_skills,
         player_independent_damage_percent=special_effects.get("independent_damage", 0),
+        player_damage_reduction_percent=special_effects.get("damage_reduction_percent", 0),
     )
 
     exp_gain = 0
     currency_gain = 0
     currency_lost = 0
+    admin_items_dropped = []
     new_level, new_exp = character["level"], character["exp"]
     stat_gain = {key: 0 for key in LEVEL_UP_POINT_VALUE}
     pending_boss_id = None
@@ -894,6 +930,21 @@ def game_hunt():
                 detail=f"擊敗{monster['name']}，獲得「{large_pouch_dropped['name']}」",
                 ip_address=request.remote_addr,
             )
+        # Admin-managed monster-drop items (see /admin/items): independent
+        # roll every win, same convention as the potion/pouch drops above --
+        # can stack with them and with each other. Rolled at the ground the
+        # player just fought at, boosted by loot_drop_rate% -- scoped only to
+        # THIS drop system, never the existing potion/pouch/hidden-loot/
+        # skill-book/boss-set systems.
+        admin_items_dropped = _roll_admin_monster_drops(
+            db, ground["id"], character["character_id"], special_effects,
+        )
+        for dropped_item in admin_items_dropped:
+            log_activity(
+                db, session["user_id"], session["username"], "admin_item_drop",
+                detail=f"擊敗{monster['name']}，獲得「{dropped_item['name']}」",
+                ip_address=request.remote_addr,
+            )
     elif not result["timed_out"]:
         currency_lost = character["currency"] // 2
         new_currency = character["currency"] - currency_lost
@@ -978,6 +1029,7 @@ def game_hunt():
         potion_dropped=potion_dropped,
         small_pouch_dropped=small_pouch_dropped,
         large_pouch_dropped=large_pouch_dropped,
+        admin_items_dropped=admin_items_dropped,
         log=result["log"],
         won=result["won"],
         timed_out=result["timed_out"],
@@ -1060,6 +1112,7 @@ def game_hunt_boss_room():
         character["character_name"], stats, character["element"], current_hp, fought_boss,
         player_mp=current_mp, usable_skills=usable_skills,
         player_independent_damage_percent=special_effects.get("independent_damage", 0),
+        player_damage_reduction_percent=special_effects.get("damage_reduction_percent", 0),
     )
 
     exp_gain = 0
@@ -1071,6 +1124,7 @@ def game_hunt_boss_room():
     potion_dropped = None
     small_pouch_dropped = None
     large_pouch_dropped = None
+    admin_items_dropped = []
     leveled_up = False
     stats_after = None
     if result["won"]:
@@ -1121,6 +1175,17 @@ def game_hunt_boss_room():
             log_activity(
                 db, session["user_id"], session["username"], "money_pouch_drop",
                 detail=f"擊敗{boss['name']}，獲得「{large_pouch_dropped['name']}」",
+                ip_address=request.remote_addr,
+            )
+        # Admin-managed monster-drop items tied to THIS boss's own ground --
+        # same independent-roll convention as the potion/pouch drops above.
+        admin_items_dropped = _roll_admin_monster_drops(
+            db, ground["id"], character["character_id"], special_effects,
+        )
+        for dropped_item in admin_items_dropped:
+            log_activity(
+                db, session["user_id"], session["username"], "admin_item_drop",
+                detail=f"擊敗{boss['name']}，獲得「{dropped_item['name']}」",
                 ip_address=request.remote_addr,
             )
         new_level, new_exp, stat_gain = apply_exp(
@@ -1197,6 +1262,7 @@ def game_hunt_boss_room():
         potion_dropped=potion_dropped,
         small_pouch_dropped=small_pouch_dropped,
         large_pouch_dropped=large_pouch_dropped,
+        admin_items_dropped=admin_items_dropped,
         log=result["log"],
         won=result["won"],
         timed_out=result["timed_out"],
@@ -1221,6 +1287,7 @@ def game_hunt_boss_room():
 
 def _resolve_bandit_conquest(
     db, character, settings, stats, current_hp, current_mp, independent_damage_percent=0,
+    damage_reduction_percent=0,
 ):
     """Neutral-tile fight against the persistent-HP 山賊領主 (bandit lord) --
     the one deliberate exception to this game's usual single-action instant
@@ -1245,6 +1312,7 @@ def _resolve_bandit_conquest(
         character["character_name"], stats, character["element"], current_hp, bandit_monster,
         player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
         player_independent_damage_percent=independent_damage_percent,
+        player_damage_reduction_percent=damage_reduction_percent,
     )
 
     bandit_hp_after = result["monster_hp"]
@@ -1432,12 +1500,13 @@ def game_conquer():
         character, equipped_items, settings, attacker_is_reigning_king, attacker_morale_buff_active,
     )
     current_hp, current_mp = _current_hp_mp(character, stats)
-    # 獨立傷害 is a genuine equipped-gear stat, so unlike the four hunt-scoped
-    # effects it works in every kind of fight -- bandit lord, garrison duel
-    # and NPC tower alike. The other four are deliberately NOT read here.
-    attacker_independent_damage = character_special_effects(equipped_items).get(
-        "independent_damage", 0
-    )
+    # 獨立傷害/減傷% are genuine equipped-gear stats, so unlike the four
+    # hunt-scoped effects (gold_rate/exp_rate/recovery_discount/enemy_debuff)
+    # they work in every kind of fight -- bandit lord, garrison duel and NPC
+    # tower alike. The other four are deliberately NOT read here.
+    attacker_special_effects = character_special_effects(equipped_items)
+    attacker_independent_damage = attacker_special_effects.get("independent_damage", 0)
+    attacker_damage_reduction = attacker_special_effects.get("damage_reduction_percent", 0)
 
     if current_hp <= 0:
         db.close()
@@ -1450,6 +1519,7 @@ def game_conquer():
     if is_neutral_target:
         return _resolve_bandit_conquest(
             db, character, settings, stats, current_hp, current_mp, attacker_independent_damage,
+            attacker_damage_reduction,
         )
 
     defending_country = db.execute(
@@ -1529,6 +1599,7 @@ def game_conquer():
             character["character_name"], stats, character["element"], current_hp, defender_monster,
             player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
             player_independent_damage_percent=attacker_independent_damage,
+            player_damage_reduction_percent=attacker_damage_reduction,
         )
 
         # No currency/EXP for either side on a defender-vs-attacker duel --
@@ -1658,6 +1729,7 @@ def game_conquer():
         character["character_name"], stats, character["element"], current_hp, tower,
         player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
         player_independent_damage_percent=attacker_independent_damage,
+        player_damage_reduction_percent=attacker_damage_reduction,
     )
 
     currency_lost = 0
@@ -2111,11 +2183,17 @@ def game_shop():
     # "在哪裡買，就只能買那裡的回城石" (buy here, get a scroll back to here).
     # Town tiles only ever sell consumables (potions/return scrolls) -- no
     # weapon/armor/accessory sets, since those are fortress-only concepts.
+    # acquisition_method != 'monster_drop' keeps admin-managed 打怪 items
+    # (see /admin/items) out of the shop entirely -- they default to
+    # price=0/country_id=NULL, so without this guard they'd be listed
+    # everywhere and purchasable for free instead of only dropping at their
+    # configured hunting ground.
     is_town = character["tile_type"] == "town"
     all_items = db.execute(
         """SELECT items.*, countries.name AS set_country_name, countries.element AS set_element
            FROM items LEFT JOIN countries ON countries.id = items.country_id
            WHERE items.hidden_set_key IS NULL
+             AND items.acquisition_method != 'monster_drop'
              AND (items.consumable_effect IS NULL OR items.consumable_effect != 'currency')
              AND (? = 0 OR items.shop_type = 'consumable')
              AND (
@@ -2203,15 +2281,17 @@ def game_shop_buy():
         flash("請至少選擇一件要購買的商品")
         return redirect(url_for("game.game_shop"))
 
-    # hidden_set_key IS NULL mirrors game_shop's listing filter: the 秘境
-    # pieces are never rendered as buyable, and (since they are priced 0) a
-    # hand-crafted POST must not be able to mint one for free either.
+    # hidden_set_key IS NULL / acquisition_method != 'monster_drop' mirror
+    # game_shop's listing filter: 秘境 pieces and admin-managed 打怪 items are
+    # never rendered as buyable, and (since both are priced 0) a hand-crafted
+    # POST must not be able to mint one for free either.
     # Town tiles only ever sell consumables -- a hand-crafted POST trying to
     # buy weapon/armor/accessory from a town must be rejected the same way.
     is_town = character["tile_type"] == "town"
     placeholders = ",".join("?" for _ in item_ids)
     items = db.execute(
         f"""SELECT * FROM items WHERE id IN ({placeholders}) AND hidden_set_key IS NULL
+            AND acquisition_method != 'monster_drop'
             AND (? = 0 OR shop_type = 'consumable')""",
         item_ids + [1 if is_town else 0],
     ).fetchall()
@@ -2926,12 +3006,12 @@ def country_challenge_king():
         "portrait_url": official_image_url(king_row["id"], "king"),
     }
 
+    challenger_special_effects = character_special_effects(equipped_items)
     result = run_battle(
         character["character_name"], challenger_stats, character["element"], current_hp, king_monster,
         player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
-        player_independent_damage_percent=character_special_effects(equipped_items).get(
-            "independent_damage", 0
-        ),
+        player_independent_damage_percent=challenger_special_effects.get("independent_damage", 0),
+        player_damage_reduction_percent=challenger_special_effects.get("damage_reduction_percent", 0),
     )
 
     country_id = character["country_id"]
@@ -3093,12 +3173,12 @@ def country_spar_official(seat):
         "portrait_url": official_image_url(opponent_row["id"], seat),
     }
 
+    challenger_special_effects = character_special_effects(equipped_items)
     result = run_battle(
         character["character_name"], challenger_stats, character["element"], current_hp, opponent_monster,
         player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
-        player_independent_damage_percent=character_special_effects(equipped_items).get(
-            "independent_damage", 0
-        ),
+        player_independent_damage_percent=challenger_special_effects.get("independent_damage", 0),
+        player_damage_reduction_percent=challenger_special_effects.get("damage_reduction_percent", 0),
     )
 
     # No stakes at all: currency and seats are both left completely untouched
@@ -3354,12 +3434,12 @@ def country_challenge_official():
         "element": officeholder_row["element"],
     }
 
+    challenger_special_effects = character_special_effects(equipped_items)
     result = run_battle(
         character["character_name"], challenger_stats, character["element"], current_hp, defender_monster,
         player_mp=current_mp, usable_skills=_character_usable_skills(db, character),
-        player_independent_damage_percent=character_special_effects(equipped_items).get(
-            "independent_damage", 0
-        ),
+        player_independent_damage_percent=challenger_special_effects.get("independent_damage", 0),
+        player_damage_reduction_percent=challenger_special_effects.get("damage_reduction_percent", 0),
     )
 
     country_id = target_country["id"]

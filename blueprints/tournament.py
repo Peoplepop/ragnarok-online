@@ -155,11 +155,13 @@ def _resolve_game(db, tournament_id, round_number, match_index, game_number, a, 
     result = run_pvp_duel(
         a["character_name"], a["stats"], a["snap_element"], a["skills"],
         b["character_name"], b["stats"], b["snap_element"], b["skills"],
-        # 獨立傷害 from a fully-equipped 秘境 火 set, read off each side's
-        # frozen snapshot like every other combat input here -- gear swapped
-        # after signup deliberately has no effect on the bracket.
+        # 獨立傷害/減傷% from each side's frozen snapshot, like every other
+        # combat input here -- gear swapped after signup deliberately has no
+        # effect on the bracket.
         a_independent_damage_percent=a["snap_independent_damage_percent"],
         b_independent_damage_percent=b["snap_independent_damage_percent"],
+        a_damage_reduction_percent=a["snap_damage_reduction_percent"],
+        b_damage_reduction_percent=b["snap_damage_reduction_percent"],
     )
 
     if result["winner"] == "a":
@@ -378,15 +380,16 @@ def tournament_register():
     # 業火尊者_1) that never contain a comma.
     learned_keys = ",".join(sorted(_learned_skill_keys(db, character["character_id"])))
 
+    registrant_special_effects = character_special_effects(equipped_items)
     try:
         db.execute(
             """INSERT INTO tournament_registrations
                (tournament_id, character_id, character_name, country_id, country_name, fee_paid,
                 snap_hp, snap_mp, snap_str, snap_def, snap_agi, snap_luk, snap_element,
                 snap_job_class, snap_job_tier, snap_equipped_skill_1, snap_equipped_skill_2,
-                snap_learned_skill_keys, snap_independent_damage_percent,
+                snap_learned_skill_keys, snap_independent_damage_percent, snap_damage_reduction_percent,
                 snap_avatar_key, snap_avatar_custom_filename)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 tournament["id"], character["character_id"], character["character_name"],
                 # character["name"] is the COUNTRY's name here (bare
@@ -396,7 +399,8 @@ def tournament_register():
                 stats["hp"], stats["mp"], stats["str"], stats["def"], stats["agi"], stats["luk"],
                 character["element"], character["job_class"], character["job_tier"],
                 character["equipped_skill_1"], character["equipped_skill_2"], learned_keys,
-                character_special_effects(equipped_items).get("independent_damage", 0),
+                registrant_special_effects.get("independent_damage", 0),
+                registrant_special_effects.get("damage_reduction_percent", 0),
                 # Frozen at signup like every other snap_* column -- a later
                 # avatar change (or an as-yet-nonexistent character never
                 # reaching job_tier 4) never rewrites an already-registered

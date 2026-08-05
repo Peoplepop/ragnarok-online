@@ -98,14 +98,23 @@ def _combat_hit(
     attacker_name, attacker_atk, attacker_agi, attacker_luk, attacker_element,
     defender_name, defender_def, defender_luk, defender_element,
     damage_multiplier=1.0, skill_name=None, attacker_independent_damage_percent=0,
+    defender_damage_reduction_percent=0,
 ):
     """attacker_independent_damage_percent (獨立傷害, from a fully-equipped
-    秘境 火 set -- see character_special_effects) defaults to 0 so every
-    pre-existing call site is bit-for-bit unchanged. When nonzero it adds a
-    flat percentage of the ALREADY-mitigated damage on top; because it is
-    computed after the defense reduction it bypasses no further mitigation,
-    which is exactly what makes it "independent". It never turns a miss, a
-    dodge or a 0 into damage -- those paths return before it applies."""
+    秘境 火 set, or an admin-managed item's own 獨立傷害 effect -- see
+    character_special_effects) defaults to 0 so every pre-existing call site
+    is bit-for-bit unchanged. When nonzero it adds a flat percentage of the
+    ALREADY-mitigated damage on top; because it is computed after the defense
+    reduction it bypasses no further mitigation, which is exactly what makes
+    it "independent". It never turns a miss, a dodge or a 0 into damage --
+    those paths return before it applies.
+
+    defender_damage_reduction_percent (減傷%, admin-managed items only -- no
+    legacy hidden-set equivalent) defaults to 0 the same way, and applies
+    AFTER the independent-damage addition above, cutting the final damage
+    value by that percent and flooring at 1 (same floor as the existing
+    max(1, ...) pattern below) -- it can reduce a hit but never fully negate
+    it."""
     if random.random() * 100 >= _hit_chance_pct(attacker_luk):
         return 0, f"{attacker_name} 的攻擊沒有命中"
 
@@ -124,9 +133,16 @@ def _combat_hit(
         if attacker_independent_damage_percent else 0
     )
     damage += independent_bonus
+    reduction_amount = 0
+    if defender_damage_reduction_percent:
+        reduced = max(1, round(damage * (1 - defender_damage_reduction_percent / 100)))
+        reduction_amount = damage - reduced
+        damage = reduced
     suffix = "（會心一擊！）" if is_crit else ""
     if independent_bonus:
         suffix += f"（獨立傷害 +{independent_bonus}）"
+    if reduction_amount:
+        suffix += f"（減傷 -{reduction_amount}）"
     if elem_mult > 1:
         suffix += "（屬性相剋！）"
     elif elem_mult < 1:
@@ -140,7 +156,7 @@ BATTLE_ROUND_CAP = 15
 
 def run_battle(
     player_name, player_stats, player_element, player_hp, monster, player_mp=0, usable_skills=(),
-    player_independent_damage_percent=0,
+    player_independent_damage_percent=0, player_damage_reduction_percent=0,
 ):
     """Resolves an entire fight in one shot. Turn order is driven purely by
     attack speed (AGI*SPEED_PER_AGI): whoever is faster always goes first each
@@ -168,7 +184,12 @@ def run_battle(
     player_independent_damage_percent applies ONLY to the "player" side's
     hits. The monster-shaped opponent (a real monster, an NPC defense tower,
     the bandit lord, or a garrisoned defender rendered monster-shaped) never
-    gets one -- it has no equipment rows to carry a 秘境 set."""
+    gets one -- it has no equipment rows to carry a 秘境 set.
+
+    player_damage_reduction_percent similarly applies ONLY to the "player"
+    side, and only when the MONSTER attacks (i.e. the player is the
+    defender) -- the monster-shaped opponent has no gear to carry a
+    減傷% effect either."""
     log = []
     p_hp, m_hp, p_mp = player_hp, monster["hp"], player_mp
 
@@ -206,6 +227,7 @@ def run_battle(
             dmg, line = _combat_hit(
                 monster["name"], monster["atk"], monster["agi"], monster.get("luk", 0), monster["element"],
                 player_name, player_stats["def"], player_stats["luk"], player_element,
+                defender_damage_reduction_percent=player_damage_reduction_percent,
             )
             p_hp = max(0, p_hp - dmg)
             log.append(f"{line}（{player_name} 剩餘 HP {p_hp}）")
@@ -238,6 +260,7 @@ def run_battle(
 def run_pvp_duel(
     a_name, a_stats, a_element, a_skills, b_name, b_stats, b_element, b_skills,
     a_independent_damage_percent=0, b_independent_damage_percent=0,
+    a_damage_reduction_percent=0, b_damage_reduction_percent=0,
 ):
     """Symmetric two-player duel for 天下武道大會 -- unlike run_battle (player
     vs monster-shaped opponent, where only the "player" side gets luk-based
@@ -266,7 +289,10 @@ def run_pvp_duel(
 
     Both sides get their own 獨立傷害 percent here (symmetric, like every
     other stat in this function) -- the tournament reads each registrant's
-    frozen snap_independent_damage_percent rather than their live gear."""
+    frozen snap_independent_damage_percent rather than their live gear.
+    a_damage_reduction_percent/b_damage_reduction_percent mirror this exactly
+    (frozen snap_damage_reduction_percent), applied on whichever side is the
+    DEFENDER of a given hit."""
     log = []
     a_hp, b_hp = a_stats["hp"], b_stats["hp"]
     a_mp, b_mp = a_stats["mp"], b_stats["mp"]
@@ -292,12 +318,14 @@ def run_pvp_duel(
                     b_name, b_stats["def"], b_stats["luk"], b_element,
                     damage_multiplier=skill["multiplier"], skill_name=skill["name"],
                     attacker_independent_damage_percent=a_independent_damage_percent,
+                    defender_damage_reduction_percent=b_damage_reduction_percent,
                 )
             else:
                 dmg, line = _combat_hit(
                     a_name, a_stats["str"], a_stats["agi"], a_stats["luk"], a_element,
                     b_name, b_stats["def"], b_stats["luk"], b_element,
                     attacker_independent_damage_percent=a_independent_damage_percent,
+                    defender_damage_reduction_percent=b_damage_reduction_percent,
                 )
             b_hp = max(0, b_hp - dmg)
             log.append(f"{line}（{b_name} 剩餘 HP {b_hp}）")
@@ -311,12 +339,14 @@ def run_pvp_duel(
                     a_name, a_stats["def"], a_stats["luk"], a_element,
                     damage_multiplier=skill["multiplier"], skill_name=skill["name"],
                     attacker_independent_damage_percent=b_independent_damage_percent,
+                    defender_damage_reduction_percent=a_damage_reduction_percent,
                 )
             else:
                 dmg, line = _combat_hit(
                     b_name, b_stats["str"], b_stats["agi"], b_stats["luk"], b_element,
                     a_name, a_stats["def"], a_stats["luk"], a_element,
                     attacker_independent_damage_percent=b_independent_damage_percent,
+                    defender_damage_reduction_percent=a_damage_reduction_percent,
                 )
             a_hp = max(0, a_hp - dmg)
             log.append(f"{line}（{a_name} 剩餘 HP {a_hp}）")
