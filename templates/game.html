@@ -121,6 +121,12 @@
   </div>
   {% endif %}
 
+  {% if feedback_reply_available %}
+  <div class="panel" style="margin-bottom:20px; border-color: rgba(212, 175, 55, 0.5);">
+    <a href="{{ url_for('feedback.feedback_page') }}" style="color:var(--gold-bright); font-size:13px; text-decoration:none;">🔔 你的意見回饋已收到管理者回覆，點我查看 →</a>
+  </div>
+  {% endif %}
+
   <nav class="quick-jump-nav" id="quick-jump-nav" aria-label="快速跳轉區塊"></nav>
 
   <div style="display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap;">

@@ -21,7 +21,7 @@ from web_helpers import (
 )
 from game_data.constants import (
     STAT_FIELDS, IDLE_THRESHOLD_MINUTES, ACTION_LABELS, GOVERNMENT_ROLES,
-    FEEDBACK_STATUSES, FEEDBACK_STATUS_LABELS, GAME_LAYOUT_BLOCKS, SLOT_LABELS,
+    FEEDBACK_STATUSES, FEEDBACK_STATUS_LABELS, FEEDBACK_MESSAGE_MAX_LEN, GAME_LAYOUT_BLOCKS, SLOT_LABELS,
 )
 from game_data.avatars import (
     BUILT_IN_AVATARS, BUILT_IN_AVATAR_KEYS, CUSTOM_AVATAR_MAX_BYTES, CUSTOM_AVATAR_DIMENSION,
@@ -359,11 +359,21 @@ def admin_update_feedback_status(feedback_id):
     if status not in FEEDBACK_STATUSES:
         flash("無效的處理狀態")
         return redirect(url_for("admin.admin_feedback"))
+    admin_reply = request.form.get("admin_reply", "").strip()
+    if len(admin_reply) > FEEDBACK_MESSAGE_MAX_LEN:
+        flash(f"回覆內容不可超過 {FEEDBACK_MESSAGE_MAX_LEN} 字")
+        return redirect(url_for("admin.admin_feedback"))
 
     db = get_db()
+    # reply_seen resets to 0 (unread) whenever a non-empty reply is saved --
+    # that's what triggers the "🔔 你的意見回饋..." banner on the player's
+    # next /game load (see _render_game); cleared back to 1 the moment the
+    # player actually opens /feedback (feedback_page). A blank reply leaves
+    # nothing to notify about, so it's stored as NULL/seen instead.
     db.execute(
-        "UPDATE feedback SET status = ?, updated_at = datetime('now') WHERE id = ?",
-        (status, feedback_id),
+        """UPDATE feedback SET status = ?, admin_reply = ?, reply_seen = ?, updated_at = datetime('now')
+           WHERE id = ?""",
+        (status, admin_reply or None, 0 if admin_reply else 1, feedback_id),
     )
     db.commit()
     db.close()

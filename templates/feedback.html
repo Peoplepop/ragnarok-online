@@ -27,6 +27,12 @@
           <span style="color: {{ 'var(--gold-bright)' if f.status == 'done' else 'var(--text-dim)' }};">{{ status_labels.get(f.status, f.status) }}</span>
         </div>
         <div style="font-size:13px; white-space:pre-wrap;">{{ f.message }}</div>
+        {% if f.admin_reply %}
+        <div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
+          <div style="font-size:11px; color:var(--gold-bright); margin-bottom:4px;">📢 管理者回覆</div>
+          <div style="font-size:13px; white-space:pre-wrap; color:var(--gold-bright);">{{ f.admin_reply }}</div>
+        </div>
+        {% endif %}
       </div>
       {% endfor %}
     </div>

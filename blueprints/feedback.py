@@ -18,6 +18,13 @@ def feedback_page():
     rows = db.execute(
         "SELECT * FROM feedback WHERE user_id = ? ORDER BY id DESC", (session["user_id"],)
     ).fetchall()
+    # Viewing this page is what clears the "🔔 你的意見回饋..." banner on
+    # /game (see _render_game) -- the reply text itself never changes here,
+    # only whether it still counts as unread.
+    db.execute(
+        "UPDATE feedback SET reply_seen = 1 WHERE user_id = ? AND reply_seen = 0", (session["user_id"],)
+    )
+    db.commit()
     db.close()
     return render_template(
         "feedback.html", feedback_list=rows, status_labels=FEEDBACK_STATUS_LABELS,

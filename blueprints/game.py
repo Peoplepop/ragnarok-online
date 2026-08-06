@@ -410,6 +410,12 @@ def _render_game(**extra):
            ORDER BY items.consumable_effect, items.name""",
         (character["character_id"],),
     ).fetchall()
+    # Cleared the moment the player actually opens /feedback (feedback_page
+    # resets reply_seen back to 1 there) -- see admin_update_feedback_status
+    # for where this gets set to 0 in the first place.
+    feedback_reply_available = db.execute(
+        "SELECT 1 FROM feedback WHERE user_id = ? AND reply_seen = 0 LIMIT 1", (session["user_id"],)
+    ).fetchone() is not None
     db.close()
 
     # King war-defense bonus: character["character_id"] is the character's
@@ -549,6 +555,7 @@ def _render_game(**extra):
         bandit_hp=bandit_hp,
         bandit_hp_max=bandit_hp_max,
         job_action_available=job_action_available,
+        feedback_reply_available=feedback_reply_available,
         country_destroyed=country_destroyed,
         own_treasury=character["treasury"],
         hexes=hexes,
@@ -2117,7 +2124,7 @@ def game_inventory_use():
         flash(f"使用了「{item['name']}」，已傳送過去")
         return redirect(url_for("game.game"))
 
-    if item["consumable_effect"] in ("heal_hp", "heal_mp"):
+    if item["consumable_effect"] in ("heal_hp", "heal_mp", "heal_both"):
         equipped_items = _fetch_equipped_items(db, character)
         stats = character_final_stats(character, equipped_items, settings)
         current_hp, current_mp = _current_hp_mp(character, stats)
@@ -2128,11 +2135,21 @@ def game_inventory_use():
                 "UPDATE characters SET current_hp = ?, next_action_at = ? WHERE id = ?",
                 (new_hp, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
             )
-        else:
+        elif item["consumable_effect"] == "heal_mp":
             new_mp = min(stats["mp"], current_mp + total_amount)
             db.execute(
                 "UPDATE characters SET current_mp = ?, next_action_at = ? WHERE id = ?",
                 (new_mp, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
+            )
+        else:
+            # heal_both -- one consumable_amount applied to BOTH pools
+            # independently (not split/halved), same convention 回春丹/凝神丹
+            # already use for their single stat.
+            new_hp = min(stats["hp"], current_hp + total_amount)
+            new_mp = min(stats["mp"], current_mp + total_amount)
+            db.execute(
+                "UPDATE characters SET current_hp = ?, current_mp = ?, next_action_at = ? WHERE id = ?",
+                (new_hp, new_mp, _next_action_at(settings["turn_wait_seconds"]), character["id"]),
             )
         _remove_from_inventory(db, character["id"], item["id"], quantity)
         log_activity(

@@ -14,8 +14,7 @@
           <th style="padding:8px 6px;">時間</th>
           <th style="padding:8px 6px;">角色</th>
           <th style="padding:8px 6px;">內容</th>
-          <th style="padding:8px 6px;">狀態</th>
-          <th style="padding:8px 6px;"></th>
+          <th style="padding:8px 6px;">狀態／回覆給玩家</th>
         </tr>
       </thead>
       <tbody>
@@ -24,20 +23,21 @@
           <td style="padding:8px 6px; color:var(--text-dim); white-space:nowrap;">{{ f.created_at }}</td>
           <td style="padding:8px 6px; white-space:nowrap;">{{ f.character_name }}</td>
           <td style="padding:8px 6px; max-width:420px; white-space:pre-wrap;">{{ f.message }}</td>
-          <td style="padding:8px 6px; white-space:nowrap;">{{ status_labels.get(f.status, f.status) }}</td>
-          <td style="padding:8px 6px;">
-            <form method="post" action="{{ url_for('admin.admin_update_feedback_status', feedback_id=f.id) }}" style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+          <td style="padding:8px 6px; max-width:300px;">
+            <form method="post" action="{{ url_for('admin.admin_update_feedback_status', feedback_id=f.id) }}" style="display:flex; flex-direction:column; gap:6px;">
               <select name="status">
                 {% for s in statuses %}
                 <option value="{{ s }}" {{ 'selected' if s == f.status }}>{{ status_labels[s] }}</option>
                 {% endfor %}
               </select>
+              <textarea name="admin_reply" rows="2" placeholder="回覆給玩家看（選填，留空表示不通知）"
+                style="width:100%; background:var(--panel-2); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:6px 8px; font-size:12px; font-family:inherit; resize:vertical;">{{ f.admin_reply or '' }}</textarea>
               <button type="submit" style="padding:6px 12px; font-size:12px;">更新</button>
             </form>
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="5" style="padding:12px 6px; color:var(--text-dim);">目前沒有玩家意見</td></tr>
+        <tr><td colspan="4" style="padding:12px 6px; color:var(--text-dim);">目前沒有玩家意見</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -106,6 +106,17 @@ DEFAULT_ITEMS.append({
     "shop_type": "consumable", "name": "凝神丹", "price": 60, "stat": "none", "stat_bonus": 0,
     "country_name": None, "consumable_effect": "heal_mp", "consumable_amount": 300,
 })
+# 回氣丹: restores HP AND MP together from one item (see game_inventory_use's
+# "heal_both" branch). Priced above simply stacking a 回春丹+凝神丹 (120) --
+# 100 is a modest bundle discount for the convenience of one action instead
+# of two, same "cheap enough to burn through mid-hunt" intent as the single-
+# stat potions. Not admin/monster-drop-managed (acquisition_method stays at
+# its schema default 'shop', same as 回春丹/凝神丹) -- shop-only for now, per
+# explicit request.
+DEFAULT_ITEMS.append({
+    "shop_type": "consumable", "name": "回氣丹", "price": 100, "stat": "none", "stat_bonus": 0,
+    "country_name": None, "consumable_effect": "heal_both", "consumable_amount": 300,
+})
 
 # 小錢袋/大錢袋: monster-only drop, never shop-purchasable (see game_hunt's
 # _roll_money_pouch_drop and game_shop's all_items query, which explicitly
@@ -878,6 +889,18 @@ def _ensure_item_admin_columns(conn):
         conn.execute("ALTER TABLE items ADD COLUMN is_admin_managed INTEGER NOT NULL DEFAULT 0")
 
 
+def _ensure_feedback_columns(conn):
+    cols = [row["name"] for row in conn.execute("PRAGMA table_info(feedback)")]
+    if "admin_reply" not in cols:
+        conn.execute("ALTER TABLE feedback ADD COLUMN admin_reply TEXT")
+    if "reply_seen" not in cols:
+        # Defaults to 1 (already seen) so existing rows don't suddenly show
+        # as a fresh unread reply the moment this migration runs -- only a
+        # reply saved through admin_update_feedback_status AFTER this column
+        # exists resets it to 0 (see blueprints/admin.py).
+        conn.execute("ALTER TABLE feedback ADD COLUMN reply_seen INTEGER NOT NULL DEFAULT 1")
+
+
 def _ensure_tournament_registration_columns(conn):
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(tournament_registrations)")]
     if not cols:
@@ -1478,6 +1501,7 @@ def init_db():
     _ensure_map_tile_columns(conn)
     _ensure_game_settings_columns(conn)
     _ensure_tournament_registration_columns(conn)
+    _ensure_feedback_columns(conn)
     conn.commit()
     conn.close()
 
