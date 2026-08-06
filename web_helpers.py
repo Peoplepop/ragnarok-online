@@ -184,6 +184,13 @@ _MAJOR_EVENT_MESSAGE_BUILDERS = {
     "promote_tier2": lambda username, detail: f"🎓 {detail}",
     "promote_tier3": lambda username, detail: f"🎓 {detail}",
     "promote_tier4": lambda username, detail: f"🌟 {detail}",
+    # detail already carries the full "擊敗XX，佔領/篡位/奪得..." phrase built
+    # at log_activity call time in blueprints/game.py -- username here is the
+    # winner's ACCOUNT username (same convention as hidden_loot_drop above;
+    # these routes never had a character-name-only detail string to prefer).
+    "conquer_win": lambda username, detail: f"🏰 {username} {detail}",
+    "challenge_king_win": lambda username, detail: f"👑 {username} {detail}",
+    "challenge_official_win": lambda username, detail: f"⚔️ {username} {detail}",
 }
 
 

@@ -385,14 +385,16 @@ def _render_game(**extra):
 
     # 重大事件 sidebar: a curated subset of activity_log (see
     # _major_event_feed) -- new players joining a country, 秘境 loot drops,
-    # 天下武道大會 champions, and job promotions (一轉~四轉). Global across
-    # every player, not scoped to this character, so it's read here rather
-    # than filtered by user_id.
+    # 天下武道大會 champions, job promotions (一轉~四轉), successful town/
+    # fortress conquests, successful king usurpations, and newly-won
+    # 大將軍/參謀 seats. Global across every player, not scoped to this
+    # character, so it's read here rather than filtered by user_id.
     major_event_rows = db.execute(
         """SELECT action, detail, username, created_at FROM activity_log
            WHERE action IN (
                'character_create', 'hidden_loot_drop', 'boss_set_drop', 'tournament_champion',
-               'promote_tier1', 'promote_tier2', 'promote_tier3', 'promote_tier4'
+               'promote_tier1', 'promote_tier2', 'promote_tier3', 'promote_tier4',
+               'conquer_win', 'challenge_king_win', 'challenge_official_win'
            )
            ORDER BY created_at DESC LIMIT 100"""
     ).fetchall()
@@ -1726,6 +1728,11 @@ def game_conquer():
             )
         log_activity(
             db, session["user_id"], session["username"],
+            # conquer_win also feeds the 重大事件 feed (see game()) -- fires
+            # on any successful attacker win along the conquest path
+            # (garrison-defender duel or the final NPC-tower fight), not
+            # strictly gated on "this was the very last defender" since
+            # every such win is already a notable PvP event in its own right.
             "conquer_win" if result["won"] else "conquer_loss",
             detail=outcome_detail, ip_address=request.remote_addr,
         )
@@ -3104,7 +3111,10 @@ def country_challenge_king():
         ),
     )
     log_activity(
-        db, session["user_id"], session["username"], "challenge_king",
+        db, session["user_id"], session["username"],
+        # challenge_king_win also feeds the 重大事件 feed (see game()) --
+        # only an actual usurpation (not a loss/timeout) is newsworthy.
+        "challenge_king_win" if result["won"] else "challenge_king",
         detail=outcome_detail, ip_address=request.remote_addr,
     )
     db.commit()
@@ -3541,7 +3551,11 @@ def country_challenge_official():
         ),
     )
     log_activity(
-        db, session["user_id"], session["username"], "challenge_official",
+        db, session["user_id"], session["username"],
+        # challenge_official_win also feeds the 重大事件 feed (see game()) --
+        # only actually winning the seat is newsworthy, same convention as
+        # challenge_king_win above.
+        "challenge_official_win" if result["won"] else "challenge_official",
         detail=outcome_detail, ip_address=request.remote_addr,
     )
     db.commit()

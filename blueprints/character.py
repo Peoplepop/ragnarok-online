@@ -265,6 +265,15 @@ def character_page():
     active_sets = _active_set_summaries(equipped_items)
     own_element_bonus = _own_element_bonus_summary(equipped_items, character["element"])
     hidden_sets = _hidden_set_summaries(equipped_items)
+    # Lets the "目前裝備" panel highlight a piece in a distinct color when its
+    # 秘境 set is actually fully gathered (3/3, bonus live) vs. just worn --
+    # item_set_effect_text's description text alone can't tell the two apart.
+    active_hidden_set_names = {s["set_name"] for s in hidden_sets if s["active"]}
+    for slot in equipped_slots:
+        item = slot["item"]
+        slot["hidden_set_active"] = bool(
+            item and item["hidden_set_key"] and item["hidden_set_name"] in active_hidden_set_names
+        )
     learnable_skills = _learnable_skills(character, learned_keys)
     usable_keys = _usable_skill_keys(character, learned_keys)
     learned_locked_skills = sorted(
