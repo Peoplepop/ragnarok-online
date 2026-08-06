@@ -5,6 +5,7 @@
   <a href="{{ url_for('admin.admin_settings') }}" style="text-decoration:none; font-size:14px; color: {{ 'var(--gold-bright)' if active_tab=='settings' else 'var(--text-dim)' }};">遊戲設定</a>
   <a href="{{ url_for('admin.admin_feedback') }}" style="text-decoration:none; font-size:14px; color: {{ 'var(--gold-bright)' if active_tab=='feedback' else 'var(--text-dim)' }};">玩家意見</a>
   <a href="{{ url_for('admin.admin_items') }}" style="text-decoration:none; font-size:14px; color: {{ 'var(--gold-bright)' if active_tab=='items' else 'var(--text-dim)' }};">裝備管理</a>
+  <a href="{{ url_for('admin.admin_monsters') }}" style="text-decoration:none; font-size:14px; color: {{ 'var(--gold-bright)' if active_tab=='monsters' else 'var(--text-dim)' }};">怪物清單</a>
   <a href="{{ url_for('admin.admin_images') }}" style="text-decoration:none; font-size:14px; color: {{ 'var(--gold-bright)' if active_tab=='images' else 'var(--text-dim)' }};">圖片管理</a>
   <a href="{{ url_for('admin.admin_backgrounds') }}" style="text-decoration:none; font-size:14px; color: {{ 'var(--gold-bright)' if active_tab=='backgrounds' else 'var(--text-dim)' }};">背景與音樂</a>
   <a href="{{ url_for('game.game') }}" style="text-decoration:none; font-size:14px; color: var(--text-dim); margin-left:auto;">🎮 返回遊戲</a>

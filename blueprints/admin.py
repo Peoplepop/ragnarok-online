@@ -36,6 +36,55 @@ from game_data.combat import WU_XING_ELEMENTS
 admin_bp = Blueprint("admin", __name__)
 
 
+@admin_bp.route("/admin/monsters")
+@admin_required
+def admin_monsters():
+    """Read-only list of every monster row (all hunting grounds, including
+    the two 秘境 hidden maps) with its full stat block. hp/atk/def/agi/luk/
+    exp_reward/currency_reward are each a single fixed number computed once
+    at roster-generation time (see db.py's _build_default_monsters) -- only
+    level_min/level_max is a genuine range (the 5-level bracket a regular
+    monster covers; guardians/bosses have no bracket at all, level_min is
+    NULL). No admin edit form here, purely a viewing aid -- monster stats
+    are only ever tuned by regenerating the whole roster, not per-row."""
+    db = get_db()
+    rows = db.execute(
+        """SELECT monsters.*, hunting_grounds.name AS ground_name,
+                  hunting_grounds.is_hidden AS ground_is_hidden
+           FROM monsters JOIN hunting_grounds ON hunting_grounds.id = monsters.hunting_ground_id
+           ORDER BY hunting_grounds.min_level, hunting_grounds.id,
+                    monsters.is_boss, monsters.is_guardian, monsters.level_min"""
+    ).fetchall()
+    db.close()
+
+    grounds = []
+    grounds_by_name = {}
+    for m in rows:
+        ground_name = m["ground_name"]
+        if m["ground_is_hidden"]:
+            ground_name = f"[隱藏] {ground_name}"
+        if m["ground_is_hidden"]:
+            level_label = "秘境"
+        elif m["is_boss"]:
+            level_label = "首領"
+        elif m["is_guardian"]:
+            level_label = "守衛怪"
+        else:
+            level_label = f"Lv{m['level_min']}-{m['level_max']}"
+        entry = {
+            "name": m["name"], "level_label": level_label, "element": m["element"],
+            "hp": m["hp"], "atk": m["atk"], "def": m["def"], "agi": m["agi"], "luk": m["luk"],
+            "exp_reward": m["exp_reward"], "currency_reward": m["currency_reward"],
+            "is_boss": bool(m["is_boss"]), "is_guardian": bool(m["is_guardian"]),
+        }
+        if ground_name not in grounds_by_name:
+            grounds_by_name[ground_name] = {"ground_name": ground_name, "monsters": []}
+            grounds.append(grounds_by_name[ground_name])
+        grounds_by_name[ground_name]["monsters"].append(entry)
+
+    return render_template("admin_monsters.html", grounds=grounds, active_tab="monsters")
+
+
 @admin_bp.route("/admin")
 @admin_required
 def admin():

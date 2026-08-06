@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+{% block title %}怪物清單 - 五行爭鋒{% endblock %}
+{% block body_class %}wide{% endblock %}
+
+{% block content %}
+  {% include "_admin_nav.html" %}
+
+  <h2 style="margin:0 0 8px; color:var(--gold-bright); font-size:18px;">👹 怪物清單</h2>
+  <p class="hint" style="margin-top:0; margin-bottom:20px;">
+    純檢視，沒有編輯功能。只有「等級」是一個區間（該怪物涵蓋的 5 級範圍，守衛怪／首領沒有區間，永遠是固定等級）；
+    HP、攻擊、防禦、敏捷、幸運、經驗值、金錢獎勵這些數值每隻怪物都是單一固定值，不是隨機區間，實際戰鬥也不會再加上隨機浮動。
+  </p>
+
+  {% for ground in grounds %}
+  <div class="panel" style="margin-bottom:20px;">
+    <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">{{ ground.ground_name }}</h3>
+    <div class="table-scroll">
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <thead>
+        <tr style="text-align:left; color:var(--text-dim); border-bottom:1px solid var(--border);">
+          <th style="padding:8px 6px;">名稱</th>
+          <th style="padding:8px 6px;">等級</th>
+          <th style="padding:8px 6px;">屬性</th>
+          <th style="padding:8px 6px; text-align:right;">HP</th>
+          <th style="padding:8px 6px; text-align:right;">攻擊</th>
+          <th style="padding:8px 6px; text-align:right;">防禦</th>
+          <th style="padding:8px 6px; text-align:right;">敏捷</th>
+          <th style="padding:8px 6px; text-align:right;">幸運</th>
+          <th style="padding:8px 6px; text-align:right;">經驗值</th>
+          <th style="padding:8px 6px; text-align:right;">金錢</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in ground.monsters %}
+        <tr style="border-bottom:1px solid rgba(212,175,55,0.1);">
+          <td style="padding:8px 6px;">
+            {{ m.name }}
+            {% if m.is_boss %}<span style="color:var(--gold-bright); font-size:11px;">👑首領</span>{% endif %}
+            {% if m.is_guardian %}<span style="color:var(--gold); font-size:11px;">🛡守衛怪</span>{% endif %}
+          </td>
+          <td style="padding:8px 6px; white-space:nowrap;">{{ m.level_label }}</td>
+          <td style="padding:8px 6px;">{{ macros.element_badge(m.element) }}</td>
+          <td style="padding:8px 6px; text-align:right;">{{ m.hp }}</td>
+          <td style="padding:8px 6px; text-align:right;">{{ m.atk }}</td>
+          <td style="padding:8px 6px; text-align:right;">{{ m.def }}</td>
+          <td style="padding:8px 6px; text-align:right;">{{ m.agi }}</td>
+          <td style="padding:8px 6px; text-align:right;">{{ m.luk }}</td>
+          <td style="padding:8px 6px; text-align:right;">{{ m.exp_reward }}</td>
+          <td style="padding:8px 6px; text-align:right;">{{ m.currency_reward }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  {% else %}
+  <p class="hint">目前沒有任何怪物資料</p>
+  {% endfor %}
+{% endblock %}
