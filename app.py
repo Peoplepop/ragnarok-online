@@ -226,7 +226,7 @@ def _session_activity():
         return
 
     db = get_db()
-    row = db.execute("SELECT last_seen_at FROM users WHERE id = ?", (user_id,)).fetchone()
+    row = db.execute("SELECT last_seen_at, session_token FROM users WHERE id = ?", (user_id,)).fetchone()
     last_seen = _parse_dt(row["last_seen_at"]) if row else None
     idle_seconds = (datetime.utcnow() - last_seen).total_seconds() if last_seen else None
 
@@ -238,6 +238,23 @@ def _session_activity():
         db.close()
         session.clear()
         flash(f"閒置超過 {IDLE_THRESHOLD_MINUTES} 分鐘，系統已自動將您登出")
+        return redirect(url_for("auth.login"))
+
+    # Single-active-login enforcement: auth.login always overwrites
+    # users.session_token with a fresh value AND stores that same value in
+    # the logging-in cookie's session. If row["session_token"] is set (some
+    # login happened since this column existed) and doesn't match what THIS
+    # cookie remembers, a newer login happened elsewhere -- kick this one
+    # out. A NULL DB token never triggers this (nobody has logged in since
+    # the column was added, or a race at registration/reset time), so it
+    # can never false-kick a legitimate lone session.
+    if row["session_token"] and session.get("session_token") != row["session_token"]:
+        username = session.get("username")
+        log_activity(db, user_id, username, "kicked_concurrent_login", ip_address=request.remote_addr)
+        db.commit()
+        db.close()
+        session.clear()
+        flash("你的帳號在其他地方登入，此連線已登出")
         return redirect(url_for("auth.login"))
 
     # Also self-heals is_online back to 1 here, not just at login: is_online

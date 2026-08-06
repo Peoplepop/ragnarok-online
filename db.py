@@ -648,6 +648,19 @@ def _ensure_is_admin_column(conn):
         conn.execute("ALTER TABLE users ADD COLUMN is_npc INTEGER NOT NULL DEFAULT 0")
 
 
+def _ensure_login_token_column(conn):
+    cols = [row["name"] for row in conn.execute("PRAGMA table_info(users)")]
+    if "session_token" not in cols:
+        # Single-active-login enforcement (see auth.login/app.py's
+        # _session_activity): overwritten with a fresh random value on every
+        # successful login, and stored in that same login's Flask session
+        # cookie. NULL means either nobody has logged in since this column
+        # was added, or the account has never logged in at all -- both
+        # deliberately never trigger a kick on their own, only an actual
+        # mismatch between two non-NULL values does.
+        conn.execute("ALTER TABLE users ADD COLUMN session_token TEXT")
+
+
 def _ensure_session_columns(conn):
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(users)")]
     if "last_login_at" not in cols:
@@ -1491,6 +1504,7 @@ def init_db():
         conn.executescript(f.read())
     _ensure_is_admin_column(conn)
     _ensure_session_columns(conn)
+    _ensure_login_token_column(conn)
     _ensure_user_avatar_columns(conn)
     _ensure_character_columns(conn)
     _ensure_country_columns(conn)

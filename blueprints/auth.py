@@ -1,5 +1,6 @@
 """Landing page, registration, login/logout."""
 import sqlite3
+import uuid
 
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -150,9 +151,17 @@ def login():
         flash("管理員已重設你的密碼，請先設定一組新密碼")
         return redirect(url_for("auth.reset_password"))
 
+    # Single-active-login enforcement: a fresh random token every login,
+    # overwriting whatever the account's previous login (if any, e.g. a
+    # different device/browser) had stored -- that older session's cookie
+    # still carries the OLD token, so app.py's _session_activity notices the
+    # mismatch on its next request and kicks it out. See
+    # db._ensure_login_token_column for the column itself.
+    session_token = uuid.uuid4().hex
     db.execute(
-        "UPDATE users SET last_login_at = datetime('now'), last_seen_at = datetime('now'), is_online = 1 WHERE id = ?",
-        (user["id"],),
+        """UPDATE users SET last_login_at = datetime('now'), last_seen_at = datetime('now'),
+               is_online = 1, session_token = ? WHERE id = ?""",
+        (session_token, user["id"]),
     )
     log_activity(db, user["id"], user["username"], "login", ip_address=request.remote_addr)
     db.commit()
@@ -167,6 +176,7 @@ def login():
     session["character_name"] = character["name"] if character else None
     session["avatar_key"] = user["avatar_key"]
     session["avatar_custom_filename"] = user["avatar_custom_filename"]
+    session["session_token"] = session_token
     flash(f"歡迎回來，{character['name'] if character else user['username']}")
     return redirect(url_for("auth.index"))
 
