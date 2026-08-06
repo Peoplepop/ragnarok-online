@@ -9,20 +9,23 @@
     <div class="special-duel-tab-panel" data-tab-panel="tournament">
       {% if current_tile.tile_type == 'fortress' %}
         {% if tournament_already_registered %}
-        <p class="hint" style="margin:0;">你已經報名本屆天下武道大會，請於開賽後至 <a href="{{ url_for('tournament.tournament_page') }}">武道大會</a> 查看賽果</p>
+        <p class="hint" style="margin:0 0 8px;">你已經報名本屆天下武道大會，請於開賽後查看賽果</p>
         {% elif tournament_registration_open %}
         <p class="hint" style="margin:0 0 8px;">
           報名費 {{ tournament_fee }} 諸神幣，報名截止：{{ tournament_deadline_label }}（台灣時間）
         </p>
-        <form method="post" action="{{ url_for('tournament.tournament_register') }}">
+        <form method="post" action="{{ url_for('tournament.tournament_register') }}" style="display:inline-block; margin-bottom:8px;">
           <button type="submit" class="btn-primary" style="padding:6px 14px; font-size:13px;">🏆 報名天下武道大會</button>
         </form>
         {% else %}
-        <p class="hint" style="margin:0;">目前不是報名時間，請至 <a href="{{ url_for('tournament.tournament_page') }}">武道大會</a> 查看賽程與歷代優勝者</p>
+        <p class="hint" style="margin:0 0 8px;">目前不是報名時間，可查看賽程與歷代優勝者</p>
         {% endif %}
       {% else %}
-      <p class="hint" style="margin:0;">請在任一國家要塞內才能報名天下武道大會，可至 <a href="{{ url_for('tournament.tournament_page') }}">武道大會</a> 查看賽程與歷代優勝者</p>
+      <p class="hint" style="margin:0 0 8px;">請在任一國家要塞內才能報名天下武道大會，可查看賽程與歷代優勝者</p>
       {% endif %}
+      <div>
+        <a href="{{ url_for('tournament.tournament_page') }}" class="btn btn-info" style="padding:6px 14px; font-size:13px;">🏆 查看武道大會</a>
+      </div>
     </div>
 
     <div class="special-duel-tab-panel" data-tab-panel="usurp" style="display:none;">
