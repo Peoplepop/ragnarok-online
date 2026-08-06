@@ -37,6 +37,8 @@ BACKGROUND_KEYS = {
     "battle_bg_neutral": "戰鬥畫面 - 未佔領區域",
     "tournament_bg": "天下武道大會",
     "shop_bg": "商店",
+    "login_bg": "登入頁",
+    "register_bg": "註冊頁",
 }
 
 # Background uploads are never cropped to a square (unlike avatars/monster

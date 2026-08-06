@@ -5,7 +5,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from db import get_db, log_activity
-from web_helpers import _validate_username, _validate_password, _validate_character_name
+from web_helpers import _validate_username, _validate_password, _validate_character_name, background_url
 from game_data.avatars import BUILT_IN_AVATARS, BUILT_IN_AVATAR_KEYS, DEFAULT_AVATAR_KEY
 
 auth_bp = Blueprint("auth", __name__)
@@ -39,6 +39,7 @@ def _render_register(country, avatar_key):
     return render_template(
         "register.html", country=country, built_in_avatars=BUILT_IN_AVATARS,
         selected_avatar_key=avatar_key,
+        page_background_url=background_url("register_bg"),
     )
 
 
@@ -109,7 +110,7 @@ def register():
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
-        return render_template("login.html")
+        return render_template("login.html", page_background_url=background_url("login_bg"))
 
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
@@ -125,14 +126,14 @@ def login():
         db.commit()
         db.close()
         flash("帳號或密碼錯誤")
-        return render_template("login.html")
+        return render_template("login.html", page_background_url=background_url("login_bg"))
 
     if user["is_locked"]:
         log_activity(db, user["id"], user["username"], "login_locked", ip_address=request.remote_addr)
         db.commit()
         db.close()
         flash("此帳號已被管理員鎖定，暫時無法登入")
-        return render_template("login.html")
+        return render_template("login.html", page_background_url=background_url("login_bg"))
 
     if user["must_reset_password"]:
         # Deliberately does NOT set session["user_id"] -- until the reset
