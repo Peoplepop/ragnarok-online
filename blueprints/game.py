@@ -206,6 +206,27 @@ def _roll_money_pouch_drop(db, drop_percent, item_name, character_id):
     return item
 
 
+def _rolled_monster_stats(monster):
+    """Plain-dict copy of a monster row with hp/atk/def/agi/luk/exp_reward/
+    currency_reward each independently re-rolled within its own admin-set
+    min/max range (see /admin/monsters) -- rolled FRESH every time this
+    monster is encountered, never cached across fights. min == max (the
+    default for every monster until an admin actually widens a range) always
+    rolls back to that exact same fixed number, so this is a no-op in
+    practice until an admin edits a range. Falls back to the plain fixed
+    value when a min/max pair is somehow NULL (defensive; the DB migration
+    backfills every real monsters-table row, so this should never trigger in
+    practice). Must run BEFORE _debuffed_monster, not after -- that function
+    scales hp/atk/def/agi/luk down by a wearer's 怪物弱化 percent and expects
+    to scale the ALREADY-rolled value, and deliberately leaves exp_reward/
+    currency_reward untouched either way."""
+    rolled = dict(monster)
+    for key in ("hp", "atk", "def", "agi", "luk", "exp_reward", "currency_reward"):
+        lo, hi = monster[f"{key}_min"], monster[f"{key}_max"]
+        rolled[key] = random.randint(lo, hi) if lo is not None and hi is not None else monster[key]
+    return rolled
+
+
 def _debuffed_monster(monster, special_effects):
     """A plain-dict copy of a monster row with its hp/atk/def/agi/luk scaled
     down by the wearer's 怪物弱化 (enemy_debuff) percent, floored at 1 so a huge
@@ -795,9 +816,15 @@ def game_hunt():
             # back to a flat pick across whatever regulars exist.
             monster = random.choice(regulars_in_bracket or regulars_any)
 
-    # 怪物弱化: the monster actually fought is a scaled-down copy; every
-    # reward below still reads the ORIGINAL row's currency_reward/exp_reward,
-    # so weakening a monster never also shrinks its payout.
+    # Roll this encounter's actual stats within the monster's admin-set
+    # min/max range BEFORE debuffing -- reassigns `monster` itself (not just
+    # a separate "fought" copy) so every later read of monster["exp_reward"]/
+    # ["currency_reward"] etc. below already reflects this fight's roll.
+    monster = _rolled_monster_stats(monster)
+    # 怪物弱化: the monster actually fought is a further scaled-down copy;
+    # every reward below still reads the ROLLED (not debuffed) row's
+    # currency_reward/exp_reward, so weakening a monster never also shrinks
+    # its payout.
     fought_monster = _debuffed_monster(monster, special_effects)
     # A regular monster's row only carries a level_min/level_max bracket (it
     # can be encountered by any character in that range) -- battle.html shows
@@ -1148,6 +1175,8 @@ def game_hunt_boss_room():
         flash("HP 已耗盡，無法挑戰魔王，請先回到要塞回復")
         return redirect(url_for("game.game"))
 
+    # Same roll-then-debuff order as game_hunt() -- see _rolled_monster_stats.
+    boss = _rolled_monster_stats(boss)
     fought_boss = _debuffed_monster(boss, special_effects)
     fought_boss["element"] = _resolve_battle_element(fought_boss)
     usable_skills = _character_usable_skills(db, character)

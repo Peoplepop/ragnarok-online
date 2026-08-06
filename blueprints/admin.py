@@ -36,18 +36,14 @@ from game_data.combat import WU_XING_ELEMENTS
 admin_bp = Blueprint("admin", __name__)
 
 
-@admin_bp.route("/admin/monsters")
-@admin_required
-def admin_monsters():
-    """Read-only list of every monster row (all hunting grounds, including
-    the two 秘境 hidden maps) with its full stat block. hp/atk/def/agi/luk/
-    exp_reward/currency_reward are each a single fixed number computed once
-    at roster-generation time (see db.py's _build_default_monsters) -- only
-    level_min/level_max is a genuine range (the 5-level bracket a regular
-    monster covers; guardians/bosses have no bracket at all, level_min is
-    NULL). No admin edit form here, purely a viewing aid -- monster stats
-    are only ever tuned by regenerating the whole roster, not per-row."""
-    db = get_db()
+MONSTER_RANGE_STATS = ("hp", "atk", "def", "agi", "luk", "exp_reward", "currency_reward")
+
+
+def _admin_monster_groups(db):
+    """Shared by admin_monsters (GET) and admin_update_monsters (redirect
+    target) -- every monster row grouped by its hunting ground, each entry
+    carrying both the min/max range (admin-editable) and the single fixed
+    value (legacy fallback, see db._ensure_monster_columns) for display."""
     rows = db.execute(
         """SELECT monsters.*, hunting_grounds.name AS ground_name,
                   hunting_grounds.is_hidden AS ground_is_hidden
@@ -55,7 +51,6 @@ def admin_monsters():
            ORDER BY hunting_grounds.min_level, hunting_grounds.id,
                     monsters.is_boss, monsters.is_guardian, monsters.level_min"""
     ).fetchall()
-    db.close()
 
     grounds = []
     grounds_by_name = {}
@@ -72,17 +67,87 @@ def admin_monsters():
         else:
             level_label = f"Lv{m['level_min']}-{m['level_max']}"
         entry = {
-            "name": m["name"], "level_label": level_label, "element": m["element"],
-            "hp": m["hp"], "atk": m["atk"], "def": m["def"], "agi": m["agi"], "luk": m["luk"],
-            "exp_reward": m["exp_reward"], "currency_reward": m["currency_reward"],
+            "id": m["id"], "name": m["name"], "level_label": level_label, "element": m["element"],
             "is_boss": bool(m["is_boss"]), "is_guardian": bool(m["is_guardian"]),
         }
+        for stat in MONSTER_RANGE_STATS:
+            entry[f"{stat}_min"] = m[f"{stat}_min"] if m[f"{stat}_min"] is not None else m[stat]
+            entry[f"{stat}_max"] = m[f"{stat}_max"] if m[f"{stat}_max"] is not None else m[stat]
         if ground_name not in grounds_by_name:
             grounds_by_name[ground_name] = {"ground_name": ground_name, "monsters": []}
             grounds.append(grounds_by_name[ground_name])
         grounds_by_name[ground_name]["monsters"].append(entry)
+    return grounds
 
+
+@admin_bp.route("/admin/monsters")
+@admin_required
+def admin_monsters():
+    """Every monster row (all hunting grounds, including the two 秘境 hidden
+    maps) with its full stat block, editable as min/max ranges -- see
+    admin_update_monsters for the save path. hp/atk/def/agi/luk/exp_reward/
+    currency_reward each get their own independent range, re-rolled fresh
+    every time that monster is encountered (see blueprints/game.py's
+    _rolled_monster_stats); only level_min/level_max was already a range
+    (the 5-level bracket a regular monster covers; guardians/bosses have no
+    bracket, level_min is NULL, and stay a fixed level)."""
+    db = get_db()
+    grounds = _admin_monster_groups(db)
+    db.close()
     return render_template("admin_monsters.html", grounds=grounds, active_tab="monsters")
+
+
+@admin_bp.route("/admin/monsters/update", methods=["POST"])
+@admin_required
+def admin_update_monsters():
+    db = get_db()
+    monster_ids = [row["id"] for row in db.execute("SELECT id FROM monsters").fetchall()]
+
+    parsed = {}
+    errors = []
+    for mid in monster_ids:
+        row_values = {}
+        for stat in MONSTER_RANGE_STATS:
+            raw_min = request.form.get(f"{stat}_min_{mid}", "")
+            raw_max = request.form.get(f"{stat}_max_{mid}", "")
+            try:
+                lo, hi = int(raw_min), int(raw_max)
+            except ValueError:
+                errors.append(f"#{mid}：{stat} 數值格式不正確")
+                continue
+            if lo < 0 or hi < 0:
+                errors.append(f"#{mid}：{stat} 不可為負數")
+                continue
+            if lo > hi:
+                errors.append(f"#{mid}：{stat} 下限不可大於上限")
+                continue
+            row_values[stat] = (lo, hi)
+        parsed[mid] = row_values
+
+    if errors:
+        shown = "；".join(errors[:5])
+        if len(errors) > 5:
+            shown += f"...（另有 {len(errors) - 5} 項錯誤）"
+        flash(f"儲存失敗，未套用任何變更：{shown}")
+        db.close()
+        return redirect(url_for("admin.admin_monsters"))
+
+    for mid, row_values in parsed.items():
+        db.execute(
+            """UPDATE monsters SET
+                   hp_min = ?, hp_max = ?, atk_min = ?, atk_max = ?, def_min = ?, def_max = ?,
+                   agi_min = ?, agi_max = ?, luk_min = ?, luk_max = ?,
+                   exp_reward_min = ?, exp_reward_max = ?, currency_reward_min = ?, currency_reward_max = ?
+               WHERE id = ?""",
+            (
+                *row_values["hp"], *row_values["atk"], *row_values["def"], *row_values["agi"],
+                *row_values["luk"], *row_values["exp_reward"], *row_values["currency_reward"], mid,
+            ),
+        )
+    db.commit()
+    db.close()
+    flash("已更新全部怪物數值範圍")
+    return redirect(url_for("admin.admin_monsters"))
 
 
 @admin_bp.route("/admin")

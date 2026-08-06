@@ -822,6 +822,28 @@ def _ensure_monster_columns(conn):
         conn.execute("ALTER TABLE monsters ADD COLUMN luk INTEGER NOT NULL DEFAULT 0")
     if "element_neutral" not in cols:
         conn.execute("ALTER TABLE monsters ADD COLUMN element_neutral INTEGER NOT NULL DEFAULT 0")
+    # Admin-configurable per-monster stat RANGES (see /admin/monsters and
+    # blueprints/game.py's _rolled_monster_stats) -- hp/atk/def/agi/luk/
+    # exp_reward/currency_reward each get a _min/_max pair, re-rolled fresh
+    # every time that monster is encountered. The single hp/atk/def/agi/luk/
+    # exp_reward/currency_reward columns above are left untouched (still the
+    # fallback used if a min/max pair is ever NULL, and still what a fresh
+    # DB's _build_default_monsters seeds first) -- backfilled below so every
+    # existing monster starts with min == max == its current fixed value,
+    # i.e. this migration changes zero combat behavior on its own; only a
+    # later admin edit that widens a range does.
+    range_cols_added = False
+    for stat in ("hp", "atk", "def", "agi", "luk", "exp_reward", "currency_reward"):
+        for suffix in ("min", "max"):
+            col = f"{stat}_{suffix}"
+            if col not in cols:
+                conn.execute(f"ALTER TABLE monsters ADD COLUMN {col} INTEGER")
+                range_cols_added = True
+    if range_cols_added:
+        for stat in ("hp", "atk", "def", "agi", "luk", "exp_reward", "currency_reward"):
+            conn.execute(
+                f"UPDATE monsters SET {stat}_min = {stat}, {stat}_max = {stat} WHERE {stat}_min IS NULL"
+            )
 
 
 def _ensure_item_columns(conn):
