@@ -1025,10 +1025,13 @@ def game_hunt():
     # HP runs low. Highest consumable_amount first so one auto-use restores
     # as much as possible per action (each item-use still costs its own
     # cooldown cycle, same as every other world action).
+    # 'heal_both' (回氣丹) counts for BOTH queries -- it restores either pool
+    # just as well as a dedicated single-stat potion, so a player carrying
+    # only the dual potion still gets auto-補血/補魔 to work.
     hp_potion = db.execute(
         """SELECT items.id AS item_id, items.name, items.consumable_amount, inventory.quantity
            FROM inventory JOIN items ON items.id = inventory.item_id
-           WHERE inventory.character_id = ? AND items.consumable_effect = 'heal_hp'
+           WHERE inventory.character_id = ? AND items.consumable_effect IN ('heal_hp', 'heal_both')
                  AND inventory.quantity > 0
            ORDER BY items.consumable_amount DESC LIMIT 1""",
         (character["character_id"],),
@@ -1038,7 +1041,7 @@ def game_hunt():
     mp_potion = db.execute(
         """SELECT items.id AS item_id, items.name, items.consumable_amount, inventory.quantity
            FROM inventory JOIN items ON items.id = inventory.item_id
-           WHERE inventory.character_id = ? AND items.consumable_effect = 'heal_mp'
+           WHERE inventory.character_id = ? AND items.consumable_effect IN ('heal_mp', 'heal_both')
                  AND inventory.quantity > 0
            ORDER BY items.consumable_amount DESC LIMIT 1""",
         (character["character_id"],),
