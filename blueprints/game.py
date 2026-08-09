@@ -434,13 +434,17 @@ def _render_game(**extra):
     # 大將軍/參謀 seats. Global across every player, not scoped to this
     # character, so it's read here rather than filtered by user_id.
     major_event_rows = db.execute(
-        """SELECT action, detail, username, created_at, character_id FROM activity_log
-           WHERE action IN (
+        """SELECT activity_log.action, activity_log.detail, activity_log.username,
+                  activity_log.created_at, activity_log.character_id
+           FROM activity_log
+           LEFT JOIN users ON users.id = activity_log.user_id
+           WHERE activity_log.action IN (
                'character_create', 'hidden_loot_drop', 'boss_set_drop', 'tournament_champion',
                'promote_tier1', 'promote_tier2', 'promote_tier3', 'promote_tier4',
                'conquer_win', 'challenge_king_win', 'challenge_official_win', 'claim_vacant_king'
            )
-           ORDER BY created_at DESC LIMIT 100"""
+           AND COALESCE(users.is_admin, 0) = 0
+           ORDER BY activity_log.created_at DESC LIMIT 100"""
     ).fetchall()
     major_events = _major_event_feed(major_event_rows)
 
