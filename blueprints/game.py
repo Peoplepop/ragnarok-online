@@ -960,9 +960,11 @@ def game_hunt():
                     ip_address=request.remote_addr, character_id=character["character_id"],
                 )
         # Rare monster-drop skill book: only rolls in the top-tier ultimate
-        # hunting ground, independent of the hunter's own job (a "wrong
-        # job's" book still isn't wasted -- once actually learned at 四轉,
-        # every learned skill becomes usable regardless of lineage).
+        # hunting ground, independent of the hunter's own job. A "wrong job's"
+        # book can't be learned by the character who found it (see
+        # character_skill_book_use's job_class check) -- it's meant to be
+        # handed off via character trade to whichever player can actually use
+        # it, not learned on the spot.
         if ground["tier"] == "ultimate" and random.random() < 1 / 20000:
             dropped_key = random.choice(TIER4_SLOT2_SKILL_KEYS)
             dropped_skill = SKILL_CATALOG[dropped_key]

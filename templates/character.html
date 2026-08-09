@@ -246,12 +246,15 @@
       {% for entry in held_skill_books %}
       <form method="post" action="{{ url_for('character.character_skill_book_use') }}" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--text-dim); margin-bottom:6px;">
         <input type="hidden" name="skill_key" value="{{ entry.skill.key }}">
-        <span>{{ macros.element_badge(stat_element.get(entry.skill.stat)) }} 📖 {{ entry.skill.name }}（持有 {{ entry.quantity }} 本，MP{{ entry.skill.mp_cost }}／{{ entry.skill.trigger_chance }}%／{{ entry.skill.multiplier }}x）</span>
-        {% if character.job_tier == 4 %}
-        <button type="submit" class="btn-primary">使用技能書學習</button>
-        {% else %}
+        <span>{{ macros.element_badge(stat_element.get(entry.skill.stat)) }} 📖 {{ entry.skill.name }}（{{ entry.skill.job_class }}專屬，持有 {{ entry.quantity }} 本，MP{{ entry.skill.mp_cost }}／{{ entry.skill.trigger_chance }}%／{{ entry.skill.multiplier }}x）</span>
+        {% if character.job_tier != 4 %}
         <span class="hint" style="margin:0;">需先四轉才能使用</span>
         <button type="submit" class="btn-primary" disabled>使用技能書學習</button>
+        {% elif character.job_class != entry.skill.job_class %}
+        <span class="hint" style="margin:0;">職業不符，無法學習，可與{{ entry.skill.job_class }}玩家交易</span>
+        <button type="submit" class="btn-primary" disabled>使用技能書學習</button>
+        {% else %}
+        <button type="submit" class="btn-primary">使用技能書學習</button>
         {% endif %}
       </form>
       {% endfor %}

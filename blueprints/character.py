@@ -1147,6 +1147,10 @@ def character_skill_book_use():
         db.close()
         flash("必須先四轉才能使用這本技能書")
         return redirect(url_for("character.character_page"))
+    if skill["job_class"] != character["job_class"]:
+        db.close()
+        flash(f"這是「{skill['job_class']}」的技能書，你的職業無法學習，請跟該職業玩家交易")
+        return redirect(url_for("character.character_page"))
     if skill_key in learned_keys:
         db.close()
         flash("你已經學會這個技能了")
