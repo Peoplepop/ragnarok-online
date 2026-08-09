@@ -5,6 +5,7 @@ import os
 import secrets
 import sqlite3
 import string
+from collections import defaultdict
 from datetime import datetime
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
@@ -26,7 +27,7 @@ from game_data.constants import (
 )
 from game_data.jobs import (
     TIER1_JOBS, TIER2_JOBS, TIER2_CHILDREN_BY_FAMILY, TIER3_CHILDREN_BY_PARENT,
-    TIER4_JOB_BY_STAT, TIER4_TIE_JOB, job_stat_bonus_pct,
+    TIER4_JOBS, TIER4_JOB_BY_COMBO, job_stat_bonus_pct,
 )
 from game_data.skills import (
     SKILL_CATALOG, NOVICE_SKILL_NAMES, NOVICE_SKILL_STAT_BY_ELEMENT, _skill_key, _novice_skill_key,
@@ -108,6 +109,60 @@ def _job_bonus_pairs(job_class, tier):
     ]
 
 
+# Grouping/label order for the 200 四轉 jobs on the admin reference page --
+# by dominant_stat, same 5-way split TIER4_JOB_ORDER's legacy anchors use
+# (None = balanced/tie jobs, e.g. 厚土真尊), so an admin scanning the page
+# sees the same 5 "elemental courts" the old 5-job system had, just each
+# now holding many jobs instead of exactly 1.
+_TIER4_ELEMENT_ORDER = ["str", "def", "agi", "luk", None]
+_TIER4_ELEMENT_LABELS = {
+    "str": "業火（力量系）", "def": "青木（防禦系）", "agi": "流水（敏捷系）",
+    "luk": "流金（幸運系）", None: "厚土（六圍平衡系）",
+}
+
+
+def _tier4_combos_by_job():
+    """job_name -> sorted list of the 4-job-name combos that resolve to it,
+    reverse-derived from TIER4_JOB_BY_COMBO (game_data/jobs.py) rather than
+    a second hand-maintained mapping -- exactly the kind of duplicate
+    source of truth this whole refactor exists to avoid."""
+    combos_by_job = defaultdict(list)
+    for combo, job_name in TIER4_JOB_BY_COMBO.items():
+        combos_by_job[job_name].append(tuple(sorted(combo)))
+    for job_name in combos_by_job:
+        combos_by_job[job_name].sort()
+    return combos_by_job
+
+
+def _tier4_reference_groups():
+    """The 200 四轉 jobs, grouped by dominant_stat for the admin reference
+    page -- a flat 200-row table instead of the old per-job always-expanded
+    card block, since that block layout (fine for 5 jobs) doesn't scale to
+    200 (see this feature's design notes). Each group renders as its own
+    closed-by-default <details> in the template."""
+    combos_by_job = _tier4_combos_by_job()
+    jobs_by_element = defaultdict(list)
+    for job_name, info in TIER4_JOBS.items():
+        jobs_by_element[info["dominant_stat"]].append(job_name)
+
+    groups = []
+    for stat in _TIER4_ELEMENT_ORDER:
+        job_names = sorted(jobs_by_element.get(stat, []))
+        jobs = []
+        for name in job_names:
+            combos = combos_by_job.get(name, [])
+            skills = _job_skill_briefs(name, (1, 2, 3))
+            jobs.append({
+                "name": name,
+                "bonus": _job_bonus_pairs(name, 4),
+                "skill_1": skills[0]["name"], "skill_2": skills[1]["name"], "skill_3": skills[2]["name"],
+                "combo_count": len(combos),
+                "combos": ["、".join(combo) for combo in combos],
+            })
+        groups.append({"label": _TIER4_ELEMENT_LABELS[stat], "jobs": jobs})
+    return groups
+
+
 def _job_reference_data():
     """Pure code-derived summary of the whole job tree (family -> 二轉 -> 三轉,
     plus the convergent 四轉 tier) with each job's stat-bonus% and skill list,
@@ -148,21 +203,10 @@ def _job_reference_data():
             "children": t2_nodes,
         })
 
-    tier4_stat_jobs = [
-        {
-            "name": t4_name, "dominant_stat": STAT_LABELS.get(stat, stat),
-            "bonus": _job_bonus_pairs(t4_name, 4),
-            "skills": _job_skill_briefs(t4_name, (1, 2, 3)),
-        }
-        for stat, t4_name in TIER4_JOB_BY_STAT.items()
-    ]
-    tier4_stat_jobs.append({
-        "name": TIER4_TIE_JOB, "dominant_stat": "平手（六圍均衡加成）",
-        "bonus": _job_bonus_pairs(TIER4_TIE_JOB, 4),
-        "skills": _job_skill_briefs(TIER4_TIE_JOB, (1, 2, 3)),
-    })
-
-    return {"novice_skills": novice_skills, "tree": tree, "tier4": tier4_stat_jobs}
+    return {
+        "novice_skills": novice_skills, "tree": tree,
+        "tier4_groups": _tier4_reference_groups(), "tier4_job_count": len(TIER4_JOBS),
+    }
 
 
 @admin_bp.route("/admin/jobs")
