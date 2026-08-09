@@ -3346,16 +3346,36 @@ def country_authorize_challenge():
         return redirect(url_for("game.countries_page"))
 
     target = db.execute(
-        "SELECT id, name FROM characters WHERE lower(name) = lower(?)", (target_name,)
+        "SELECT id, name, country_id FROM characters WHERE lower(name) = lower(?)", (target_name,)
     ).fetchone()
     if target is None:
         db.close()
         flash("找不到這個角色")
         return redirect(url_for("game.countries_page"))
 
+    if target["country_id"] != country["id"]:
+        db.close()
+        flash("只能授權本國玩家挑戰")
+        return redirect(url_for("game.countries_page"))
+
     if target["id"] == country["king_character_id"]:
         db.close()
         flash("不能授權國王本人挑戰自己國家的官職")
+        return redirect(url_for("game.countries_page"))
+
+    # Must be office-free (not King/Advisor/General anywhere) -- otherwise a
+    # winning challenger's one-seat-per-player vacate logic (see
+    # country_challenge_official) could strip them of an existing seat in
+    # another country, leaving that seat vacant with no way to reclaim it.
+    holds_office = db.execute(
+        """SELECT 1 FROM countries
+           WHERE king_character_id = ? OR advisor_character_id = ? OR general_character_id = ?
+           LIMIT 1""",
+        (target["id"], target["id"], target["id"]),
+    ).fetchone()
+    if holds_office is not None:
+        db.close()
+        flash("該玩家目前已擔任官職，無法被授權挑戰")
         return redirect(url_for("game.countries_page"))
 
     seat_label = "參謀" if seat == "advisor" else "大將軍"
