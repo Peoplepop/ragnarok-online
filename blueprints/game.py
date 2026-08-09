@@ -434,7 +434,7 @@ def _render_game(**extra):
     # 大將軍/參謀 seats. Global across every player, not scoped to this
     # character, so it's read here rather than filtered by user_id.
     major_event_rows = db.execute(
-        """SELECT action, detail, username, created_at FROM activity_log
+        """SELECT action, detail, username, created_at, character_id FROM activity_log
            WHERE action IN (
                'character_create', 'hidden_loot_drop', 'boss_set_drop', 'tournament_champion',
                'promote_tier1', 'promote_tier2', 'promote_tier3', 'promote_tier4',
@@ -919,7 +919,7 @@ def game_hunt():
                     db, session["user_id"], session["username"], "boss_set_drop",
                     detail=f"擊敗{monster['name']}，獲得「{boss_set_dropped['name']}」"
                            f"（{boss_set_dropped['hidden_set_name']}）",
-                    ip_address=request.remote_addr,
+                    ip_address=request.remote_addr, character_id=character["character_id"],
                 )
         new_level, new_exp, stat_gain = apply_exp(
             character["level"], character["exp"], exp_gain, settings,
@@ -951,7 +951,7 @@ def game_hunt():
                     db, session["user_id"], session["username"], "hidden_loot_drop",
                     detail=f"{ground['name']}：{hidden_loot_dropped['name']}"
                            f"（{hidden_loot_dropped['hidden_set_name']}）",
-                    ip_address=request.remote_addr,
+                    ip_address=request.remote_addr, character_id=character["character_id"],
                 )
         # Rare monster-drop skill book: only rolls in the top-tier ultimate
         # hunting ground, independent of the hunter's own job (a "wrong
@@ -1248,7 +1248,7 @@ def game_hunt_boss_room():
                 db, session["user_id"], session["username"], "boss_set_drop",
                 detail=f"擊敗{boss['name']}，獲得「{boss_set_dropped['name']}」"
                        f"（{boss_set_dropped['hidden_set_name']}）",
-                ip_address=request.remote_addr,
+                ip_address=request.remote_addr, character_id=character["character_id"],
             )
         # Potion drop: an independent roll every win, regardless of whether
         # the boss set above also dropped -- both can land in the same fight.
@@ -1475,7 +1475,7 @@ def _resolve_bandit_conquest(
     )
     log_activity(
         db, session["user_id"], session["username"], "conquer_win" if tile_captured else "conquer_loss",
-        detail=outcome_detail, ip_address=request.remote_addr,
+        detail=outcome_detail, ip_address=request.remote_addr, character_id=character["character_id"],
     )
     db.commit()
     db.close()
@@ -1793,7 +1793,7 @@ def game_conquer():
             # strictly gated on "this was the very last defender" since
             # every such win is already a notable PvP event in its own right.
             "conquer_win" if result["won"] else "conquer_loss",
-            detail=outcome_detail, ip_address=request.remote_addr,
+            detail=outcome_detail, ip_address=request.remote_addr, character_id=character["character_id"],
         )
         db.commit()
         db.close()
@@ -1883,7 +1883,7 @@ def game_conquer():
     )
     log_activity(
         db, session["user_id"], session["username"], "conquer_win" if result["won"] else "conquer_loss",
-        detail=outcome_detail, ip_address=request.remote_addr,
+        detail=outcome_detail, ip_address=request.remote_addr, character_id=character["character_id"],
     )
     db.commit()
     db.close()
@@ -3108,6 +3108,7 @@ def country_challenge_king():
         log_activity(
             db, session["user_id"], session["username"], "claim_vacant_king",
             detail=f"「{country_name}」王位原本從缺，登基成為新任國王", ip_address=request.remote_addr,
+            character_id=character["character_id"],
         )
         db.commit()
         db.close()
@@ -3209,7 +3210,7 @@ def country_challenge_king():
         # challenge_king_win also feeds the 重大事件 feed (see game()) --
         # only an actual usurpation (not a loss/timeout) is newsworthy.
         "challenge_king_win" if result["won"] else "challenge_king",
-        detail=outcome_detail, ip_address=request.remote_addr,
+        detail=outcome_detail, ip_address=request.remote_addr, character_id=character["character_id"],
     )
     db.commit()
     db.close()
@@ -3679,7 +3680,7 @@ def country_challenge_official():
         # only actually winning the seat is newsworthy, same convention as
         # challenge_king_win above.
         "challenge_official_win" if result["won"] else "challenge_official",
-        detail=outcome_detail, ip_address=request.remote_addr,
+        detail=outcome_detail, ip_address=request.remote_addr, character_id=character["character_id"],
     )
     db.commit()
     db.close()

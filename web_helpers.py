@@ -196,9 +196,12 @@ _MAJOR_EVENT_MESSAGE_BUILDERS = {
 
 
 def _major_event_feed(rows):
-    """rows: activity_log rows (need action/detail/username/created_at) ->
-    [{message, time_label}], oldest-filtered-out, newest first (assumes the
-    caller already queried ORDER BY created_at DESC)."""
+    """rows: activity_log rows (need action/detail/username/created_at/
+    character_id) -> [{message, time_label, character_id}], oldest-filtered-
+    out, newest first (assumes the caller already queried ORDER BY
+    created_at DESC). character_id may be None (rows logged before the
+    column existed, or a system-authored row with no single actor) -- the
+    template only renders a link when it's present, see game.html."""
     events = []
     for row in rows:
         builder = _MAJOR_EVENT_MESSAGE_BUILDERS.get(row["action"])
@@ -207,6 +210,7 @@ def _major_event_feed(rows):
         events.append({
             "message": builder(row["username"], row["detail"]),
             "time_label": _activity_log_time_label(row["created_at"]),
+            "character_id": row["character_id"],
         })
     return events
 

@@ -936,6 +936,16 @@ def _ensure_feedback_columns(conn):
         conn.execute("ALTER TABLE feedback ADD COLUMN reply_seen INTEGER NOT NULL DEFAULT 1")
 
 
+def _ensure_activity_log_columns(conn):
+    cols = [row["name"] for row in conn.execute("PRAGMA table_info(activity_log)")]
+    if "character_id" not in cols:
+        # Nullable, no backfill -- historical rows simply render with no
+        # clickable link in the 重大事件 feed (see _major_event_feed in
+        # web_helpers.py), which is fine since there's no reliable way to
+        # retroactively resolve an old row's acting character.
+        conn.execute("ALTER TABLE activity_log ADD COLUMN character_id INTEGER")
+
+
 def _ensure_tournament_registration_columns(conn):
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(tournament_registrations)")]
     if not cols:
@@ -1546,15 +1556,16 @@ def init_db():
     _ensure_game_settings_columns(conn)
     _ensure_tournament_registration_columns(conn)
     _ensure_feedback_columns(conn)
+    _ensure_activity_log_columns(conn)
     conn.commit()
     conn.close()
 
 
-def log_activity(conn, user_id, username, action, detail="", ip_address=None):
+def log_activity(conn, user_id, username, action, detail="", ip_address=None, character_id=None):
     conn.execute(
-        """INSERT INTO activity_log (user_id, username, action, detail, ip_address)
-           VALUES (?, ?, ?, ?, ?)""",
-        (user_id, username, action, detail, ip_address),
+        """INSERT INTO activity_log (user_id, username, action, detail, ip_address, character_id)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (user_id, username, action, detail, ip_address, character_id),
     )
 
 

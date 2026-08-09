@@ -34,6 +34,13 @@
   }
   .quick-jump-nav a:hover { color: var(--gold-bright); border-color: var(--gold); }
 
+  .event-actor-link, .chat-actor-link {
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .event-actor-link:hover, .chat-actor-link:hover { text-decoration: underline; }
+
   details.panel { scroll-margin-top: 64px; }
   details.panel > summary {
     cursor: pointer;
@@ -248,9 +255,20 @@
         var start = currentPage * pageSize;
         var pageItems = majorEvents.slice(start, start + pageSize);
         list.innerHTML = pageItems.map(function (e) {
+          var messageHtml = escapeHtml(e.message);
+          // Wrap the WHOLE event line (not just a name substring) in a link
+          // when we know which character it's about -- the message text is
+          // a single pre-built string from _MAJOR_EVENT_MESSAGE_BUILDERS
+          // (web_helpers.py) that sometimes leads with the account username
+          // and sometimes with a character name already baked into `detail`
+          // at log-time, so there's no reliable substring to isolate; the
+          // whole line is also a bigger, more mobile-friendly tap target.
+          var messageSpan = e.character_id
+            ? '<a class="event-actor-link" href="/character/view/' + e.character_id + '" style="margin-left:6px;">' + messageHtml + '</a>'
+            : '<span style="margin-left:6px;">' + messageHtml + '</span>';
           return '<div style="font-size:12px; line-height:1.6;">' +
             '<span style="color:var(--text-dim);">' + escapeHtml(e.time_label) + '</span>' +
-            '<span style="margin-left:6px;">' + escapeHtml(e.message) + '</span>' +
+            messageSpan +
           '</div>';
         }).join("") || '<span class="hint">這一頁沒有事件</span>';
         if (label) label.textContent = (currentPage + 1) + " / " + totalPages;
@@ -295,11 +313,15 @@
         if (!list) return;
         var wasAtBottom = list.scrollTop + list.clientHeight >= list.scrollHeight - 10;
         list.innerHTML = messages.map(function (m) {
+          var nameHtml = escapeHtml(m.character_name);
+          var nameSpan = m.character_id
+            ? '<a class="chat-actor-link" href="/character/view/' + m.character_id + '" style="color:var(--gold-bright);">' + nameHtml + '</a>'
+            : '<span style="color:var(--gold-bright);">' + nameHtml + '</span>';
           return '<div style="margin-bottom:4px; display:flex; align-items:flex-start; gap:6px;">' +
             '<img src="' + escapeHtml(m.avatar_url) + '" alt="" style="width:20px; height:20px; border-radius:50%; flex-shrink:0; margin-top:2px;">' +
             '<span>' +
               '<span style="color:var(--text-dim);">' + escapeHtml(m.time_label) + '</span> ' +
-              '<span style="color:var(--gold-bright);">' + escapeHtml(m.character_name) + '</span>' +
+              nameSpan +
               '<span style="color:var(--text-dim);">：</span>' +
               '<span>' + escapeHtml(m.message) + '</span>' +
             '</span>' +

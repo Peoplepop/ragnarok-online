@@ -294,6 +294,7 @@ def _settle_tournament(db, tournament):
     log_activity(
         db, None, "系統", "tournament_champion",
         detail=f"{champion['character_name']}（{champion['country_name']}）",
+        character_id=champion["character_id"],
     )
 
 

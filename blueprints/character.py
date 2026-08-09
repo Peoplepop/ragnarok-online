@@ -63,7 +63,7 @@ def _create_character(db, country_id, character_name):
         return None, f"{country['name']}目前沒有任何據點，暫時無法在此建立角色"
 
     try:
-        db.execute(
+        cursor = db.execute(
             """INSERT INTO characters (user_id, country_id, current_tile_id, name, tutorial_seen)
                VALUES (?, ?, ?, ?, 0)""",
             (session["user_id"], country["id"], fortress["id"], character_name),
@@ -75,6 +75,7 @@ def _create_character(db, country_id, character_name):
     log_activity(
         db, session["user_id"], session["username"], "character_create",
         detail=f"{character_name}（{country['name']}）", ip_address=request.remote_addr,
+        character_id=cursor.lastrowid,
     )
     db.commit()
     return country, None
@@ -825,6 +826,7 @@ def character_promote_tier1():
     log_activity(
         db, session["user_id"], session["username"], "promote_tier1",
         detail=f"{character['character_name']} 已一轉為「{job_name}」", ip_address=request.remote_addr,
+        character_id=character["character_id"],
     )
     db.commit()
 
@@ -884,6 +886,7 @@ def character_promote_tier2():
     log_activity(
         db, session["user_id"], session["username"], "promote_tier2",
         detail=f"{character['character_name']} 已二轉為「{job_name}」", ip_address=request.remote_addr,
+        character_id=character["character_id"],
     )
     db.commit()
 
@@ -943,6 +946,7 @@ def character_promote_tier3():
     log_activity(
         db, session["user_id"], session["username"], "promote_tier3",
         detail=f"{character['character_name']} 已三轉為「{job_name}」", ip_address=request.remote_addr,
+        character_id=character["character_id"],
     )
     db.commit()
 
@@ -1000,7 +1004,7 @@ def character_promote_tier4():
     log_activity(
         db, session["user_id"], session["username"], "promote_tier4",
         detail=f"{character['character_name']} 已四轉為「{job_name}」，職業旅程至此圓滿",
-        ip_address=request.remote_addr,
+        ip_address=request.remote_addr, character_id=character["character_id"],
     )
     db.commit()
 

@@ -74,7 +74,8 @@ def chat_messages():
     # a picture that may since have been changed (post-四轉 avatar change).
     if channel == "country":
         rows = db.execute(
-            """SELECT chat_messages.character_name, chat_messages.country_name,
+            """SELECT chat_messages.character_id, chat_messages.character_name,
+                      chat_messages.country_name,
                       chat_messages.message, chat_messages.created_at,
                       users.avatar_key, users.avatar_custom_filename
                FROM chat_messages
@@ -86,7 +87,8 @@ def chat_messages():
         ).fetchall()
     else:
         rows = db.execute(
-            """SELECT chat_messages.character_name, chat_messages.country_name,
+            """SELECT chat_messages.character_id, chat_messages.character_name,
+                      chat_messages.country_name,
                       chat_messages.message, chat_messages.created_at,
                       users.avatar_key, users.avatar_custom_filename
                FROM chat_messages
@@ -99,6 +101,7 @@ def chat_messages():
 
     messages = [
         {
+            "character_id": r["character_id"],
             "character_name": r["character_name"],
             "country_name": r["country_name"],
             "message": r["message"],
