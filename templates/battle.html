@@ -270,12 +270,18 @@
       <button type="submit" class="turn-action-control btn-primary" id="continue-hunt-btn">⚔️ 繼續挑戰</button>
     </form>
     <button type="button" id="auto-hunt-toggle" class="btn-info" style="margin-right:10px;">🔁 自動連續挑戰</button>
-    <label style="display:inline-flex; align-items:center; gap:4px; margin-right:10px; font-size:13px; color:var(--text-dim); cursor:pointer;">
-      <input type="checkbox" id="auto-heal-hp-toggle"> 自動補血
+    <label style="display:inline-flex; align-items:center; gap:4px; margin-right:2px; font-size:13px; color:var(--text-dim); cursor:pointer;">
+      <input type="checkbox" id="auto-heal-hp-toggle"> 自動補血：低於
     </label>
-    <label style="display:inline-flex; align-items:center; gap:4px; margin-right:10px; font-size:13px; color:var(--text-dim); cursor:pointer;">
-      <input type="checkbox" id="auto-heal-mp-toggle"> 自動補魔
+    <input type="number" id="auto-heal-hp-threshold" min="1" max="99" step="1" value="20"
+           style="width:48px; padding:2px 4px; font-size:13px; margin-right:2px;">
+    <span style="font-size:13px; color:var(--text-dim); margin-right:10px;">%</span>
+    <label style="display:inline-flex; align-items:center; gap:4px; margin-right:2px; font-size:13px; color:var(--text-dim); cursor:pointer;">
+      <input type="checkbox" id="auto-heal-mp-toggle"> 自動補魔：低於
     </label>
+    <input type="number" id="auto-heal-mp-threshold" min="1" max="99" step="1" value="20"
+           style="width:48px; padding:2px 4px; font-size:13px; margin-right:2px;">
+    <span style="font-size:13px; color:var(--text-dim); margin-right:10px;">%</span>
     {% endif %}
     <a href="{{ url_for('game.game') }}" class="btn btn-info">← 返回主畫面</a>
     {% if can_continue_hunt %}
@@ -529,8 +535,7 @@
       var bossRoomAvailable = {{ 'true' if boss_room_available else 'false' }};
       var hpPotion = {{ hp_potion | tojson if hp_potion else 'null' }};
       var mpPotion = {{ mp_potion | tojson if mp_potion else 'null' }};
-      var LOW_HP_RATIO = 0.2;
-      var LOW_MP_RATIO = 0.2;
+      var DEFAULT_LOW_RATIO_PERCENT = 20;
       // How full to top HP/MP back up to when auto-drinking a potion --
       // clears the LOW_*_RATIO trigger with a comfortable margin so it
       // doesn't immediately re-trigger next fight if the potion is a small
@@ -564,6 +569,27 @@
           localStorage.setItem(key, value ? "1" : "0");
         } catch (e) {}
       }
+      // Auto-heal trigger thresholds are likewise a per-browser preference
+      // (each player picks their own %, no longer a fixed 20% for everyone)
+      // stored as a whole-number percent, clamped to 1~99 on both read and
+      // write so a stray manual localStorage edit can't produce a ratio of
+      // 0 (would never trigger) or >=1 (would trigger every fight).
+      function readPercentPref(key) {
+        try {
+          var raw = parseInt(localStorage.getItem(key), 10);
+          if (isNaN(raw)) return DEFAULT_LOW_RATIO_PERCENT;
+          return Math.min(99, Math.max(1, raw));
+        } catch (e) {
+          return DEFAULT_LOW_RATIO_PERCENT;
+        }
+      }
+      function writePercentPref(key, value) {
+        try {
+          localStorage.setItem(key, String(Math.min(99, Math.max(1, value))));
+        } catch (e) {}
+      }
+      var autoHealHpThresholdInput = document.getElementById("auto-heal-hp-threshold");
+      var autoHealMpThresholdInput = document.getElementById("auto-heal-mp-threshold");
       if (autoHealHpToggle) {
         autoHealHpToggle.checked = readBoolPref("autoHealHp");
         autoHealHpToggle.addEventListener("change", function () {
@@ -574,6 +600,26 @@
         autoHealMpToggle.checked = readBoolPref("autoHealMp");
         autoHealMpToggle.addEventListener("change", function () {
           writeBoolPref("autoHealMp", autoHealMpToggle.checked);
+        });
+      }
+      var lowHpRatio = DEFAULT_LOW_RATIO_PERCENT / 100;
+      if (autoHealHpThresholdInput) {
+        var hpThresholdPercent = readPercentPref("autoHealHpThresholdPercent");
+        autoHealHpThresholdInput.value = hpThresholdPercent;
+        lowHpRatio = hpThresholdPercent / 100;
+        autoHealHpThresholdInput.addEventListener("change", function () {
+          writePercentPref("autoHealHpThresholdPercent", parseInt(autoHealHpThresholdInput.value, 10) || DEFAULT_LOW_RATIO_PERCENT);
+          autoHealHpThresholdInput.value = readPercentPref("autoHealHpThresholdPercent");
+        });
+      }
+      var lowMpRatio = DEFAULT_LOW_RATIO_PERCENT / 100;
+      if (autoHealMpThresholdInput) {
+        var mpThresholdPercent = readPercentPref("autoHealMpThresholdPercent");
+        autoHealMpThresholdInput.value = mpThresholdPercent;
+        lowMpRatio = mpThresholdPercent / 100;
+        autoHealMpThresholdInput.addEventListener("change", function () {
+          writePercentPref("autoHealMpThresholdPercent", parseInt(autoHealMpThresholdInput.value, 10) || DEFAULT_LOW_RATIO_PERCENT);
+          autoHealMpThresholdInput.value = readPercentPref("autoHealMpThresholdPercent");
         });
       }
       // Grace period before the very first auto-submit on a freshly loaded
@@ -676,8 +722,8 @@
       var armed = readArmed();
       var autoHealHp = !!(autoHealHpToggle && autoHealHpToggle.checked);
       var autoHealMp = !!(autoHealMpToggle && autoHealMpToggle.checked);
-      var lowHp = maxHpAfter > 0 && (playerHpAfter / maxHpAfter) < LOW_HP_RATIO;
-      var lowMp = maxMpAfter > 0 && (playerMpAfter / maxMpAfter) < LOW_MP_RATIO;
+      var lowHp = maxHpAfter > 0 && (playerHpAfter / maxHpAfter) < lowHpRatio;
+      var lowMp = maxMpAfter > 0 && (playerMpAfter / maxMpAfter) < lowMpRatio;
       if (armed && lowHp && autoHealHp && hpPotion && hpPotion.quantity > 0) {
         usePotionAndResume(hpPotion, playerHpAfter, maxHpAfter, "HP ");
         return;
@@ -688,7 +734,7 @@
         armed = false;
         persistArmed(false);
         setStatus(
-          "已停止自動挑戰：HP 過低（低於上限 " + Math.round(LOW_HP_RATIO * 100) + "%）" +
+          "已停止自動挑戰：HP 過低（低於上限 " + Math.round(lowHpRatio * 100) + "%）" +
           (autoHealHp ? "，且背包沒有補血藥品" : "")
         );
       } else if (armed && lowMp && autoHealMp && mpPotion && mpPotion.quantity > 0) {
