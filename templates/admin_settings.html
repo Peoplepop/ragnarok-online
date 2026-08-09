@@ -197,11 +197,20 @@
           <label>官職挑戰氣勢加成 (%)</label>
           <input type="text" inputmode="numeric" name="office_challenge_aura_bonus_percent" value="{{ settings.office_challenge_aura_bonus_percent }}">
         </div>
+        <div>
+          <label>國王最低貢獻值需求</label>
+          <input type="text" inputmode="numeric" name="king_min_contribution" value="{{ settings.king_min_contribution }}">
+        </div>
+        <div>
+          <label>參謀／大將軍最低貢獻值需求</label>
+          <input type="text" inputmode="numeric" name="official_min_contribution" value="{{ settings.official_min_contribution }}">
+        </div>
       </div>
       <p class="hint" style="margin-bottom:16px;">
         國王／參謀／大將軍每週五可領取「國庫 × 分潤%」的諸神幣（每人每週限領一次）；
         國王在國戰或城鎮戰時段內，防禦力額外獲得「國戰防禦加成%」；
-        受國王授權應戰參謀／大將軍之位的挑戰者，在該場戰鬥中六圍全部獲得「氣勢加成%」的臨時加成
+        受國王授權應戰參謀／大將軍之位的挑戰者，在該場戰鬥中六圍全部獲得「氣勢加成%」的臨時加成；
+        貢獻值未達「國王最低貢獻值需求」者無法篡位或登基，未達「參謀／大將軍最低貢獻值需求」者無法被國王授權挑戰官職
       </p>
 
       <h3 style="color: var(--gold-bright); font-size: 15px; margin-bottom:8px;">國庫花費（士氣激勵／攻城武器／修補防禦）設定</h3>

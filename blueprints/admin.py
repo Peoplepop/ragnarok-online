@@ -657,6 +657,8 @@ def admin_update_game_settings():
         dodge_chance_k = float(request.form.get("dodge_chance_k", ""))
         element_overcome_bonus_percent = float(request.form.get("element_overcome_bonus_percent", ""))
         element_overcome_penalty_percent = float(request.form.get("element_overcome_penalty_percent", ""))
+        king_min_contribution = int(request.form.get("king_min_contribution", ""))
+        official_min_contribution = int(request.form.get("official_min_contribution", ""))
     except ValueError:
         flash("設定值格式不正確")
         return redirect(url_for("admin.admin_settings"))
@@ -810,6 +812,10 @@ def admin_update_game_settings():
         flash("戰鬥傷害公式的設定值不可為負數，且百分比上限相關數值須介於 0 到 100 之間")
         return redirect(url_for("admin.admin_settings"))
 
+    if king_min_contribution < 0 or official_min_contribution < 0:
+        flash("國王／官職的最低貢獻值需求不可為負數")
+        return redirect(url_for("admin.admin_settings"))
+
     db = get_db()
     db.execute(
         """UPDATE game_settings
@@ -843,7 +849,8 @@ def admin_update_game_settings():
                crit_damage_min = ?, crit_damage_max = ?,
                hit_chance_base_percent = ?, hit_chance_max_bonus_percent = ?, hit_chance_k = ?,
                dodge_chance_base_percent = ?, dodge_chance_max_bonus_percent = ?, dodge_chance_k = ?,
-               element_overcome_bonus_percent = ?, element_overcome_penalty_percent = ?
+               element_overcome_bonus_percent = ?, element_overcome_penalty_percent = ?,
+               king_min_contribution = ?, official_min_contribution = ?
            WHERE id = 1""",
         (
             turn_wait_seconds, exp_base, exp_growth_novice_percent,
@@ -877,6 +884,7 @@ def admin_update_game_settings():
             hit_chance_base_percent, hit_chance_max_bonus_percent, hit_chance_k,
             dodge_chance_base_percent, dodge_chance_max_bonus_percent, dodge_chance_k,
             element_overcome_bonus_percent, element_overcome_penalty_percent,
+            king_min_contribution, official_min_contribution,
         ),
     )
     # Applied immediately rather than waiting for the next server restart --

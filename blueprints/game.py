@@ -598,6 +598,8 @@ def _render_game(**extra):
         king_name=king_name,
         advisor_name=advisor_name,
         general_name=general_name,
+        king_min_contribution=settings["king_min_contribution"],
+        official_min_contribution=settings["official_min_contribution"],
         major_events=major_events,
         chat_message_max_len=CHAT_MESSAGE_MAX_LEN,
         action_block_order=_sanitized_action_block_order(settings["action_block_order"]),
@@ -2989,6 +2991,7 @@ def countries_page():
         siege_attack_cooldown_label=siege_attack_cooldown_label,
         enemy_target_tiles=enemy_target_tiles,
         damaged_own_tiles=damaged_own_tiles,
+        official_min_contribution=settings["official_min_contribution"],
     )
 
 
@@ -3005,7 +3008,7 @@ def country_challenge_king():
     character = db.execute(
         """SELECT characters.id AS character_id, characters.country_id, characters.next_action_at,
                   characters.current_hp, characters.current_mp, characters.currency, characters.level,
-                  characters.name AS character_name,
+                  characters.name AS character_name, characters.contribution,
                   characters.equipped_weapon_id, characters.equipped_armor_id, characters.equipped_accessory_id,
                   characters.job_class, characters.job_tier, characters.rebirth_count,
                   characters.stat_floor_hp, characters.stat_floor_mp, characters.stat_floor_str,
@@ -3036,6 +3039,11 @@ def country_challenge_king():
         return redirect(url_for("game.game"))
 
     settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+
+    if character["contribution"] < settings["king_min_contribution"]:
+        db.close()
+        flash(f"貢獻值需達到 {settings['king_min_contribution']} 以上才能篡位／登基（目前貢獻值 {character['contribution']}）")
+        return redirect(url_for("game.game"))
 
     # Opposite polarity from game_conquer's war-window gate: usurpation is
     # only allowed OUTSIDE both the town and fortress war windows.
@@ -3375,11 +3383,20 @@ def country_authorize_challenge():
         return redirect(url_for("game.countries_page"))
 
     target = db.execute(
-        "SELECT id, name, country_id FROM characters WHERE lower(name) = lower(?)", (target_name,)
+        "SELECT id, name, country_id, contribution FROM characters WHERE lower(name) = lower(?)", (target_name,)
     ).fetchone()
     if target is None:
         db.close()
         flash("找不到這個角色")
+        return redirect(url_for("game.countries_page"))
+
+    settings = db.execute("SELECT official_min_contribution FROM game_settings WHERE id = 1").fetchone()
+    if target["contribution"] < settings["official_min_contribution"]:
+        db.close()
+        flash(
+            f"該玩家貢獻值需達到 {settings['official_min_contribution']} 以上才能被授權挑戰官職"
+            f"（目前貢獻值 {target['contribution']}）"
+        )
         return redirect(url_for("game.countries_page"))
 
     if target["country_id"] != country["id"]:

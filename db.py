@@ -1518,6 +1518,14 @@ def _ensure_game_settings_columns(conn):
         conn.execute(
             "ALTER TABLE game_settings ADD COLUMN element_overcome_penalty_percent REAL NOT NULL DEFAULT 20"
         )
+    if "king_min_contribution" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN king_min_contribution INTEGER NOT NULL DEFAULT 100000"
+        )
+    if "official_min_contribution" not in cols:
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN official_min_contribution INTEGER NOT NULL DEFAULT 50000"
+        )
 
 
 def init_db():

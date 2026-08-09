@@ -35,6 +35,8 @@
         <p class="hint" style="margin:0;">你已經是本國國王了，前往 <a href="{{ url_for('game.countries_page') }}">國家詳情</a> 可以指派挑戰者應戰參謀／大將軍之位</p>
         {% elif current_tile.tile_type != 'fortress' %}
         <p class="hint" style="margin:0;">請在任一國家要塞內才能挑戰國王</p>
+        {% elif character.contribution < king_min_contribution %}
+        <p class="hint" style="margin:0;">貢獻值需達到 {{ king_min_contribution }} 以上才能篡位／登基（你目前貢獻值 {{ character.contribution }}）</p>
         {% elif in_any_war_window %}
         <p class="hint" style="margin:0; color:var(--danger);">國戰或城鎮戰期間無法篡位</p>
         {% elif character.king_character_id is none %}
