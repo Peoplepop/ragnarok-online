@@ -15,11 +15,15 @@ EXP_TIER_BANDS = [
     (120, LEVEL_CAP - 1, "exp_growth_tier4_percent"),
 ]
 
-# A 三轉 (job_tier == 3) character stops gaining EXP at this level -- rebirth
-# (back to 初心者) or 四轉 is required to keep climbing toward LEVEL_CAP.
-# Doesn't apply to any other tier: 初心者/一轉/二轉 have no analogous hard
-# stop (nothing but their own promotion routes' level gates encourages
-# moving on), and 四轉 keeps going all the way to LEVEL_CAP.
+# Any character that hasn't reached 四轉 yet (job_tier < 4) stops gaining EXP
+# at this level -- promoting/rebirthing onward (and eventually 四轉) is
+# required to keep climbing toward LEVEL_CAP. Originally this only gated
+# job_tier == 3, on the assumption that a 初心者/一轉/二轉 character would
+# naturally promote once eligible -- but nothing actually stops a player from
+# just not promoting and grinding straight through 120 while still low-tier,
+# skipping the intended rebirth/mastery loop entirely. Applying the cap to
+# every pre-四轉 tier closes that. 四轉 itself keeps going all the way to
+# LEVEL_CAP.
 TIER3_LEVEL_CAP = 120
 
 
@@ -93,15 +97,16 @@ def apply_exp(level, exp, gained, settings, force_one=False, job_class=None, job
     level-up in this call, since one big EXP gain can still cross several
     level thresholds if force_one or a huge kill allows it, even though
     overflow itself is discarded rather than carried. Capped at LEVEL_CAP
-    (or, while still job_tier == 3, at the lower TIER3_LEVEL_CAP -- see that
-    constant); extra EXP past the applicable cap is discarded. Overflow past
-    what a level-up consumes is also discarded (not carried into the next
+    (or, while still below 四轉/job_tier 4, at the lower TIER3_LEVEL_CAP --
+    see that constant); extra EXP past the applicable cap is discarded.
+    Overflow past what a level-up consumes is also discarded (not carried
+    into the next
     level's counter) -- every level always starts counting from 0, so a
     single force_one level-up can only ever advance one level, not cascade
     through many."""
     exp += gained
     stat_gain = {key: 0 for key in LEVEL_UP_POINT_VALUE}
-    effective_cap = TIER3_LEVEL_CAP if job_tier == 3 else LEVEL_CAP
+    effective_cap = TIER3_LEVEL_CAP if job_tier < 4 else LEVEL_CAP
     while level < effective_cap:
         needed = exp_required_for_level(level, settings, force_one)
         if exp < needed:

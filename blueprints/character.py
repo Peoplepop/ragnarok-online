@@ -225,11 +225,11 @@ def character_page():
     morale_buff_active = _morale_buff_active(character)
     stats = character_final_stats(character, equipped_items, settings, king_war_defense_bonus, morale_buff_active)
     current_hp, current_mp = _current_hp_mp(character, stats)
-    # A 三轉 character stuck at TIER3_LEVEL_CAP (120) needs its own message
-    # (rebirth or 四轉 required) -- distinct from the ordinary "已達最高等級"
-    # shown at the real LEVEL_CAP (200), which a still-job_tier==3 character
-    # can never actually reach without leaving tier 3 first.
-    tier3_level_capped = character["job_tier"] == 3 and character["level"] >= TIER3_LEVEL_CAP
+    # Any pre-四轉 character (job_tier 0/1/2/3) stuck at TIER3_LEVEL_CAP (120)
+    # needs its own message (promote onward, or rebirth/四轉 once in tier 3)
+    # -- distinct from the ordinary "已達最高等級" shown at the real LEVEL_CAP
+    # (200), which a character below job_tier 4 can never actually reach.
+    tier3_level_capped = character["job_tier"] < 4 and character["level"] >= TIER3_LEVEL_CAP
     exp_needed = (
         exp_required_for_level(character["level"], settings, force_one=session.get("is_admin", False))
         if character["level"] < LEVEL_CAP and not tier3_level_capped else None

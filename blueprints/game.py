@@ -481,8 +481,10 @@ def _render_game(**extra):
     current_hp, current_mp = _current_hp_mp(character, stats)
 
     # See character.py's matching tier3_level_capped for why this needs its
-    # own check separate from the ordinary LEVEL_CAP one.
-    tier3_level_capped = character["job_tier"] == 3 and character["level"] >= TIER3_LEVEL_CAP
+    # own check separate from the ordinary LEVEL_CAP one -- applies to any
+    # pre-四轉 tier (0/1/2/3), not just tier 3, so a player can't dodge the
+    # cap by simply never promoting.
+    tier3_level_capped = character["job_tier"] < 4 and character["level"] >= TIER3_LEVEL_CAP
     exp_needed = (
         exp_required_for_level(character["level"], settings, force_one=session.get("is_admin", False))
         if character["level"] < LEVEL_CAP and not tier3_level_capped else None
