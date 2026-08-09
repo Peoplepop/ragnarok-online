@@ -418,6 +418,13 @@ def character_view(character_id):
         "SELECT avatar_key, avatar_custom_filename FROM users WHERE id = ?", (character["user_id"],)
     ).fetchone()
     settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+    # Same job_masteries lookup character_page() uses for the logged-in
+    # player, just scoped to the viewed character_id instead of session user.
+    mastery_names = [
+        row["job_name"] for row in db.execute(
+            "SELECT job_name FROM job_masteries WHERE character_id = ?", (character["character_id"],)
+        )
+    ]
     equipped_items = _fetch_equipped_items(db, character)
 
     equipped_slots = []
@@ -456,6 +463,7 @@ def character_view(character_id):
         job_tier_label=JOB_TIER_LABELS.get(character["job_tier"], ""),
         equipped_slots=equipped_slots,
         profile_avatar_url=avatar_url(profile_user["avatar_key"], profile_user["avatar_custom_filename"]),
+        mastery_names=mastery_names,
     )
 
 

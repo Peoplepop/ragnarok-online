@@ -14,6 +14,13 @@
       <span style="font-size:13px; color:var(--text-dim);">轉生次數 {{ character.rebirth_count }}</span>
     </div>
 
+    <div style="margin-top:10px; font-size:13px; color:var(--text-dim);">
+      <!-- No "/3" denominator here (unlike character.html's tier4-eligibility
+           progress line) -- this is a read-only view of someone else with no
+           promotion context, and a character can end up with 4 masteries. -->
+      <span>已精通職業 {{ mastery_names|length }} 個{% if mastery_names %}（{{ mastery_names|join('、') }}）{% endif %}</span>
+    </div>
+
     <div style="display:flex; gap:14px; font-size:13px; color:var(--text-dim); margin-top:18px; flex-wrap:wrap;">
       <span>HP {{ stats.hp }}</span>
       <span>MP {{ stats.mp }}</span>
