@@ -965,7 +965,7 @@ def game_hunt():
         # character_skill_book_use's job_class check) -- it's meant to be
         # handed off via character trade to whichever player can actually use
         # it, not learned on the spot.
-        if ground["tier"] == "ultimate" and random.random() < 1 / 20000:
+        if ground["tier"] == "ultimate" and random.random() * 100 < settings["skill_book_drop_percent"]:
             dropped_key = random.choice(TIER4_SLOT2_SKILL_KEYS)
             dropped_skill = SKILL_CATALOG[dropped_key]
             skill_book_dropped = dropped_skill["name"]

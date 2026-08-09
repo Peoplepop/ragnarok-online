@@ -1467,6 +1467,15 @@ def _ensure_game_settings_columns(conn):
         conn.execute(
             "ALTER TABLE game_settings ADD COLUMN large_money_pouch_drop_percent REAL NOT NULL DEFAULT 10"
         )
+    if "skill_book_drop_percent" not in cols:
+        # Rare monster-drop skill book roll, ultimate hunting ground only --
+        # see game_hunt in blueprints/game.py. Default 0.005 preserves the
+        # previously-hardcoded 1/20000 chance (0.005% == 1/20000 expressed in
+        # the same "percent, compared against random()*100" convention as
+        # every other *_drop_percent column here).
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN skill_book_drop_percent REAL NOT NULL DEFAULT 0.005"
+        )
     if "monster_combat_stat_bump" not in cols:
         # Flat buff (can be set negative to nerf instead) applied to every
         # monster's atk/def/agi/luk -- see _bump_monster_combat_stats.
