@@ -70,6 +70,8 @@
         </div>
         <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">EXP {{ character.exp }} / {{ exp_needed }}</div>
       </div>
+      {% elif tier3_level_capped %}
+      <span style="font-size:12px; color:var(--text-dim);">三轉已達等級上限 Lv.120，轉生或四轉才能繼續升級</span>
       {% else %}
       <span style="font-size:12px; color:var(--text-dim);">已達最高等級 Lv.{{ level_cap }}</span>
       {% endif %}

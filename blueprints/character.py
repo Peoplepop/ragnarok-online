@@ -33,7 +33,7 @@ from game_data.equipment import (
 )
 from game_data.stats import STAT_FLOOR_COLUMNS, character_final_stats, _current_hp_mp
 from game_data.progression import (
-    exp_required_for_level, LEVEL_UP_POINT_VALUE, _roll_level_up_stat_points,
+    exp_required_for_level, LEVEL_UP_POINT_VALUE, _roll_level_up_stat_points, TIER3_LEVEL_CAP,
 )
 from game_data.combat import derived_combat_stats
 
@@ -224,9 +224,14 @@ def character_page():
     morale_buff_active = _morale_buff_active(character)
     stats = character_final_stats(character, equipped_items, settings, king_war_defense_bonus, morale_buff_active)
     current_hp, current_mp = _current_hp_mp(character, stats)
+    # A 三轉 character stuck at TIER3_LEVEL_CAP (120) needs its own message
+    # (rebirth or 四轉 required) -- distinct from the ordinary "已達最高等級"
+    # shown at the real LEVEL_CAP (200), which a still-job_tier==3 character
+    # can never actually reach without leaving tier 3 first.
+    tier3_level_capped = character["job_tier"] == 3 and character["level"] >= TIER3_LEVEL_CAP
     exp_needed = (
         exp_required_for_level(character["level"], settings, force_one=session.get("is_admin", False))
-        if character["level"] < LEVEL_CAP else None
+        if character["level"] < LEVEL_CAP and not tier3_level_capped else None
     )
     can_promote_tier1 = character["job_tier"] == 0 and character["level"] >= 10
     can_promote_tier2 = character["job_tier"] == 1 and character["level"] >= 30
@@ -323,6 +328,7 @@ def character_page():
         current_mp=current_mp,
         level_cap=LEVEL_CAP,
         exp_needed=exp_needed,
+        tier3_level_capped=tier3_level_capped,
         equipped_items=equipped_items,
         equipped_slots=equipped_slots,
         active_sets=active_sets,

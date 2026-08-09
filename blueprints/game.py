@@ -26,7 +26,7 @@ from game_data.equipment import _fetch_equipped_items, character_special_effects
 from game_data.stats import (
     character_final_stats, defense_tower_stats, _current_hp_mp, _bandit_lord_stats,
 )
-from game_data.progression import exp_required_for_level, LEVEL_UP_POINT_VALUE, apply_exp
+from game_data.progression import exp_required_for_level, LEVEL_UP_POINT_VALUE, apply_exp, TIER3_LEVEL_CAP
 from game_data.combat import gold_luk_bonus_pct, run_battle, _resolve_battle_element
 
 game_bp = Blueprint("game", __name__)
@@ -476,9 +476,12 @@ def _render_game(**extra):
     stats = character_final_stats(character, equipped_items, settings, king_war_defense_bonus, morale_buff_active)
     current_hp, current_mp = _current_hp_mp(character, stats)
 
+    # See character.py's matching tier3_level_capped for why this needs its
+    # own check separate from the ordinary LEVEL_CAP one.
+    tier3_level_capped = character["job_tier"] == 3 and character["level"] >= TIER3_LEVEL_CAP
     exp_needed = (
         exp_required_for_level(character["level"], settings, force_one=session.get("is_admin", False))
-        if character["level"] < LEVEL_CAP else None
+        if character["level"] < LEVEL_CAP and not tier3_level_capped else None
     )
 
     cooldown_seconds = _cooldown_remaining_seconds(character["next_action_at"])
@@ -587,6 +590,7 @@ def _render_game(**extra):
         current_mp=current_mp,
         level_cap=LEVEL_CAP,
         exp_needed=exp_needed,
+        tier3_level_capped=tier3_level_capped,
         current_tile=current_tile,
         move_targets=move_targets,
         hunting_grounds=hunting_grounds,
