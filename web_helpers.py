@@ -191,6 +191,7 @@ _MAJOR_EVENT_MESSAGE_BUILDERS = {
     "conquer_win": lambda username, detail: f"🏰 {username} {detail}",
     "challenge_king_win": lambda username, detail: f"👑 {username} {detail}",
     "challenge_official_win": lambda username, detail: f"⚔️ {username} {detail}",
+    "claim_vacant_king": lambda username, detail: f"👑 {username} {detail}",
 }
 
 

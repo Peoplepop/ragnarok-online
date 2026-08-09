@@ -415,7 +415,7 @@ def _render_game(**extra):
            WHERE action IN (
                'character_create', 'hidden_loot_drop', 'boss_set_drop', 'tournament_champion',
                'promote_tier1', 'promote_tier2', 'promote_tier3', 'promote_tier4',
-               'conquer_win', 'challenge_king_win', 'challenge_official_win'
+               'conquer_win', 'challenge_king_win', 'challenge_official_win', 'claim_vacant_king'
            )
            ORDER BY created_at DESC LIMIT 100"""
     ).fetchall()
@@ -3030,11 +3030,6 @@ def country_challenge_king():
         flash("請在任一國家要塞內才能挑戰國王")
         return redirect(url_for("game.game"))
 
-    if character["king_character_id"] is None:
-        db.close()
-        flash("這個國家目前沒有國王，無法篡位")
-        return redirect(url_for("game.game"))
-
     if character["king_character_id"] == character["character_id"]:
         db.close()
         flash("你已經是這個國家的國王了")
@@ -3047,6 +3042,40 @@ def country_challenge_king():
     if _in_any_war_window(settings):
         db.close()
         flash("國戰或城鎮戰期間無法篡位")
+        return redirect(url_for("game.game"))
+
+    if character["king_character_id"] is None:
+        # Vacant throne (e.g. the previous king got pulled into an office
+        # elsewhere, or was deleted by an admin) -- no one to fight, so the
+        # first claimant just takes the seat directly rather than being
+        # permanently stuck (there was previously no route back to a filled
+        # throne once it went NULL). Still consumes the normal action
+        # cooldown like every other /country/challenge_king outcome.
+        country_id = character["country_id"]
+        country_name = character["name"]  # bare countries.* -> "name" is the country's own name here
+        for seat_col in ("king_character_id", "advisor_character_id", "general_character_id"):
+            db.execute(
+                f"UPDATE countries SET {seat_col} = NULL WHERE {seat_col} = ?",
+                (character["character_id"],),
+            )
+        db.execute(
+            """UPDATE countries
+               SET king_character_id = ?, pending_challenge_seat = NULL,
+                   pending_challenge_character_id = NULL, pending_challenge_authorized_at = NULL
+               WHERE id = ?""",
+            (character["character_id"], country_id),
+        )
+        db.execute(
+            "UPDATE characters SET next_action_at = ? WHERE id = ?",
+            (_next_action_at(settings["turn_wait_seconds"]), character["character_id"]),
+        )
+        log_activity(
+            db, session["user_id"], session["username"], "claim_vacant_king",
+            detail=f"「{country_name}」王位原本從缺，登基成為新任國王", ip_address=request.remote_addr,
+        )
+        db.commit()
+        db.close()
+        flash(f"「{country_name}」王位原本從缺，你已直接登基成為新任國王！")
         return redirect(url_for("game.game"))
 
     king_row = db.execute(
