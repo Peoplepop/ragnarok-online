@@ -34,6 +34,12 @@
                 style="width:100%; background:var(--panel-2); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:6px 8px; font-size:12px; font-family:inherit; resize:vertical;">{{ f.admin_reply or '' }}</textarea>
               <button type="submit" style="padding:6px 12px; font-size:12px;">更新</button>
             </form>
+            {% if f.status == 'done' %}
+            <form method="post" action="{{ url_for('admin.admin_delete_feedback', feedback_id=f.id) }}"
+                  style="margin-top:6px;" onsubmit="return confirm('確定要刪除這則意見嗎？此動作無法復原。');">
+              <button type="submit" class="btn-danger" style="padding:6px 12px; font-size:12px;">🗑 刪除</button>
+            </form>
+            {% endif %}
           </td>
         </tr>
         {% else %}

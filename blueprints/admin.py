@@ -495,6 +495,33 @@ def admin_update_feedback_status(feedback_id):
     return redirect(url_for("admin.admin_feedback"))
 
 
+@admin_bp.route("/admin/feedback/<int:feedback_id>/delete", methods=["POST"])
+@admin_required
+def admin_delete_feedback(feedback_id):
+    db = get_db()
+    row = db.execute("SELECT status FROM feedback WHERE id = ?", (feedback_id,)).fetchone()
+    if row is None:
+        db.close()
+        flash("找不到這則意見")
+        return redirect(url_for("admin.admin_feedback"))
+
+    # Only "處理完成" entries can be deleted -- pending/in_progress feedback
+    # must stay visible until it's actually been handled, matching the
+    # user's explicit "針對處理完成的意見" scoping (a status-select POST
+    # forged from outside this UI can't bypass it either, since this check
+    # is server-side, not just a hidden delete button).
+    if row["status"] != "done":
+        db.close()
+        flash("只有「處理完成」的意見才能刪除")
+        return redirect(url_for("admin.admin_feedback"))
+
+    db.execute("DELETE FROM feedback WHERE id = ?", (feedback_id,))
+    db.commit()
+    db.close()
+    flash("已刪除該則意見")
+    return redirect(url_for("admin.admin_feedback"))
+
+
 @admin_bp.route("/admin/countries/<int:country_id>", methods=["POST"])
 @admin_required
 def admin_update_country(country_id):
