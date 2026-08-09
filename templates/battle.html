@@ -50,7 +50,12 @@
 {% endblock %}
 
 {% block content %}
-  {% set can_continue_hunt = ground and not conquest and not bandit_fight and not boss_room_challenge and (won or timed_out) and player_hp > 0 %}
+  {# boss_room_challenge no longer excluded: with 自動進攻魔王房間 enabled the
+     auto-hunt loop needs to keep working on the page a boss fight lands on
+     too, and letting a manual player keep grinding the same ground right
+     after a boss fight (instead of having to navigate back to /game and
+     re-pick it) is a harmless side benefit. #}
+  {% set can_continue_hunt = ground and not conquest and not bandit_fight and (won or timed_out) and player_hp > 0 %}
   {% if can_continue_hunt %}
   <div id="auto-hunt-bar" style="display:none; position:sticky; top:8px; z-index:50; margin-bottom:14px; padding:10px 14px; background:var(--panel-2); border:1px solid var(--danger); border-radius:8px; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; box-shadow:0 2px 10px rgba(0,0,0,0.35);">
     <span id="auto-hunt-bar-status" style="font-size:13px; color:var(--gold-bright);">🔁 自動連續挑戰中...</span>
@@ -242,7 +247,7 @@
     <p style="margin:10px 0 0; font-size:13px; color:var(--gold-bright);">🎁 你獲得了「{{ dropped.name }}」，已放入背包！</p>
     {% endfor %}
     {% if boss_room_available %}
-    <form method="post" action="{{ url_for('game.game_hunt_boss_room') }}" style="display:inline-block; margin-top:14px;">
+    <form method="post" action="{{ url_for('game.game_hunt_boss_room') }}" id="boss-room-form" style="display:inline-block; margin-top:14px;">
       <p class="hint" style="margin:0 0 8px;">你擊敗了守衛怪，可以選擇挑戰魔王房間，或直接返回主畫面</p>
       <button type="submit" class="btn-primary">⚔️ 進攻魔王房間</button>
     </form>
@@ -282,6 +287,9 @@
     <input type="number" id="auto-heal-mp-threshold" min="1" max="99" step="1" value="20"
            style="width:48px; padding:2px 4px; font-size:13px; margin-right:2px;">
     <span style="font-size:13px; color:var(--text-dim); margin-right:10px;">%</span>
+    <label style="display:inline-flex; align-items:center; gap:4px; margin-right:10px; font-size:13px; color:var(--text-dim); cursor:pointer;">
+      <input type="checkbox" id="auto-boss-room-toggle"> 自動進攻魔王房間
+    </label>
     {% endif %}
     <a href="{{ url_for('game.game') }}" class="btn btn-info">← 返回主畫面</a>
     {% if can_continue_hunt %}
@@ -546,6 +554,8 @@
       var autoToggle = document.getElementById("auto-hunt-toggle");
       var autoHealHpToggle = document.getElementById("auto-heal-hp-toggle");
       var autoHealMpToggle = document.getElementById("auto-heal-mp-toggle");
+      var autoBossRoomToggle = document.getElementById("auto-boss-room-toggle");
+      var bossRoomForm = document.getElementById("boss-room-form");
       var statusEl = document.getElementById("auto-hunt-status");
       var autoHuntBar = document.getElementById("auto-hunt-bar");
       var autoHuntBarStatus = document.getElementById("auto-hunt-bar-status");
@@ -600,6 +610,12 @@
         autoHealMpToggle.checked = readBoolPref("autoHealMp");
         autoHealMpToggle.addEventListener("change", function () {
           writeBoolPref("autoHealMp", autoHealMpToggle.checked);
+        });
+      }
+      if (autoBossRoomToggle) {
+        autoBossRoomToggle.checked = readBoolPref("autoBossRoom");
+        autoBossRoomToggle.addEventListener("change", function () {
+          writeBoolPref("autoBossRoom", autoBossRoomToggle.checked);
         });
       }
       var lowHpRatio = DEFAULT_LOW_RATIO_PERCENT / 100;
@@ -722,6 +738,7 @@
       var armed = readArmed();
       var autoHealHp = !!(autoHealHpToggle && autoHealHpToggle.checked);
       var autoHealMp = !!(autoHealMpToggle && autoHealMpToggle.checked);
+      var autoBossRoom = !!(autoBossRoomToggle && autoBossRoomToggle.checked);
       var lowHp = maxHpAfter > 0 && (playerHpAfter / maxHpAfter) < lowHpRatio;
       var lowMp = maxMpAfter > 0 && (playerMpAfter / maxMpAfter) < lowMpRatio;
       if (armed && lowHp && autoHealHp && hpPotion && hpPotion.quantity > 0) {
@@ -740,11 +757,24 @@
       } else if (armed && lowMp && autoHealMp && mpPotion && mpPotion.quantity > 0) {
         usePotionAndResume(mpPotion, playerMpAfter, maxMpAfter, "MP ");
         return;
+      } else if (armed && bossRoomAvailable && autoBossRoom && bossRoomForm) {
+        // 自動進攻魔王房間 is on: submit the same manual "進攻魔王房間" form
+        // instead of pausing. No cooldown to wait out here (the boss fight
+        // is a free bonus round, server-side game_hunt_boss_room never
+        // touches next_action_at) -- the short delay is purely so the
+        // guardian-win result is visible for a beat before the page
+        // navigates on. can_continue_hunt now stays true on the resulting
+        // boss_room_challenge page too, so this same script naturally picks
+        // "armed" back up there and keeps grinding the same ground.
+        setStatus("⚔️ 自動進攻魔王房間中...");
+        setTimeout(function () { bossRoomForm.submit(); }, FIRST_SUBMIT_GRACE_MS);
+        return;
       } else if (armed && bossRoomAvailable) {
         // A guardian win just unlocked a one-time boss-room invitation
         // (server-side `pending_boss_monster_id`); continuing the auto-loop
         // would silently overwrite it with the next regular hunt before the
-        // player ever sees it, so pause here and let them decide by hand.
+        // player ever sees it, so pause here and let them decide by hand,
+        // unless 自動進攻魔王房間 (branch above) is on.
         armed = false;
         persistArmed(false);
         setStatus("已暫停自動挑戰：出現魔王房間邀請，請自行選擇是否進攻");
