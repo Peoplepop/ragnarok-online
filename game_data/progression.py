@@ -1,7 +1,7 @@
 import random
 
 from db import LEVEL_CAP
-from game_data.jobs import TIER1_JOBS, TIER2_JOBS, TIER3_JOBS, TIER4_JOB_BY_STAT
+from game_data.jobs import TIER1_JOBS, TIER2_JOBS, TIER3_JOBS, TIER4_JOBS
 
 # Growth rate is tier-dependent (initiate/二轉/三轉/四轉), deliberately
 # non-increasing band to band. Bands compound continuously across their
@@ -60,8 +60,8 @@ def _job_primary_secondary(job_class, job_tier):
     elif job_tier == 3:
         info = TIER3_JOBS.get(job_class)
     elif job_tier == 4:
-        dominant = next((k for k, v in TIER4_JOB_BY_STAT.items() if v == job_class), None)
-        return dominant, None
+        info = TIER4_JOBS.get(job_class)
+        return (info["dominant_stat"], None) if info else (None, None)
     else:
         info = None
     return (info["primary"], info["secondary"]) if info else (None, None)

@@ -238,9 +238,20 @@ def character_page():
     can_promote_tier2 = character["job_tier"] == 1 and character["level"] >= 30
     can_promote_tier3 = character["job_tier"] == 2 and character["level"] >= 70
     mastery_count = len(mastery_names)
+    # >=4, not >=3: the 四轉 resolver (_resolve_tier4_job, game_data/jobs.py)
+    # now keys off the character's first 4 mastered jobs as a group -- a
+    # normal player always has exactly 4 by the time job_tier==3 and
+    # level>=120 (reaching level 120 in tier3 always auto-masters that job,
+    # and that's a precondition for either rebirthing again or promoting),
+    # but the admin debug tools (character_debug_set_rebirth in particular)
+    # can advance rebirth_count without going through a real rebirth, so a
+    # stale >=3 gate here could let a character reach this route with only
+    # 3 job_masteries rows -- TIER4_JOB_BY_COMBO has no key for a 3-job
+    # combo (it's built purely from 4-job combinations), so that would
+    # crash with an uncaught KeyError instead of failing to promote cleanly.
     can_promote_tier4 = (
         character["job_tier"] == 3 and character["level"] >= 120
-        and character["rebirth_count"] >= 3 and mastery_count >= 3
+        and character["rebirth_count"] >= 3 and mastery_count >= 4
     )
     can_rebirth = character["job_tier"] == 3 and character["level"] >= 120 and not can_promote_tier4
     mastered = set(mastery_names)
@@ -976,9 +987,12 @@ def character_promote_tier4():
         "SELECT COUNT(*) AS c FROM job_masteries WHERE character_id = ?",
         (character["character_id"],),
     ).fetchone()["c"]
+    # >=4, not >=3 -- see the matching comment on can_promote_tier4 in
+    # character_page() above for why (TIER4_JOB_BY_COMBO only has entries
+    # for 4-job combos; fewer than 4 masteries here would KeyError below).
     if not (
         character["job_tier"] == 3 and character["level"] >= 120
-        and character["rebirth_count"] >= 3 and mastery_count >= 3
+        and character["rebirth_count"] >= 3 and mastery_count >= 4
     ):
         db.close()
         flash("目前還不能四轉")

@@ -55,8 +55,9 @@
   <p class="hint" style="margin-top:0; margin-bottom:20px;">
     職業樹、屬性加成、技能表全部是程式邏輯內建設定，不是資料庫欄位，這頁純粹是查詢參考，沒有可編輯或儲存的地方。
     轉職路線為 初心者 → 一轉（3 選 1）→ 二轉（每個一轉再分 2 條）→ 三轉（每個二轉再分 2 條）；
-    四轉不是選出來的，是角色精通 3 個三轉職業＋轉生滿 3 次後，依這 3 個三轉職業的主／副屬性加權（主 x2、副 x1）
-    自動加總六圍分數，分數最高的屬性對應到一位四轉職業，平手則落到厚土真尊。
+    四轉共有 {{ data.tier4_job_count }} 種職業，不是選出來的：角色最早精通的 4 個三轉職業（依精通時間排序，取前 4 個）
+    決定結果，依這 4 個職業的主／副屬性加權（主 x2、副 x1）加總六圍分數，分數落在哪個區間、由哪些職業組成，
+    對應到固定的一種四轉職業；六圍嚴重打平則落到「六圍平衡系」。下方按主導屬性分成 5 組，每組預設收合。
   </p>
 
   <details class="panel" style="margin-bottom:16px;">
@@ -128,22 +129,53 @@
   {% endfor %}
 
   <details class="panel" style="margin-bottom:16px;" open>
-    <summary><h3 style="margin:0; color:var(--gold-bright); font-size:15px; display:inline;">👑 四轉（3 個三轉職業精通＋轉生3次後，依屬性加權自動判定）</h3></summary>
+    <summary>
+      <h3 style="margin:0; color:var(--gold-bright); font-size:15px; display:inline;">
+        👑 四轉（{{ data.tier4_job_count }} 種，依前 4 個精通三轉職業自動判定）
+      </h3>
+    </summary>
     <div class="panel-body">
-      {% for t4 in data.tier4 %}
-      <div style="margin:0 0 16px; padding:12px; border:1px solid var(--border); border-radius:8px;">
-        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px;">
-          <span style="font-size:14px; color:var(--gold-bright);">🌟 {{ t4.name }}</span>
-          <span class="hint" style="margin:0;">（主導屬性：{{ t4.dominant_stat }}）</span>
-          {{ bonus_line(t4.bonus) }}
-        </div>
-        {{ skill_table(t4.skills) }}
-      </div>
-      {% endfor %}
-      <p class="hint" style="margin:0;">
-        四轉第2技能不能用諸神幣學習，只能靠究極打怪場掉落的技能書兌換；第3技能是國王專屬技能，
+      <p class="hint" style="margin:0 0 12px;">
+        每組按主導屬性收合顯示；「精通組合」欄列出會落在這個職業的三轉職業組合（4選4，無先後之分）。
+        第2技能不能用諸神幣學習，只能靠究極打怪場掉落的技能書兌換；第3技能是國王專屬技能，
         只會直接內建在該國國王 NPC 身上，玩家沒有任何管道學到。
       </p>
+      {% for group in data.tier4_groups %}
+      <details class="panel" style="margin-bottom:10px;">
+        <summary>
+          <span style="font-size:14px; color:var(--gold-bright);">{{ group.label }}</span>
+          <span class="hint" style="margin:0;">（{{ group.jobs|length }} 種職業）</span>
+        </summary>
+        <div class="panel-body" style="overflow-x:auto;">
+          <table style="width:100%; border-collapse:collapse; font-size:12px; margin-top:6px;">
+            <thead>
+              <tr style="text-align:left; color:var(--text-dim); border-bottom:1px solid rgba(212,175,55,0.15);">
+                <th style="padding:4px 6px;">職業</th>
+                <th style="padding:4px 6px;">屬性加成</th>
+                <th style="padding:4px 6px;">第1技（可購買）</th>
+                <th style="padding:4px 6px;">第2技（技能書）</th>
+                <th style="padding:4px 6px;">第3技（國王專屬）</th>
+                <th style="padding:4px 6px;">精通組合</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for job in group.jobs %}
+              <tr style="border-bottom:1px solid rgba(212,175,55,0.06); vertical-align:top;">
+                <td style="padding:4px 6px; color:var(--gold-bright); white-space:nowrap;">{{ job.name }}</td>
+                <td style="padding:4px 6px; white-space:nowrap;">{{ bonus_line(job.bonus) }}</td>
+                <td style="padding:4px 6px; white-space:nowrap;">{{ job.skill_1 }}</td>
+                <td style="padding:4px 6px; white-space:nowrap;">{{ job.skill_2 }}</td>
+                <td style="padding:4px 6px; white-space:nowrap;">{{ job.skill_3 }}</td>
+                <td style="padding:4px 6px; color:var(--text-dim);">
+                  {{ job.combo_count }} 組：{{ job.combos|join('；') }}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+      {% endfor %}
     </div>
   </details>
 {% endblock %}

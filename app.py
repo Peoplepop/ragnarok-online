@@ -77,8 +77,10 @@ def _backfill_level_bonus_columns():
 # seats. Each tuple is (country_name, root, role, name, level, job_class,
 # job_tier) -- root is the name fragment shared by that country's regalia
 # item names (e.g. "流金御劍"/"流金策劍"/"流金戰劍" for 百鍊流金國). Job
-# classes are verified against TIER3_JOBS/TIER4_JOB_BY_STAT/TIER4_TIE_JOB in
-# game_data/jobs.py; King is always job_tier=4 at level 220 (a deliberate,
+# classes are verified against TIER3_JOBS/TIER4_JOBS in game_data/jobs.py
+# (the 5 King job_class values are 5 of TIER4_JOBS' 200 job names -- see
+# that module's TIER4_JOB_ORDER comment for why those 5 specifically never
+# move); King is always job_tier=4 at level 220 (a deliberate,
 # one-time exception to the normal LEVEL_CAP=200 -- see the is_npc guard
 # added to the level clamp in db.py's seed_defaults()), Advisor/General are
 # always job_tier=3 at level 200.
