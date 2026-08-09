@@ -22,6 +22,14 @@ from web_helpers import (
 from game_data.constants import (
     STAT_FIELDS, IDLE_THRESHOLD_MINUTES, ACTION_LABELS, GOVERNMENT_ROLES,
     FEEDBACK_STATUSES, FEEDBACK_STATUS_LABELS, FEEDBACK_MESSAGE_MAX_LEN, GAME_LAYOUT_BLOCKS, SLOT_LABELS,
+    STAT_LABELS,
+)
+from game_data.jobs import (
+    TIER1_JOBS, TIER2_JOBS, TIER2_CHILDREN_BY_FAMILY, TIER3_CHILDREN_BY_PARENT,
+    TIER4_JOB_BY_STAT, TIER4_TIE_JOB, job_stat_bonus_pct,
+)
+from game_data.skills import (
+    SKILL_CATALOG, NOVICE_SKILL_NAMES, NOVICE_SKILL_STAT_BY_ELEMENT, _skill_key, _novice_skill_key,
 )
 from game_data.avatars import (
     BUILT_IN_AVATARS, BUILT_IN_AVATAR_KEYS, CUSTOM_AVATAR_MAX_BYTES, CUSTOM_AVATAR_DIMENSION,
@@ -78,6 +86,94 @@ def _admin_monster_groups(db):
             grounds.append(grounds_by_name[ground_name])
         grounds_by_name[ground_name]["monsters"].append(entry)
     return grounds
+
+
+def _job_skill_briefs(job_class, slots):
+    briefs = []
+    for slot in slots:
+        s = SKILL_CATALOG[_skill_key(job_class, slot)]
+        briefs.append({
+            "slot": slot, "name": s["name"], "stat": STAT_LABELS.get(s["stat"], s["stat"]),
+            "mp_cost": s["mp_cost"], "multiplier": s["multiplier"], "trigger_chance": s["trigger_chance"],
+            "learn_level": s["learn_level"], "learn_cost": s["learn_cost"],
+            "requires_skill_book": s.get("requires_skill_book", False),
+        })
+    return briefs
+
+
+def _job_bonus_pairs(job_class, tier):
+    return [
+        (STAT_LABELS.get(stat, stat), pct)
+        for stat, pct in job_stat_bonus_pct(job_class, tier).items()
+    ]
+
+
+def _job_reference_data():
+    """Pure code-derived summary of the whole job tree (family -> 二轉 -> 三轉,
+    plus the convergent 四轉 tier) with each job's stat-bonus% and skill list,
+    for the read-only admin reference page. Nothing here is DB-backed --
+    it's TIER*_JOBS/SKILL_CATALOG (game_data/jobs.py, game_data/skills.py)
+    reorganized into a shape the template can walk directly, so there is no
+    save/update route to go with this page."""
+    novice_skills = []
+    for element, stat in NOVICE_SKILL_STAT_BY_ELEMENT.items():
+        s = SKILL_CATALOG[_novice_skill_key(element)]
+        novice_skills.append({
+            "element": element, "name": NOVICE_SKILL_NAMES[element], "stat": STAT_LABELS.get(stat, stat),
+            "mp_cost": s["mp_cost"], "multiplier": s["multiplier"], "trigger_chance": s["trigger_chance"],
+            "learn_level": s["learn_level"], "learn_cost": s["learn_cost"],
+        })
+
+    tree = []
+    for t1_name, t1_info in TIER1_JOBS.items():
+        t2_nodes = []
+        for t2_name in TIER2_CHILDREN_BY_FAMILY.get(t1_name, []):
+            t3_nodes = [
+                {
+                    "name": t3_name,
+                    "bonus": _job_bonus_pairs(t3_name, 3),
+                    "skills": _job_skill_briefs(t3_name, (1, 2, 3)),
+                }
+                for t3_name in TIER3_CHILDREN_BY_PARENT.get(t2_name, [])
+            ]
+            t2_nodes.append({
+                "name": t2_name,
+                "bonus": _job_bonus_pairs(t2_name, 2),
+                "skills": _job_skill_briefs(t2_name, (1, 2)),
+                "children": t3_nodes,
+            })
+        tree.append({
+            "name": t1_name,
+            "bonus": _job_bonus_pairs(t1_name, 1),
+            "children": t2_nodes,
+        })
+
+    tier4_stat_jobs = [
+        {
+            "name": t4_name, "dominant_stat": STAT_LABELS.get(stat, stat),
+            "bonus": _job_bonus_pairs(t4_name, 4),
+            "skills": _job_skill_briefs(t4_name, (1, 2, 3)),
+        }
+        for stat, t4_name in TIER4_JOB_BY_STAT.items()
+    ]
+    tier4_stat_jobs.append({
+        "name": TIER4_TIE_JOB, "dominant_stat": "平手（六圍均衡加成）",
+        "bonus": _job_bonus_pairs(TIER4_TIE_JOB, 4),
+        "skills": _job_skill_briefs(TIER4_TIE_JOB, (1, 2, 3)),
+    })
+
+    return {"novice_skills": novice_skills, "tree": tree, "tier4": tier4_stat_jobs}
+
+
+@admin_bp.route("/admin/jobs")
+@admin_required
+def admin_jobs():
+    """Read-only reference: the full 初心者->一轉->二轉->三轉->四轉 job tree,
+    each job's stat-bonus% and skill list. No DB access at all -- everything
+    is derived straight from game_data/jobs.py + game_data/skills.py, so
+    there's nothing here for an admin to edit (job design lives in code, not
+    a table)."""
+    return render_template("admin_jobs.html", data=_job_reference_data(), active_tab="jobs")
 
 
 @admin_bp.route("/admin/monsters")

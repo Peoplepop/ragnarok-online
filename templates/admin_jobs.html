@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+{% block title %}職業列表 - 五行爭鋒{% endblock %}
+{% block body_class %}wide{% endblock %}
+
+{% macro skill_table(skills) %}
+<table style="width:100%; border-collapse:collapse; font-size:12px; margin-top:6px;">
+  <thead>
+    <tr style="text-align:left; color:var(--text-dim); border-bottom:1px solid rgba(212,175,55,0.15);">
+      <th style="padding:4px 6px;">順位</th>
+      <th style="padding:4px 6px;">技能名稱</th>
+      <th style="padding:4px 6px;">主屬性</th>
+      <th style="padding:4px 6px; text-align:center;">MP消耗</th>
+      <th style="padding:4px 6px; text-align:center;">傷害倍率</th>
+      <th style="padding:4px 6px; text-align:center;">觸發機率</th>
+      <th style="padding:4px 6px; text-align:center;">學習等級</th>
+      <th style="padding:4px 6px; text-align:right;">學習費用</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for sk in skills %}
+    <tr style="border-bottom:1px solid rgba(212,175,55,0.06);">
+      <td style="padding:4px 6px; color:var(--text-dim);">第{{ sk.slot }}技</td>
+      <td style="padding:4px 6px; color:var(--gold-bright);">{{ sk.name }}</td>
+      <td style="padding:4px 6px;">{{ sk.stat }}</td>
+      <td style="padding:4px 6px; text-align:center;">{{ sk.mp_cost }}</td>
+      <td style="padding:4px 6px; text-align:center;">x{{ sk.multiplier }}</td>
+      <td style="padding:4px 6px; text-align:center;">{{ sk.trigger_chance }}%</td>
+      <td style="padding:4px 6px; text-align:center;">Lv.{{ sk.learn_level }}</td>
+      <td style="padding:4px 6px; text-align:right;">
+        {% if sk.requires_skill_book %}
+        <span class="hint" style="margin:0;">怪物掉落技能書</span>
+        {% elif sk.learn_cost is none %}
+        <span class="hint" style="margin:0;">國王專屬（不可學習）</span>
+        {% else %}
+        {{ sk.learn_cost }} 諸神幣
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endmacro %}
+
+{% macro bonus_line(bonus) %}
+<span style="font-size:12px; color:var(--text-dim);">
+  {% for label, pct in bonus %}{{ label }}+{{ pct }}%{% if not loop.last %}、{% endif %}{% endfor %}
+</span>
+{% endmacro %}
+
+{% block content %}
+  {% include "_admin_nav.html" %}
+
+  <h2 style="margin:0 0 8px; color:var(--gold-bright); font-size:18px;">👤 職業列表</h2>
+  <p class="hint" style="margin-top:0; margin-bottom:20px;">
+    職業樹、屬性加成、技能表全部是程式邏輯內建設定，不是資料庫欄位，這頁純粹是查詢參考，沒有可編輯或儲存的地方。
+    轉職路線為 初心者 → 一轉（3 選 1）→ 二轉（每個一轉再分 2 條）→ 三轉（每個二轉再分 2 條）；
+    四轉不是選出來的，是角色精通 3 個三轉職業＋轉生滿 3 次後，依這 3 個三轉職業的主／副屬性加權（主 x2、副 x1）
+    自動加總六圍分數，分數最高的屬性對應到一位四轉職業，平手則落到厚土真尊。
+  </p>
+
+  <details class="panel" style="margin-bottom:16px;">
+    <summary><h3 style="margin:0; color:var(--gold-bright); font-size:15px; display:inline;">🔰 初心者技能（依角色所屬國家屬性，五選一，自動擁有）</h3></summary>
+    <div class="panel-body">
+      <table style="width:100%; border-collapse:collapse; font-size:12px; margin-top:6px;">
+        <thead>
+          <tr style="text-align:left; color:var(--text-dim); border-bottom:1px solid rgba(212,175,55,0.15);">
+            <th style="padding:4px 6px;">屬性</th>
+            <th style="padding:4px 6px;">技能名稱</th>
+            <th style="padding:4px 6px;">主屬性</th>
+            <th style="padding:4px 6px; text-align:center;">MP消耗</th>
+            <th style="padding:4px 6px; text-align:center;">傷害倍率</th>
+            <th style="padding:4px 6px; text-align:center;">觸發機率</th>
+            <th style="padding:4px 6px; text-align:center;">學習等級</th>
+            <th style="padding:4px 6px; text-align:right;">學習費用</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sk in data.novice_skills %}
+          <tr style="border-bottom:1px solid rgba(212,175,55,0.06);">
+            <td style="padding:4px 6px;">{{ macros.element_badge(sk.element) }}</td>
+            <td style="padding:4px 6px; color:var(--gold-bright);">{{ sk.name }}</td>
+            <td style="padding:4px 6px;">{{ sk.stat }}</td>
+            <td style="padding:4px 6px; text-align:center;">{{ sk.mp_cost }}</td>
+            <td style="padding:4px 6px; text-align:center;">x{{ sk.multiplier }}</td>
+            <td style="padding:4px 6px; text-align:center;">{{ sk.trigger_chance }}%</td>
+            <td style="padding:4px 6px; text-align:center;">Lv.{{ sk.learn_level }}</td>
+            <td style="padding:4px 6px; text-align:right;">{{ sk.learn_cost }} 諸神幣</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  {% for t1 in data.tree %}
+  <details class="panel" style="margin-bottom:16px;" open>
+    <summary>
+      <h3 style="margin:0; color:var(--gold-bright); font-size:15px; display:inline;">
+        🌳 一轉：{{ t1.name }}
+      </h3>
+      <span style="margin-left:8px;">{{ bonus_line(t1.bonus) }}</span>
+    </summary>
+    <div class="panel-body">
+      <p class="hint" style="margin:0 0 12px;">一轉沒有專屬技能，沿用初心者技能，直到二轉才會習得新技能。</p>
+
+      {% for t2 in t1.children %}
+      <div style="margin:0 0 16px; padding:12px; border:1px solid var(--border); border-radius:8px;">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px;">
+          <span style="font-size:14px; color:var(--gold-bright);">⚔️ 二轉：{{ t2.name }}</span>
+          {{ bonus_line(t2.bonus) }}
+        </div>
+        {{ skill_table(t2.skills) }}
+
+        {% for t3 in t2.children %}
+        <div style="margin:12px 0 0 20px; padding:10px 12px; border-left:2px solid var(--border);">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px;">
+            <span style="font-size:13px; color:var(--gold-bright);">🗡️ 三轉：{{ t3.name }}</span>
+            {{ bonus_line(t3.bonus) }}
+          </div>
+          {{ skill_table(t3.skills) }}
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+  {% endfor %}
+
+  <details class="panel" style="margin-bottom:16px;" open>
+    <summary><h3 style="margin:0; color:var(--gold-bright); font-size:15px; display:inline;">👑 四轉（3 個三轉職業精通＋轉生3次後，依屬性加權自動判定）</h3></summary>
+    <div class="panel-body">
+      {% for t4 in data.tier4 %}
+      <div style="margin:0 0 16px; padding:12px; border:1px solid var(--border); border-radius:8px;">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px;">
+          <span style="font-size:14px; color:var(--gold-bright);">🌟 {{ t4.name }}</span>
+          <span class="hint" style="margin:0;">（主導屬性：{{ t4.dominant_stat }}）</span>
+          {{ bonus_line(t4.bonus) }}
+        </div>
+        {{ skill_table(t4.skills) }}
+      </div>
+      {% endfor %}
+      <p class="hint" style="margin:0;">
+        四轉第2技能不能用諸神幣學習，只能靠究極打怪場掉落的技能書兌換；第3技能是國王專屬技能，
+        只會直接內建在該國國王 NPC 身上，玩家沒有任何管道學到。
+      </p>
+    </div>
+  </details>
+{% endblock %}
