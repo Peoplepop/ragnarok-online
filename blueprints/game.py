@@ -287,6 +287,17 @@ def _render_game(**extra):
     hunting_grounds = db.execute(
         "SELECT * FROM hunting_grounds WHERE is_hidden = 0 ORDER BY min_level"
     ).fetchall()
+    # Level-appropriate fallback for the 前往打怪 dropdown's default selection,
+    # used only when the player hasn't picked a ground yet this session (see
+    # last_ground_id below/action.html) -- otherwise a level 35 character's
+    # very first hunt would default to the beginner ground (level 1-30) just
+    # because it's first in the list. Falls back to the highest-level ground
+    # if the character's level somehow exceeds every bracket's max_level.
+    level_default_ground = next(
+        (g for g in hunting_grounds if g["min_level"] <= character["level"] <= g["max_level"]),
+        hunting_grounds[-1] if hunting_grounds else None,
+    )
+    default_ground_id = level_default_ground["id"] if level_default_ground else None
     admin_monsters = []
     if session.get("is_admin"):
         # Deliberately NOT filtered by is_hidden -- admin must be able to
@@ -568,6 +579,7 @@ def _render_game(**extra):
         move_targets=move_targets,
         hunting_grounds=hunting_grounds,
         last_ground_id=session.get("last_ground_id"),
+        default_ground_id=default_ground_id,
         admin_monsters=admin_monsters,
         cooldown_seconds=cooldown_seconds,
         recover_cost=recover_cost,
