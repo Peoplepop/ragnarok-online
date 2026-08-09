@@ -439,8 +439,8 @@ def _render_game(**extra):
            FROM activity_log
            LEFT JOIN users ON users.id = activity_log.user_id
            WHERE activity_log.action IN (
-               'character_create', 'hidden_loot_drop', 'boss_set_drop', 'tournament_champion',
-               'promote_tier1', 'promote_tier2', 'promote_tier3', 'promote_tier4',
+               'character_create', 'hidden_loot_drop', 'boss_set_drop', 'skill_book_drop',
+               'tournament_champion', 'promote_tier1', 'promote_tier2', 'promote_tier3', 'promote_tier4',
                'conquer_win', 'challenge_king_win', 'challenge_official_win', 'claim_vacant_king'
            )
            AND COALESCE(users.is_admin, 0) = 0
@@ -978,6 +978,7 @@ def game_hunt():
             log_activity(
                 db, session["user_id"], session["username"], "skill_book_drop",
                 detail=dropped_skill["name"], ip_address=request.remote_addr,
+                character_id=character["character_id"],
             )
         # Potion drop: an independent roll every win, regardless of whatever
         # else this fight already handed out -- a hidden-set/boss-set/skill-

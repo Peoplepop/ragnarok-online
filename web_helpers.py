@@ -174,6 +174,7 @@ _MAJOR_EVENT_MESSAGE_BUILDERS = {
     "character_create": lambda username, detail: f"🆕 {detail} 加入了遊戲",
     "hidden_loot_drop": lambda username, detail: f"✨ {username} 在秘境獲得寶物：{detail}",
     "boss_set_drop": lambda username, detail: f"👑 {username} {detail}",
+    "skill_book_drop": lambda username, detail: f"📖 {username} 在究極打怪場獲得稀世技能書：{detail}",
     "tournament_champion": lambda username, detail: f"🏆 {detail} 奪得本屆天下武道大會冠軍！",
     # detail is already the full "角色名 已X轉為「職業」" phrase (set at
     # log_activity call time in blueprints/character.py's promote_tier1..4),
