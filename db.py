@@ -939,11 +939,22 @@ def _ensure_feedback_columns(conn):
 def _ensure_activity_log_columns(conn):
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(activity_log)")]
     if "character_id" not in cols:
-        # Nullable, no backfill -- historical rows simply render with no
-        # clickable link in the 重大事件 feed (see _major_event_feed in
-        # web_helpers.py), which is fine since there's no reliable way to
-        # retroactively resolve an old row's acting character.
         conn.execute("ALTER TABLE activity_log ADD COLUMN character_id INTEGER")
+    # Backfill historical rows left NULL by log_activity calls made before
+    # this column existed -- safe because every account maps to exactly one
+    # character (no multi-character-per-user flow anywhere in this game), so
+    # user_id -> characters.user_id is an unambiguous lookup. Idempotent
+    # (only touches still-NULL rows) and cheap, so it's fine to run on every
+    # startup rather than gating it behind the ALTER TABLE above -- needed
+    # since this migration already ran once (adding the column) on
+    # deployments from before this backfill was written.
+    conn.execute(
+        """UPDATE activity_log SET character_id = (
+               SELECT c.id FROM characters c WHERE c.user_id = activity_log.user_id
+           )
+           WHERE character_id IS NULL
+             AND EXISTS (SELECT 1 FROM characters c WHERE c.user_id = activity_log.user_id)"""
+    )
 
 
 def _ensure_tournament_registration_columns(conn):
