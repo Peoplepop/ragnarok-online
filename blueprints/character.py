@@ -954,6 +954,20 @@ def character_promote_tier3():
             character["character_id"],
         ),
     )
+    # _process_job_progression only records mastery on the exact hunt where
+    # level crosses from <120 to >=120 *while already 三轉* -- a character
+    # who ground straight to 120 before ever promoting would cross that
+    # threshold while still job_tier 2, miss the record, and then be stuck
+    # forever (old_level >= 120 from here on, so the crossing can never fire
+    # again in this lifetime). Promoting to 三轉 while already at/above 120
+    # has effectively already satisfied both conditions at once, so credit
+    # it immediately here rather than requiring a future hunt that can't
+    # actually happen.
+    if character["level"] >= 120:
+        db.execute(
+            "INSERT OR IGNORE INTO job_masteries (character_id, job_name) VALUES (?, ?)",
+            (character["character_id"], job_name),
+        )
     log_activity(
         db, session["user_id"], session["username"], "promote_tier3",
         detail=f"{character['character_name']} 已三轉為「{job_name}」", ip_address=request.remote_addr,
