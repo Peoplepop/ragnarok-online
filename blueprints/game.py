@@ -22,7 +22,7 @@ from game_data.constants import (
 from game_data.backgrounds import ELEMENT_TO_BG_SLUG
 from game_data.jobs import _process_job_progression
 from game_data.skills import TIER4_SLOT2_SKILL_KEYS, SKILL_CATALOG, _character_usable_skills
-from game_data.equipment import _fetch_equipped_items, character_special_effects
+from game_data.equipment import _fetch_equipped_items, character_special_effects, _hidden_set_summaries
 from game_data.stats import (
     character_final_stats, defense_tower_stats, _current_hp_mp, _bandit_lord_stats,
 )
@@ -344,6 +344,18 @@ def _render_game(**extra):
             if item_id else None
         )
         equipped_slots.append({"slot": shop_type, "label": label, "item": item})
+
+    # Same "highlight a fully-gathered 秘境/魔王 set in neon green" flag
+    # character_page() computes for its own copy of equipped_slots -- this
+    # page has its own separate 背包 block (game_blocks/inventory.html) that
+    # also shows the equipped-items list, so it needs the same flag or it
+    # silently stays un-highlighted there even when the set is complete.
+    active_hidden_set_names = {s["set_name"] for s in _hidden_set_summaries(equipped_items) if s["active"]}
+    for slot in equipped_slots:
+        item = slot["item"]
+        slot["hidden_set_active"] = bool(
+            item and item["hidden_set_key"] and item["hidden_set_name"] in active_hidden_set_names
+        )
 
     equipment_inventory_rows = db.execute(
         """SELECT items.*, inventory.quantity AS quantity,
