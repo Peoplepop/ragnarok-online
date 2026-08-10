@@ -670,6 +670,10 @@ def character_train():
     inventory-joined query independent of character_page's own context."""
     db = get_db()
     character = _character_for_promotion(db)
+    if character["job_tier"] != 4:
+        db.close()
+        flash("修行場只有四轉玩家才能使用")
+        return redirect(url_for("character.character_page"))
     equipped_items = _fetch_equipped_items(db, character)
     settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
     stats = character_final_stats(character, equipped_items, settings)
@@ -713,6 +717,10 @@ def character_train_use_stone():
     computed stat, never the raw level_bonus_* column itself)."""
     db = get_db()
     character = _character_for_promotion(db)
+    if character["job_tier"] != 4:
+        db.close()
+        flash("修行場只有四轉玩家才能使用")
+        return redirect(url_for("character.character_page"))
 
     item = db.execute(
         "SELECT * FROM items WHERE id = ?", (request.form.get("item_id", ""),)
