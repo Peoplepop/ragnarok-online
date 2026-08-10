@@ -689,6 +689,7 @@ def character_rename():
     log_activity(
         db, session["user_id"], session["username"], "rename_character",
         detail=f"{old_name} → {new_name}", ip_address=request.remote_addr,
+        character_id=character["character_id"],
     )
     db.commit()
     db.close()

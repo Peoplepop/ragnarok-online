@@ -49,6 +49,7 @@ ACTION_LABELS = {
     "promote_tier4": "四轉",
     "rebirth": "轉生",
     "change_avatar": "更換頭像",
+    "rename_character": "更改角色名稱",
     "tutorial_dismissed": "新手指引結束/略過",
     "learn_skill": "學習技能",
     "skill_book_drop": "掉落技能書",

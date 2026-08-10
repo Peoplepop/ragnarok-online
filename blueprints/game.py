@@ -441,7 +441,8 @@ def _render_game(**extra):
            WHERE activity_log.action IN (
                'character_create', 'hidden_loot_drop', 'boss_set_drop', 'skill_book_drop',
                'tournament_champion', 'promote_tier1', 'promote_tier2', 'promote_tier3', 'promote_tier4',
-               'conquer_win', 'challenge_king_win', 'challenge_official_win', 'claim_vacant_king'
+               'conquer_win', 'challenge_king_win', 'challenge_official_win', 'claim_vacant_king',
+               'rename_character'
            )
            AND COALESCE(users.is_admin, 0) = 0
            ORDER BY activity_log.created_at DESC LIMIT 100"""

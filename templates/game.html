@@ -200,7 +200,7 @@
     </div>
   </div>
 
-  <div class="panel" style="margin-top:20px;">
+  <div class="panel" id="major-events-panel" style="margin-top:20px;">
     <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">📜 重大事件</h3>
     {% if major_events %}
     <div id="major-events-list" style="display:flex; flex-direction:column; gap:10px; min-height:100px;"></div>
@@ -214,7 +214,7 @@
     {% endif %}
   </div>
 
-  <div class="panel" style="margin-top:20px;">
+  <div class="panel" id="chat-panel" style="margin-top:20px;">
     <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">💬 聊天</h3>
     <div style="display:flex; gap:18px; flex-wrap:wrap;">
       <div style="flex:1 1 300px; min-width:260px;">
@@ -480,6 +480,19 @@
           var a = document.createElement("a");
           a.href = "#block-" + key;
           a.textContent = blockLabels[key] || key;
+          nav.appendChild(a);
+        });
+        // 重大事件/聊天 aren't part of the admin-orderable action_block_order
+        // system (see game_data.constants.GAME_LAYOUT_BLOCKS) -- they're
+        // fixed, always-rendered panels lower on the page, so they're just
+        // appended here directly rather than needing their own render-check.
+        [["major-events-panel", "📜 重大事件"], ["chat-panel", "💬 聊天"]].forEach(function (pair) {
+          var el = document.getElementById(pair[0]);
+          if (!el) return;
+          any = true;
+          var a = document.createElement("a");
+          a.href = "#" + pair[0];
+          a.textContent = pair[1];
           nav.appendChild(a);
         });
         if (!any) nav.style.display = "none";
