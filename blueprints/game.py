@@ -293,8 +293,15 @@ def _render_game(**extra):
     # very first hunt would default to the beginner ground (level 1-30) just
     # because it's first in the list. Falls back to the highest-level ground
     # if the character's level somehow exceeds every bracket's max_level.
+    # tier4_realm skipped for a non-四轉 character even when its level falls
+    # inside 120-130 -- otherwise a job_tier 3 character in that range would
+    # default-select a ground it's not allowed to enter (its <option> renders
+    # disabled, see action.html), landing the dropdown on a locked choice.
     level_default_ground = next(
-        (g for g in hunting_grounds if g["min_level"] <= character["level"] <= g["max_level"]),
+        (
+            g for g in hunting_grounds if g["min_level"] <= character["level"] <= g["max_level"]
+            and (g["tier"] != "tier4_realm" or character["job_tier"] == 4)
+        ),
         hunting_grounds[-1] if hunting_grounds else None,
     )
     default_ground_id = level_default_ground["id"] if level_default_ground else None
@@ -440,6 +447,7 @@ def _render_game(**extra):
            LEFT JOIN users ON users.id = activity_log.user_id
            WHERE activity_log.action IN (
                'character_create', 'hidden_loot_drop', 'boss_set_drop', 'skill_book_drop',
+               'stat_stone_drop',
                'tournament_champion', 'promote_tier1', 'promote_tier2', 'promote_tier3', 'promote_tier4',
                'conquer_win', 'challenge_king_win', 'challenge_official_win', 'claim_vacant_king',
                'rename_character'
@@ -774,6 +782,16 @@ def game_hunt():
         db.close()
         flash("請選擇一個有效的打怪場")
         return redirect(url_for("game.game"))
+    # 太虛聖域 four-transcendence gate: enforced server-side (never just hidden
+    # client-side, see action.html's disabled <option>) so a hand-crafted POST
+    # naming this ground's id can't bypass the job_tier requirement. Scoped to
+    # the player-chosen path only (forced_monster is None) -- an admin's own
+    # "指定怪物測試" dropdown is deliberately exempt, same spirit as the
+    # is_hidden=0 filter above only applying to the ordinary ground_id lookup.
+    if forced_monster is None and ground["tier"] == "tier4_realm" and character["job_tier"] != 4:
+        db.close()
+        flash("太虛聖域只有四轉玩家才能進入")
+        return redirect(url_for("game.game"))
     # Remembered so the next visit to /game pre-selects this ground instead
     # of always defaulting back to the first <option> -- see last_ground_id
     # in _render_game/action.html.
@@ -889,6 +907,7 @@ def game_hunt():
     pending_boss_id = None
     boss_room_available = False
     skill_book_dropped = None
+    stat_stone_dropped = None
     hidden_loot_dropped = None
     boss_set_dropped = None
     potion_dropped = None
@@ -981,6 +1000,24 @@ def game_hunt():
                 detail=dropped_skill["name"], ip_address=request.remote_addr,
                 character_id=character["character_id"],
             )
+        # 屬性石 drop: only rolls at 太虛聖域 (job_tier==4 gated at the top of
+        # this route), same independent-roll-every-win convention as the
+        # skill book/potion/pouch drops. On success, picks uniformly among
+        # the 6 stat stones (str/def/agi/luk/hp/mp) -- not weighted toward
+        # any particular stat -- and adds it to the winner's inventory
+        # through the same _add_to_inventory the shop/trade/loot systems use.
+        if ground["tier"] == "tier4_realm" and random.random() * 100 < settings["stat_stone_drop_percent"]:
+            stone_pool = db.execute(
+                "SELECT * FROM items WHERE consumable_effect = 'stat_stone' ORDER BY id"
+            ).fetchall()
+            if stone_pool:
+                stat_stone_dropped = random.choice(stone_pool)
+                _add_to_inventory(db, character["character_id"], stat_stone_dropped["id"], 1)
+                log_activity(
+                    db, session["user_id"], session["username"], "stat_stone_drop",
+                    detail=f"{ground['name']}：{stat_stone_dropped['name']}",
+                    ip_address=request.remote_addr, character_id=character["character_id"],
+                )
         # Potion drop: an independent roll every win, regardless of whatever
         # else this fight already handed out -- a hidden-set/boss-set/skill-
         # book drop and a potion can both land in the same fight.
@@ -1135,6 +1172,7 @@ def game_hunt():
         hidden_loot_dropped=hidden_loot_dropped,
         boss_room_available=boss_room_available,
         skill_book_dropped=skill_book_dropped,
+        stat_stone_dropped=stat_stone_dropped,
         boss_set_dropped=boss_set_dropped,
         potion_dropped=potion_dropped,
         small_pouch_dropped=small_pouch_dropped,
@@ -2152,7 +2190,11 @@ def game_inventory_use():
     item = db.execute(
         "SELECT * FROM items WHERE id = ?", (request.form.get("item_id", ""),)
     ).fetchone()
-    if item is None or item["consumable_effect"] is None:
+    # stat_stone is deliberately excluded here (same as consumable_effect IS
+    # NULL): it's never "used" through this generic route -- it has its own
+    # 70%/30% probability mechanic at /character/train/use_stone, and letting
+    # it through here would let a player bypass that roll entirely.
+    if item is None or item["consumable_effect"] is None or item["consumable_effect"] == "stat_stone":
         db.close()
         flash("找不到可以使用的道具")
         return redirect(url_for("game.game"))
@@ -2315,7 +2357,7 @@ def game_shop():
            FROM items LEFT JOIN countries ON countries.id = items.country_id
            WHERE items.hidden_set_key IS NULL
              AND items.acquisition_method != 'monster_drop'
-             AND (items.consumable_effect IS NULL OR items.consumable_effect != 'currency')
+             AND (items.consumable_effect IS NULL OR items.consumable_effect NOT IN ('currency', 'stat_stone'))
              AND (? = 0 OR items.shop_type = 'consumable')
              AND (
                (

@@ -1,5 +1,6 @@
 """Character creation, the character sheet, promotions, rebirth and skills."""
 import os
+import random
 import sqlite3
 import uuid
 
@@ -9,7 +10,7 @@ from db import get_db, log_activity, LEVEL_CAP, ELEMENT_OVERCOMES
 from web_helpers import (
     login_required, admin_required, character_required, _cooldown_remaining_seconds,
     _validate_character_name, _in_any_war_window, _morale_buff_active, avatar_url,
-    _process_square_image_upload,
+    _process_square_image_upload, _remove_from_inventory,
 )
 from game_data.constants import (
     SLOT_LABELS, EQUIP_SLOT_COLUMNS, LEVEL_STAT_GROWTH, STAT_LABELS,
@@ -637,6 +638,120 @@ def character_reroll_stats():
     return render_template(
         "job_change_result.html",
         title="屬性重洗完成！",
+        stats_before=stats_before,
+        stats_after=stats_after,
+        stat_labels=STAT_LABELS,
+    )
+
+
+# 屬性石 (stat stone)淬煉: which characters.level_bonus_<stat> column each
+# items.stat value on a stat_stone row maps to -- see character_train_use_stone.
+# Distinct from character_reroll_stats above (that route re-rolls the ENTIRE
+# accumulated level-up point history at once via _roll_level_up_stat_points;
+# this one nudges a single stat by a small random amount, one stone at a
+# time) -- deliberately not sharing a route with it.
+STAT_STONE_LEVEL_BONUS_COLUMN = {
+    "str": "level_bonus_str", "def": "level_bonus_def", "agi": "level_bonus_agi",
+    "luk": "level_bonus_luk", "hp": "level_bonus_hp", "mp": "level_bonus_mp",
+}
+# 70% chance the roll is positive (+1~+3 points), 30% negative (-1~-3 points)
+# -- see character_train_use_stone.
+STAT_STONE_POSITIVE_CHANCE = 0.7
+STAT_STONE_MIN_POINTS = 1
+STAT_STONE_MAX_POINTS = 3
+
+
+@character_bp.route("/character/train")
+@character_required
+def character_train():
+    """修行場: lists the character's owned 屬性石 (one row per stat, quantity 0
+    if none owned) with a "使用" link into character_train_use_stone for each.
+    A dedicated page (not a character.html panel) since it needs its own
+    inventory-joined query independent of character_page's own context."""
+    db = get_db()
+    character = _character_for_promotion(db)
+    stones = db.execute(
+        """SELECT items.id, items.name, items.stat, COALESCE(inventory.quantity, 0) AS quantity
+           FROM items
+           LEFT JOIN inventory
+               ON inventory.item_id = items.id AND inventory.character_id = ?
+           WHERE items.consumable_effect = 'stat_stone'
+           ORDER BY items.id""",
+        (character["character_id"],),
+    ).fetchall()
+    db.close()
+    return render_template(
+        "character_train.html",
+        character=character,
+        stones=stones,
+        stat_labels=STAT_LABELS,
+    )
+
+
+@character_bp.route("/character/train/use_stone", methods=["POST"])
+@character_required
+def character_train_use_stone():
+    """Consumes 1 屬性石, rolling 70%/30% for a +1~+3 / -1~-3 POINT adjustment
+    (converted to raw stat value via LEVEL_UP_POINT_VALUE, same conversion
+    every level-up already uses) to the level_bonus_<stat> column matching
+    the stone's own items.stat. Floored at 0 (never negative) -- unlike
+    character_reroll_stats' stat floor, this has nothing to do with
+    characters.stat_floor_* (that floor only clamps the CHARACTER's final
+    computed stat, never the raw level_bonus_* column itself)."""
+    db = get_db()
+    character = _character_for_promotion(db)
+
+    item = db.execute(
+        "SELECT * FROM items WHERE id = ?", (request.form.get("item_id", ""),)
+    ).fetchone()
+    if item is None or item["consumable_effect"] != "stat_stone":
+        db.close()
+        flash("找不到可以淬煉的屬性石")
+        return redirect(url_for("character.character_train"))
+
+    owned = db.execute(
+        "SELECT quantity FROM inventory WHERE character_id = ? AND item_id = ?",
+        (character["character_id"], item["id"]),
+    ).fetchone()
+    if owned is None or owned["quantity"] < 1:
+        db.close()
+        flash("背包裡沒有這顆屬性石")
+        return redirect(url_for("character.character_train"))
+
+    equipped_items = _fetch_equipped_items(db, character)
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+    stats_before = character_final_stats(character, equipped_items, settings)
+
+    _remove_from_inventory(db, character["character_id"], item["id"], 1)
+
+    stat = item["stat"]
+    column = STAT_STONE_LEVEL_BONUS_COLUMN[stat]
+    points = random.randint(STAT_STONE_MIN_POINTS, STAT_STONE_MAX_POINTS)
+    if random.random() >= STAT_STONE_POSITIVE_CHANCE:
+        points = -points
+    delta_value = points * LEVEL_UP_POINT_VALUE[stat]
+    current_value = character[column]
+    new_value = max(0, current_value + delta_value)
+    actual_delta = new_value - current_value
+
+    db.execute(f"UPDATE characters SET {column} = ? WHERE id = ?", (new_value, character["character_id"]))
+
+    stat_label = STAT_LABELS[stat]
+    log_activity(
+        db, session["user_id"], session["username"], "stat_stone_use",
+        detail=f"使用{item['name']}，{stat_label} {'+' if actual_delta >= 0 else ''}{actual_delta}",
+        ip_address=request.remote_addr, character_id=character["character_id"],
+    )
+    db.commit()
+
+    updated = dict(character)
+    updated[column] = new_value
+    stats_after = character_final_stats(updated, equipped_items, settings)
+
+    db.close()
+    return render_template(
+        "job_change_result.html",
+        title="屬性石淬煉結果",
         stats_before=stats_before,
         stats_after=stats_after,
         stat_labels=STAT_LABELS,

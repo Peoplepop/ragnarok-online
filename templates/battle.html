@@ -234,6 +234,9 @@
     {% if skill_book_dropped %}
     <p style="margin:10px 0 0; font-size:13px; color:var(--gold-bright);">📖 稀世珍寶！你獲得了技能書「{{ skill_book_dropped }}」，四轉後可用它學習這個技能！</p>
     {% endif %}
+    {% if stat_stone_dropped %}
+    <p style="margin:10px 0 0; font-size:13px; color:var(--gold-bright);">💎 意外收穫！你獲得了「{{ stat_stone_dropped.name }}」，已放入背包，可於修行場淬煉！</p>
+    {% endif %}
     {% if boss_set_dropped %}
     <p style="margin:10px 0 0; font-size:13px; color:var(--gold-bright);">👑 魔王套裝掉落！你獲得了「{{ boss_set_dropped.name }}」（{{ boss_set_dropped.hidden_set_name }}），已放入背包！</p>
     {% endif %}
@@ -404,7 +407,7 @@
       }
 
       var leveledUp = {{ 'true' if leveled_up else 'false' }};
-      var lootDropped = {{ 'true' if (hidden_loot_dropped or boss_set_dropped or skill_book_dropped or potion_dropped or small_pouch_dropped or large_pouch_dropped or (admin_items_dropped and admin_items_dropped|length > 0)) else 'false' }};
+      var lootDropped = {{ 'true' if (hidden_loot_dropped or boss_set_dropped or skill_book_dropped or stat_stone_dropped or potion_dropped or small_pouch_dropped or large_pouch_dropped or (admin_items_dropped and admin_items_dropped|length > 0)) else 'false' }};
 
       function soundEnabled() {
         try {

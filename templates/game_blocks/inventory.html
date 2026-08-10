@@ -13,9 +13,13 @@
         {% elif item.consumable_effect == 'heal_both' %}（恢復 {{ item.consumable_amount }} HP + {{ item.consumable_amount }} MP）
         {% elif item.consumable_effect == 'return_scroll' %}（傳送回該地點）
         {% elif item.consumable_effect == 'currency' %}（獲得 {{ item.consumable_amount }} 諸神幣）
+        {% elif item.consumable_effect == 'stat_stone' %}（可於修行場淬煉）
         {% endif %}
         持有 {{ item.quantity }} 件
       </span>
+      {% if item.consumable_effect == 'stat_stone' %}
+      <a href="{{ url_for('character.character_train') }}" class="turn-action-control btn-success" style="padding:6px 14px; font-size:13px; text-decoration:none;">前往修行場</a>
+      {% else %}
       <form method="post" action="{{ url_for('game.game_inventory_use') }}" style="display:flex; gap:6px; align-items:center;">
         <input type="hidden" name="item_id" value="{{ item.id }}">
         {% if item.consumable_effect != 'return_scroll' %}
@@ -24,6 +28,7 @@
         {% endif %}
         <button type="submit" class="turn-action-control btn-success" style="padding:6px 14px; font-size:13px;">使用</button>
       </form>
+      {% endif %}
     </div>
     {% endfor %}
   </div>

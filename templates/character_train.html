@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}修行場 - 五行爭鋒{% endblock %}
+
+{% block content %}
+  <div class="panel" style="margin-bottom:20px;">
+    <h2 style="margin:0 0 8px; color:var(--gold-bright);">修行場</h2>
+    <p class="hint" style="margin:0;">
+      使用屬性石淬煉屬性：每顆石頭有 70% 機率讓對應屬性 +1~+3 點，30% 機率 -1~-3 點（點數換算為實際數值，且不會低於 0），每次淬煉會消耗 1 顆石頭。
+    </p>
+  </div>
+
+  <div class="panel" style="margin-bottom:20px;">
+    <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">持有的屬性石</h3>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      {% for stone in stones %}
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <span style="font-size:13px;">{{ stone.name }}（{{ stat_labels[stone.stat] }}）持有 {{ stone.quantity }} 顆</span>
+        <form method="post" action="{{ url_for('character.character_train_use_stone') }}">
+          <input type="hidden" name="item_id" value="{{ stone.id }}">
+          <button type="submit" class="turn-action-control btn-success" style="padding:6px 14px; font-size:13px;" {% if stone.quantity < 1 %}disabled{% endif %}>使用</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <a href="{{ url_for('character.character_page') }}" class="btn">回到角色頁</a>
+{% endblock %}

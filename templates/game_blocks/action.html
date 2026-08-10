@@ -63,7 +63,12 @@
       {% set selected_ground_id = last_ground_id or default_ground_id %}
       <select name="ground_id" id="hunt-ground-select" class="turn-action-control">
         {% for g in hunting_grounds %}
-        <option value="{{ g.id }}" {% if selected_ground_id and g.id == selected_ground_id %}selected{% endif %}>{{ g.name }}（Lv.{{ g.min_level }}-{{ g.max_level }}）</option>
+        {% set locked = g.tier == 'tier4_realm' and character.job_tier != 4 %}
+        <option value="{{ g.id }}"
+                {% if locked %}disabled style="color:#888;"{% endif %}
+                {% if selected_ground_id and g.id == selected_ground_id and not locked %}selected{% endif %}>
+          {{ g.name }}（Lv.{{ g.min_level }}-{{ g.max_level }}）{% if locked %}（需四轉）{% endif %}
+        </option>
         {% endfor %}
       </select>
       <button type="submit" class="turn-action-control btn-primary" style="padding:6px 14px; font-size:13px;">前往打怪</button>

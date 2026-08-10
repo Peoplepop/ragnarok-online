@@ -426,6 +426,54 @@ def _build_boss_set_items():
 # monsters.
 BOSS_SET_ITEMS = _build_boss_set_items()
 
+# --- 屬性石 (stat stones): 太虛聖域 drop, used at /character/train ------------
+# 6 items, one per stat (str/def/agi/luk/hp/mp). shop_type is 'consumable'
+# (NOT a new shop_type of its own) specifically so they fall into the
+# equipment_inventory_rows `!= 'consumable'` exclusion in blueprints/game.py
+# and never reach equipment_inventory_items[row['shop_type']] -- that dict
+# only has weapon/armor/accessory keys (SLOT_LABELS), so any other shop_type
+# there would KeyError. Being a consumable also means they're picked up for
+# free by game.py's existing `consumable_items` query (WHERE
+# items.consumable_effect IS NOT NULL) without a dedicated query of their own.
+# `stat` records which level_bonus_<stat> character column
+# /character/train/use_stone adjusts on use -- repurposed here for hp/mp too,
+# which the legacy equip-bonus `stat` column never targets on its own
+# (equipment stat bonuses only ever use str/def/agi/luk; hp/mp equipment
+# bonuses go through the separate stat_bonus_hp/stat_bonus_mp admin-item
+# columns instead -- see compute_final_stats). stat_bonus/consumable_amount
+# are both inert placeholders here (0/NULL, unused by the stat-stone flow,
+# same "never actually read" convention as every other non-equipment row's
+# stat_bonus -- see DEFAULT_ITEMS' consumable entries above). price=0: never
+# purchasable, monster-drop only (see game_shop's listing query exclusion
+# and game_hunt's stat_stone_drop_percent roll).
+#
+# name carries the literal "70%" prefix per the requester's explicit
+# clarification (the 70% is the /character/train/use_stone淬煉 success
+# chance baked right into the item's own display name, not a separate drop
+# gate) -- every place that shows a stone (inventory, drop banner, major-
+# event detail, log_activity detail, the 修行場 button label) just reads
+# items.name, so this one list is the only place the string is spelled out.
+STAT_STONE_ITEMS = [
+    {"shop_type": "consumable", "name": "70%力量石", "price": 0, "stat": "str", "stat_bonus": 0,
+     "country_name": None, "consumable_effect": "stat_stone"},
+    {"shop_type": "consumable", "name": "70%防禦石", "price": 0, "stat": "def", "stat_bonus": 0,
+     "country_name": None, "consumable_effect": "stat_stone"},
+    {"shop_type": "consumable", "name": "70%敏捷石", "price": 0, "stat": "agi", "stat_bonus": 0,
+     "country_name": None, "consumable_effect": "stat_stone"},
+    {"shop_type": "consumable", "name": "70%幸運石", "price": 0, "stat": "luk", "stat_bonus": 0,
+     "country_name": None, "consumable_effect": "stat_stone"},
+    {"shop_type": "consumable", "name": "70%HP石", "price": 0, "stat": "hp", "stat_bonus": 0,
+     "country_name": None, "consumable_effect": "stat_stone"},
+    {"shop_type": "consumable", "name": "70%MP石", "price": 0, "stat": "mp", "stat_bonus": 0,
+     "country_name": None, "consumable_effect": "stat_stone"},
+]
+# Appended straight to DEFAULT_ITEMS (unlike BOSS_SET_ITEMS) since these are
+# ordinary enough rows -- no live-DB-only concern -- that reusing the exact
+# same two paths DEFAULT_ITEMS already feeds (the empty-table fresh-seed loop
+# and _upgrade_items' add-by-name migration for an existing table) is enough
+# on its own; matches HIDDEN_SET_ITEMS' convention just above.
+DEFAULT_ITEMS = DEFAULT_ITEMS + STAT_STONE_ITEMS
+
 # Monster roster, generated rather than hand-typed: every 5-level bracket
 # within a hunting ground gets 2 regular monsters (two long-running species
 # per tier, escalating through an adjective ladder as the bracket climbs),
@@ -618,6 +666,79 @@ HIDDEN_MONSTERS = [
         "image_key": "wuji_sage",
     },
 ]
+
+# --- 太虛聖域 (four-transcendence-only arena) --------------------------------
+# A THIRD kind of special hunting ground, distinct from both the ordinary
+# _MONSTER_TIER_CONFIG-generated grounds and the two random-interrupt 秘境
+# above: unlike a 秘境 it IS a normal, always-selectable destination
+# (is_hidden=0, shows up in the /game hunt dropdown) -- but unlike every
+# ordinary ground it is gated to job_tier == 4 characters only (enforced
+# server-side in game_hunt, never just hidden client-side). Every job_tier==4
+# character has necessarily already rebirthed 3 times (see
+# game_data/jobs.py's _process_job_progression), so this ground's monsters
+# are tuned to be a real step up from the toughest EXISTING ground (究極
+# 打怪場, whose own strongest regular monster tops out at
+# hp1400/atk130/def65/agi75/luk38 -- see _MONSTER_TIER_CONFIG's "ultimate"
+# "high" anchor) rather than reusing that generator's linear-interpolation
+# scheme. Hand-tuned by the requester rather than simulated (unlike
+# HIDDEN_MONSTERS above) -- deliberately kept in its OWN list rather than
+# folded into _MONSTER_TIER_CONFIG/_build_default_monsters, so it never gets
+# swept up by that generator's bracket/guardian/boss machinery.
+#
+# One monster per 2-level bracket across the ground's 120-130 span, each
+# aligned to a real Wu Xing element (element_neutral stays False/0 -- unlike
+# the neutral 秘境 monsters, these DO get country 相剋 bonus/penalty) so a
+# character's own element strategy still matters here. is_boss/is_guardian
+# both 0 for all five -- see _seed_tier4_arena_monsters' comment for why this
+# ground intentionally has no guardian/boss encounter at all.
+TIER4_ARENA_MONSTERS = [
+    {
+        "name": "業火魔軀", "level_min": 120, "level_max": 121,
+        "hp": 1820, "atk": 169, "def": 85, "agi": 98, "luk": 49,
+        "currency_reward": 845, "exp_reward": 135, "element": "火",
+        "image_key": "tier4_demonbody",
+    },
+    {
+        "name": "蝕道妖靈", "level_min": 122, "level_max": 123,
+        "hp": 1960, "atk": 182, "def": 91, "agi": 105, "luk": 53,
+        "currency_reward": 910, "exp_reward": 146, "element": "木",
+        "image_key": "tier4_shade",
+    },
+    {
+        "name": "幽冥法王", "level_min": 124, "level_max": 125,
+        "hp": 2100, "atk": 195, "def": 98, "agi": 113, "luk": 57,
+        "currency_reward": 975, "exp_reward": 156, "element": "水",
+        "image_key": "tier4_lord",
+    },
+    {
+        "name": "破界魔靈", "level_min": 126, "level_max": 127,
+        "hp": 2240, "atk": 208, "def": 104, "agi": 120, "luk": 61,
+        "currency_reward": 1040, "exp_reward": 166, "element": "土",
+        "image_key": "tier4_breaker",
+    },
+    {
+        "name": "太虛尊靈", "level_min": 128, "level_max": 130,
+        "hp": 2450, "atk": 228, "def": 114, "agi": 131, "luk": 67,
+        "currency_reward": 1138, "exp_reward": 182, "element": "金",
+        "image_key": "tier4_sovereign",
+    },
+]
+for _m in TIER4_ARENA_MONSTERS:
+    _m["tier"] = "tier4_realm"
+    _m["is_boss"] = 0
+    _m["is_guardian"] = 0
+    _m["element_neutral"] = False
+
+# monster_exp mirrors DEFAULT_HUNTING_GROUNDS' own per-tier values (10/20/40/
+# 80, roughly doubling tier to tier) -- confirmed unused by any live game
+# logic (no blueprint or template ever reads hunting_grounds.monster_exp;
+# actual per-kill EXP always comes from monsters.exp_reward instead), kept
+# only because every hunting_grounds row has always carried a value here.
+# 120 continues that same rough doubling trend one step past 究極打怪場's 80.
+TIER4_ARENA_HUNTING_GROUND = {
+    "tier": "tier4_realm", "name": "太虛聖域", "min_level": 120, "max_level": 130,
+    "monster_exp": 120, "is_hidden": 0,
+}
 
 # tier -> the hidden ground a fired trigger sends the hunter to, and which
 # game_settings columns gate it. Single source of truth shared by game_hunt's
@@ -1184,6 +1305,71 @@ def _seed_hidden_grounds(conn):
         )
 
 
+def _seed_tier4_arena_ground(conn):
+    """Add-only seed of the 太虛聖域 hunting_grounds row (tier4_realm).
+    Same idempotent by-tier convention as _seed_hidden_grounds, but this
+    ground is_hidden=0 (a normal selectable destination) rather than a random
+    秘境 interrupt, so it gets its own small seed function instead of being
+    folded into HIDDEN_HUNTING_GROUNDS/_seed_hidden_grounds. Runs on every
+    startup for both a fresh and a long-lived DB; touches nothing once the
+    row exists (an admin who renames 太虛聖域 keeps their name)."""
+    existing_tiers = {row["tier"] for row in conn.execute("SELECT tier FROM hunting_grounds")}
+    if TIER4_ARENA_HUNTING_GROUND["tier"] in existing_tiers:
+        return
+    g = TIER4_ARENA_HUNTING_GROUND
+    conn.execute(
+        """INSERT INTO hunting_grounds (tier, name, min_level, max_level, monster_exp, is_hidden)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (g["tier"], g["name"], g["min_level"], g["max_level"], g["monster_exp"], g["is_hidden"]),
+    )
+
+
+def _seed_tier4_arena_monsters(conn):
+    """Add-only seed of the 5 太虛聖域 monsters (TIER4_ARENA_MONSTERS), matched
+    by exact name so a prior run's rows are never duplicated and a tuned
+    existing row is never overwritten -- same convention as
+    _seed_hidden_monsters. Must run AFTER _seed_tier4_arena_ground (needs its
+    id) and after _rebuild_monster_roster (which only wipes/regenerates the
+    ordinary _MONSTER_TIER_CONFIG roster; this ground's monsters are a
+    separate hand-authored list and are never touched by that rebuild).
+
+    Deliberately no guardian/boss row for this ground (unlike every
+    _MONSTER_TIER_CONFIG tier) -- verified safe: game_hunt's guardian pick is
+    `guardian = next((m for m in monsters if m["is_guardian"]), None)`, which
+    is simply None here, and `is_guardian_fight = bool(guardian) and ...`
+    short-circuits to False without ever evaluating the encounter-percent
+    roll; the "no monster at all" guard right after
+    (`if not regulars_any and not guardian`) still passes since the 5 regular
+    monsters exist. `boss = next((m for m in monsters if m["is_boss"]), None)`
+    is likewise just None, and the 魔王房間 follow-up is only ever offered when
+    `is_guardian_fight` is True (`if hidden_key is None and is_guardian_fight
+    and boss is not None ...`), so a None boss is never dereferenced. No
+    schema or game-logic change was needed to support a guardian/boss-less
+    hunting ground -- the existing code already treats both as optional."""
+    ground_ids = {
+        row["tier"]: row["id"] for row in conn.execute("SELECT id, tier FROM hunting_grounds")
+    }
+    if TIER4_ARENA_HUNTING_GROUND["tier"] not in ground_ids:
+        return
+    existing_names = {row["name"] for row in conn.execute("SELECT name FROM monsters")}
+    for m in TIER4_ARENA_MONSTERS:
+        if m["name"] in existing_names:
+            continue
+        conn.execute(
+            """INSERT INTO monsters
+               (hunting_ground_id, name, is_boss, is_guardian, level_min, level_max,
+                hp, atk, def, agi, luk, currency_reward, exp_reward, element, element_neutral, image_key)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                ground_ids[m["tier"]], m["name"], m["is_boss"], m["is_guardian"],
+                m["level_min"], m["level_max"],
+                m["hp"], m["atk"], m["def"], m["agi"], m["luk"],
+                m["currency_reward"], m["exp_reward"], m["element"],
+                int(bool(m.get("element_neutral"))), m["image_key"],
+            ),
+        )
+
+
 def _seed_hidden_monsters(conn):
     """Add-only seed of the one monster each 秘境 holds, matched by exact name
     so it is never duplicated and never overwrites a tuned existing row. Must
@@ -1476,6 +1662,14 @@ def _ensure_game_settings_columns(conn):
         conn.execute(
             "ALTER TABLE game_settings ADD COLUMN skill_book_drop_percent REAL NOT NULL DEFAULT 0.005"
         )
+    if "stat_stone_drop_percent" not in cols:
+        # 屬性石 drop roll, 太虛聖域 only -- see game_hunt's stat_stone_drop_percent
+        # check. Default 0.01 is 1/10000 (0.01% expressed in the same "percent,
+        # compared against random()*100" convention as skill_book_drop_percent
+        # above), per the feature's spec.
+        conn.execute(
+            "ALTER TABLE game_settings ADD COLUMN stat_stone_drop_percent REAL NOT NULL DEFAULT 0.01"
+        )
     if "monster_combat_stat_bump" not in cols:
         # Flat buff (can be set negative to nerf instead) applied to every
         # monster's atk/def/agi/luk -- see _bump_monster_combat_stats.
@@ -1637,6 +1831,7 @@ def seed_defaults():
     else:
         _upgrade_hunting_ground_bounds(conn)
     _seed_hidden_grounds(conn)
+    _seed_tier4_arena_ground(conn)
 
     # is_npc = 0 guard: NPC officeholders (see _seed_npc_officials in app.py)
     # deliberately seed the King seat above LEVEL_CAP (level 220, a legendary
@@ -1688,6 +1883,7 @@ def seed_defaults():
         _upgrade_monster_elements(conn)
         _rebuild_monster_roster(conn)
     _seed_hidden_monsters(conn)
+    _seed_tier4_arena_monsters(conn)
     _backfill_monster_image_keys(conn)
     _backfill_monster_luk(conn)
     combat_stat_bump = conn.execute(

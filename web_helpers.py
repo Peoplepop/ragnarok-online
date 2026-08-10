@@ -175,6 +175,7 @@ _MAJOR_EVENT_MESSAGE_BUILDERS = {
     "hidden_loot_drop": lambda username, detail: f"✨ {username} 在秘境獲得寶物：{detail}",
     "boss_set_drop": lambda username, detail: f"👑 {username} {detail}",
     "skill_book_drop": lambda username, detail: f"📖 {username} 在究極打怪場獲得稀世技能書：{detail}",
+    "stat_stone_drop": lambda username, detail: f"💎 {username} 在太虛聖域獲得屬性石：{detail}",
     # detail is already the full "舊名 → 新名" phrase set at log_activity call
     # time in character_rename -- username here is the ACCOUNT username, same
     # convention as hidden_loot_drop/skill_book_drop above.

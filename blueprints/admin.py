@@ -12,8 +12,8 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from werkzeug.security import generate_password_hash
 
 from db import (
-    get_db, LEVEL_CAP, log_activity, DEFAULT_MONSTERS, HIDDEN_MONSTERS, _bump_monster_combat_stats,
-    ITEM_STAT_BONUS_COLUMNS,
+    get_db, LEVEL_CAP, log_activity, DEFAULT_MONSTERS, HIDDEN_MONSTERS, TIER4_ARENA_MONSTERS,
+    _bump_monster_combat_stats, ITEM_STAT_BONUS_COLUMNS,
 )
 from web_helpers import (
     admin_required, _parse_dt, _valid_war_time, _format_duration, _sanitized_action_block_order,
@@ -773,6 +773,7 @@ def admin_update_game_settings():
         small_money_pouch_drop_percent = float(request.form.get("small_money_pouch_drop_percent", ""))
         large_money_pouch_drop_percent = float(request.form.get("large_money_pouch_drop_percent", ""))
         skill_book_drop_percent = float(request.form.get("skill_book_drop_percent", ""))
+        stat_stone_drop_percent = float(request.form.get("stat_stone_drop_percent", ""))
         monster_combat_stat_bump = int(request.form.get("monster_combat_stat_bump", ""))
         shop_tax_percent = float(request.form.get("shop_tax_percent", ""))
         heal_cost_per_point = float(request.form.get("heal_cost_per_point", ""))
@@ -872,6 +873,10 @@ def admin_update_game_settings():
 
     if skill_book_drop_percent < 0 or skill_book_drop_percent > 100:
         flash("技能書掉落機率須介於 0 到 100 之間")
+        return redirect(url_for("admin.admin_settings"))
+
+    if stat_stone_drop_percent < 0 or stat_stone_drop_percent > 100:
+        flash("屬性石掉落機率須介於 0 到 100 之間")
         return redirect(url_for("admin.admin_settings"))
 
     if same_bracket_encounter_percent < 0 or same_bracket_encounter_percent > 100:
@@ -1014,6 +1019,7 @@ def admin_update_game_settings():
                avatar_change_base_cost = ?, same_bracket_encounter_percent = ?,
                potion_drop_percent = ?, small_money_pouch_drop_percent = ?,
                large_money_pouch_drop_percent = ?, skill_book_drop_percent = ?,
+               stat_stone_drop_percent = ?,
                monster_combat_stat_bump = ?,
                str_damage_range_min = ?, str_damage_range_max = ?,
                def_reduction_k = ?, def_reduction_jitter_min = ?, def_reduction_jitter_max = ?,
@@ -1049,6 +1055,7 @@ def admin_update_game_settings():
             avatar_change_base_cost, same_bracket_encounter_percent,
             potion_drop_percent, small_money_pouch_drop_percent,
             large_money_pouch_drop_percent, skill_book_drop_percent,
+            stat_stone_drop_percent,
             monster_combat_stat_bump,
             str_damage_range_min, str_damage_range_max,
             def_reduction_k, def_reduction_jitter_min, def_reduction_jitter_max,
@@ -1166,11 +1173,11 @@ _EXTRA_MONSTER_IMAGE_KEYS = {
 
 def _monster_image_catalog():
     """Returns an ordered list of dicts, one per known monster image_key
-    (deduped from DEFAULT_MONSTERS + HIDDEN_MONSTERS, plus the two
-    non-monsters-table keys above), each with the monster name(s) that use
-    it for admin readability."""
+    (deduped from DEFAULT_MONSTERS + HIDDEN_MONSTERS + TIER4_ARENA_MONSTERS,
+    plus the two non-monsters-table keys above), each with the monster
+    name(s) that use it for admin readability."""
     names_by_key = {}
-    for m in DEFAULT_MONSTERS + HIDDEN_MONSTERS:
+    for m in DEFAULT_MONSTERS + HIDDEN_MONSTERS + TIER4_ARENA_MONSTERS:
         names_by_key.setdefault(m["image_key"], []).append(m["name"])
 
     catalog = [
@@ -1182,7 +1189,10 @@ def _monster_image_catalog():
 
 
 def _known_monster_image_keys():
-    return {m["image_key"] for m in DEFAULT_MONSTERS + HIDDEN_MONSTERS} | set(_EXTRA_MONSTER_IMAGE_KEYS)
+    return (
+        {m["image_key"] for m in DEFAULT_MONSTERS + HIDDEN_MONSTERS + TIER4_ARENA_MONSTERS}
+        | set(_EXTRA_MONSTER_IMAGE_KEYS)
+    )
 
 
 def _monster_custom_dir():

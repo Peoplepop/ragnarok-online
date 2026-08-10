@@ -199,7 +199,10 @@ CREATE TABLE IF NOT EXISTS game_settings (
     dodge_chance_max_bonus_percent REAL NOT NULL DEFAULT 55,
     dodge_chance_k REAL NOT NULL DEFAULT 150,
     element_overcome_bonus_percent REAL NOT NULL DEFAULT 25,
-    element_overcome_penalty_percent REAL NOT NULL DEFAULT 20
+    element_overcome_penalty_percent REAL NOT NULL DEFAULT 20,
+    -- 屬性石 drop roll, 太虛聖域 only -- percent convention (0.01 = 1/10000),
+    -- same as skill_book_drop_percent. See game_hunt.
+    stat_stone_drop_percent REAL NOT NULL DEFAULT 0.01
 );
 
 CREATE TABLE IF NOT EXISTS site_visits (
