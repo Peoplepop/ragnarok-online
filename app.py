@@ -3,6 +3,7 @@ import random
 import secrets
 import uuid
 from datetime import datetime
+from urllib.parse import quote as urlquote
 
 from flask import Flask, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash
@@ -229,7 +230,15 @@ def _session_activity():
 
     db = get_db()
     row = db.execute("SELECT last_seen_at, session_token FROM users WHERE id = ?", (user_id,)).fetchone()
-    last_seen = _parse_dt(row["last_seen_at"]) if row else None
+    if row is None:
+        # The account this cookie belongs to no longer exists (e.g. an admin
+        # deleted the player -- see admin_delete_user -- while they still had
+        # a valid session elsewhere). Nothing left to update; just log them
+        # out cleanly instead of crashing every subsequent request.
+        db.close()
+        session.clear()
+        return redirect(url_for("auth.login"))
+    last_seen = _parse_dt(row["last_seen_at"])
     idle_seconds = (datetime.utcnow() - last_seen).total_seconds() if last_seen else None
 
     if idle_seconds is not None and idle_seconds > IDLE_THRESHOLD_MINUTES * 60:
@@ -326,17 +335,30 @@ def _track_site_visit(response):
     return response
 
 
+FACEBOOK_SHARE_QUOTE = "來玩《五行爭鋒》！屬性戰略 x 攻城掠地 x 轉生養成，免費線上策略遊戲，一起稱霸五行！"
+
+
 @app.context_processor
 def _inject_nav_display_name():
     nav_avatar_url = None
     if session.get("user_id"):
         nav_avatar_url = avatar_url(session.get("avatar_key"), session.get("avatar_custom_filename"))
+    # Facebook's sharer.php needs no app registration/API key -- just the
+    # page URL (+ optional quote) as query params -- so this is built here
+    # rather than via the Graph API. request.url_root already resolves to
+    # whatever host actually served the request (localhost in dev,
+    # PythonAnywhere in prod), so no hardcoded domain is needed.
+    facebook_share_url = (
+        "https://www.facebook.com/sharer/sharer.php?u=" + urlquote(request.url_root, safe="")
+        + "&quote=" + urlquote(FACEBOOK_SHARE_QUOTE, safe="")
+    )
     return {
         "nav_display_name": session.get("character_name") or session.get("username"),
         "nav_avatar_url": nav_avatar_url,
         "bgm_url": bgm_url(),
         "favicon_url": favicon_url(),
         "announcement_text": active_announcement(),
+        "facebook_share_url": facebook_share_url,
     }
 
 
