@@ -171,50 +171,57 @@ def _activity_log_time_label(created_at):
 # is simply not a "major" event and never shows up, regardless of how much
 # activity_log otherwise fills up with routine hunt/move/shop rows.
 _MAJOR_EVENT_MESSAGE_BUILDERS = {
-    "character_create": lambda username, detail: f"🆕 {detail} 加入了遊戲",
-    "hidden_loot_drop": lambda username, detail: f"✨ {username} 在秘境獲得寶物：{detail}",
-    "boss_set_drop": lambda username, detail: f"👑 {username} {detail}",
-    "skill_book_drop": lambda username, detail: f"📖 {username} 在究極打怪場獲得稀世技能書：{detail}",
-    "stat_stone_drop": lambda username, detail: f"💎 {username} 在太虛聖域獲得屬性石：{detail}",
+    "character_create": lambda display_name, detail: f"🆕 {detail} 加入了遊戲",
+    "hidden_loot_drop": lambda display_name, detail: f"✨ {display_name} 在秘境獲得寶物：{detail}",
+    "boss_set_drop": lambda display_name, detail: f"👑 {display_name} {detail}",
+    "skill_book_drop": lambda display_name, detail: f"📖 {display_name} 在究極打怪場獲得稀世技能書：{detail}",
+    "stat_stone_drop": lambda display_name, detail: f"💎 {display_name} 在太虛聖域獲得屬性石：{detail}",
     # detail is already the full "舊名 → 新名" phrase set at log_activity call
-    # time in character_rename -- username here is the ACCOUNT username, same
-    # convention as hidden_loot_drop/skill_book_drop above.
-    "rename_character": lambda username, detail: f"✏️ {username} 更改了角色名稱：{detail}",
-    "tournament_champion": lambda username, detail: f"🏆 {detail} 奪得本屆天下武道大會冠軍！",
+    # time in character_rename -- display_name here is the CHARACTER name
+    # (see _major_event_feed), same convention as hidden_loot_drop/
+    # skill_book_drop above.
+    "rename_character": lambda display_name, detail: f"✏️ {display_name} 更改了角色名稱：{detail}",
+    "tournament_champion": lambda display_name, detail: f"🏆 {detail} 奪得本屆天下武道大會冠軍！",
     # detail is already the full "角色名 已X轉為「職業」" phrase (set at
     # log_activity call time in blueprints/character.py's promote_tier1..4),
     # same self-contained-detail convention as character_create above --
-    # username here is the ACCOUNT username, less useful than the character
-    # name already baked into detail, so it's ignored just like there.
-    "promote_tier1": lambda username, detail: f"🎓 {detail}",
-    "promote_tier2": lambda username, detail: f"🎓 {detail}",
-    "promote_tier3": lambda username, detail: f"🎓 {detail}",
-    "promote_tier4": lambda username, detail: f"🌟 {detail}",
+    # display_name is ignored here since the character name is already baked
+    # into detail.
+    "promote_tier1": lambda display_name, detail: f"🎓 {detail}",
+    "promote_tier2": lambda display_name, detail: f"🎓 {detail}",
+    "promote_tier3": lambda display_name, detail: f"🎓 {detail}",
+    "promote_tier4": lambda display_name, detail: f"🌟 {detail}",
     # detail already carries the full "擊敗XX，佔領/篡位/奪得..." phrase built
-    # at log_activity call time in blueprints/game.py -- username here is the
-    # winner's ACCOUNT username (same convention as hidden_loot_drop above;
+    # at log_activity call time in blueprints/game.py -- display_name here is
+    # the winner's CHARACTER name (same convention as hidden_loot_drop above;
     # these routes never had a character-name-only detail string to prefer).
-    "conquer_win": lambda username, detail: f"🏰 {username} {detail}",
-    "challenge_king_win": lambda username, detail: f"👑 {username} {detail}",
-    "challenge_official_win": lambda username, detail: f"⚔️ {username} {detail}",
-    "claim_vacant_king": lambda username, detail: f"👑 {username} {detail}",
+    "conquer_win": lambda display_name, detail: f"🏰 {display_name} {detail}",
+    "challenge_king_win": lambda display_name, detail: f"👑 {display_name} {detail}",
+    "challenge_official_win": lambda display_name, detail: f"⚔️ {display_name} {detail}",
+    "claim_vacant_king": lambda display_name, detail: f"👑 {display_name} {detail}",
 }
 
 
 def _major_event_feed(rows):
-    """rows: activity_log rows (need action/detail/username/created_at/
-    character_id) -> [{message, time_label, character_id}], oldest-filtered-
-    out, newest first (assumes the caller already queried ORDER BY
-    created_at DESC). character_id may be None (rows logged before the
-    column existed, or a system-authored row with no single actor) -- the
-    template only renders a link when it's present, see game.html."""
+    """rows: activity_log rows (need action/detail/username/character_name/
+    created_at/character_id) -> [{message, time_label, character_id}],
+    oldest-filtered-out, newest first (assumes the caller already queried
+    ORDER BY created_at DESC). character_id may be None (rows logged before
+    the column existed, or a system-authored row with no single actor) --
+    the template only renders a link when it's present, see game.html.
+
+    Prefers the CHARACTER name (what players actually recognize each other
+    by) over the account username baked into activity_log.username, falling
+    back to the username only for rows whose character no longer resolves
+    (character_id NULL, or the character was since deleted)."""
     events = []
     for row in rows:
         builder = _MAJOR_EVENT_MESSAGE_BUILDERS.get(row["action"])
         if builder is None:
             continue
+        display_name = row["character_name"] or row["username"]
         events.append({
-            "message": builder(row["username"], row["detail"]),
+            "message": builder(display_name, row["detail"]),
             "time_label": _activity_log_time_label(row["created_at"]),
             "character_id": row["character_id"],
         })

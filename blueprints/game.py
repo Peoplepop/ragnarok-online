@@ -442,9 +442,10 @@ def _render_game(**extra):
     # character, so it's read here rather than filtered by user_id.
     major_event_rows = db.execute(
         """SELECT activity_log.action, activity_log.detail, activity_log.username,
-                  activity_log.created_at, activity_log.character_id
+                  activity_log.created_at, activity_log.character_id, characters.name AS character_name
            FROM activity_log
            LEFT JOIN users ON users.id = activity_log.user_id
+           LEFT JOIN characters ON characters.id = activity_log.character_id
            WHERE activity_log.action IN (
                'character_create', 'hidden_loot_drop', 'boss_set_drop', 'skill_book_drop',
                'stat_stone_drop',
