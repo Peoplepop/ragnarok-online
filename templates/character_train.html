@@ -3,25 +3,72 @@
 
 {% block content %}
   <div class="panel" style="margin-bottom:20px;">
-    <h2 style="margin:0 0 8px; color:var(--gold-bright);">修行場</h2>
+    <h2 style="margin:0 0 8px; color:var(--gold-bright);">🧘 修行場</h2>
     <p class="hint" style="margin:0;">
-      使用屬性石淬煉屬性：每顆石頭有 70% 機率讓對應屬性 +1~+3 點，30% 機率 -1~-3 點（點數換算為實際數值，且不會低於 0），每次淬煉會消耗 1 顆石頭。
+      選擇一顆屬性石後點選「開始修行」：70% 機率讓對應屬性 +1~+3 點，30% 機率 -1~-3 點（點數換算為實際數值，且不會低於 0），每次修行消耗 1 顆石頭。屬性石只能在修行場使用，不會出現在背包中。
     </p>
   </div>
 
   <div class="panel" style="margin-bottom:20px;">
-    <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">持有的屬性石</h3>
-    <div style="display:flex; flex-direction:column; gap:10px;">
-      {% for stone in stones %}
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-        <span style="font-size:13px;">{{ stone.name }}（{{ stat_labels[stone.stat] }}）持有 {{ stone.quantity }} 顆</span>
-        <form method="post" action="{{ url_for('character.character_train_use_stone') }}">
-          <input type="hidden" name="item_id" value="{{ stone.id }}">
-          <button type="submit" class="turn-action-control btn-success" style="padding:6px 14px; font-size:13px;" {% if stone.quantity < 1 %}disabled{% endif %}>使用</button>
-        </form>
+    <div style="display:flex; flex-direction:column; align-items:center; gap:12px;">
+      {% if nav_avatar_url %}<img src="{{ nav_avatar_url }}" alt="頭像" style="width:96px; height:96px; border-radius:50%; border:2px solid var(--gold); object-fit:cover;">{% endif %}
+      <div style="font-size:15px; color:var(--gold-bright); font-weight:700;">{{ character.character_name }}</div>
+      <div style="display:grid; grid-template-columns:repeat(3, minmax(80px, 1fr)); gap:14px 24px; max-width:380px; width:100%; margin-top:4px;">
+        <div style="text-align:center;">
+          <div class="hint" style="font-size:11px; margin-bottom:2px;">HP</div>
+          <div style="font-size:17px; color:var(--text);">{{ stats.hp }}</div>
+        </div>
+        <div style="text-align:center;">
+          <div class="hint" style="font-size:11px; margin-bottom:2px;">MP</div>
+          <div style="font-size:17px; color:var(--text);">{{ stats.mp }}</div>
+        </div>
+        <div style="text-align:center;">
+          <div class="hint" style="font-size:11px; margin-bottom:2px;">{{ stat_labels.str }}</div>
+          <div style="font-size:17px; color:var(--text);">{{ stats.str }}</div>
+        </div>
+        <div style="text-align:center;">
+          <div class="hint" style="font-size:11px; margin-bottom:2px;">{{ stat_labels.def }}</div>
+          <div style="font-size:17px; color:var(--text);">{{ stats.def }}</div>
+        </div>
+        <div style="text-align:center;">
+          <div class="hint" style="font-size:11px; margin-bottom:2px;">{{ stat_labels.agi }}</div>
+          <div style="font-size:17px; color:var(--text);">{{ stats.agi }}</div>
+        </div>
+        <div style="text-align:center;">
+          <div class="hint" style="font-size:11px; margin-bottom:2px;">{{ stat_labels.luk }}</div>
+          <div style="font-size:17px; color:var(--text);">{{ stats.luk }}</div>
+        </div>
       </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:20px;">
+    <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">選擇屬性石</h3>
+    <form method="post" action="{{ url_for('character.character_train_use_stone') }}">
+      <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
+        {% for stone in stones %}
+        <label style="display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border); border-radius:6px; {% if stone.quantity < 1 %}opacity:0.4;{% endif %}">
+          <input type="radio" name="item_id" value="{{ stone.id }}" {% if stone.quantity < 1 %}disabled{% endif %}>
+          <span style="font-size:13px;">{{ stone.name }}（{{ stat_labels[stone.stat] }}）持有 {{ stone.quantity }} 顆</span>
+        </label>
+        {% endfor %}
+      </div>
+      <button type="submit" class="turn-action-control btn-success" style="padding:8px 22px; font-size:14px;" {% if not any_owned %}disabled{% endif %}>開始修行</button>
+      {% if not any_owned %}<p class="hint" style="margin:8px 0 0;">目前沒有任何屬性石，請先到太虛聖域尋寶</p>{% endif %}
+    </form>
+  </div>
+
+  <div class="panel" style="margin-bottom:20px;">
+    <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">修行紀錄</h3>
+    {% if history %}
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      {% for row in history %}
+      <div style="font-size:12px; color:var(--text-dim);">{{ row.created_at }}　{{ row.detail }}</div>
       {% endfor %}
     </div>
+    {% else %}
+    <p class="hint" style="margin:0;">尚無修行紀錄</p>
+    {% endif %}
   </div>
 
   <a href="{{ url_for('character.character_page') }}" class="btn">回到角色頁</a>

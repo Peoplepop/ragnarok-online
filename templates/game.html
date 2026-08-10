@@ -144,10 +144,10 @@
     <h3 style="margin:0 0 4px; color:var(--gold-bright); font-size:15px;">🏯 四轉專屬</h3>
     <p class="hint" style="margin:0 0 12px;">只有四轉玩家看得到這個區域，功能尚在準備中</p>
     <div style="display:flex; gap:12px; flex-wrap:wrap;">
-      <div style="flex:1 1 200px; padding:14px; border:1px dashed var(--border); border-radius:8px; opacity:0.45; filter:grayscale(1); cursor:not-allowed;">
-        <div style="font-size:14px; color:var(--text-dim); margin-bottom:4px;">🧘 修行場</div>
-        <div class="hint" style="margin:0;">敬請期待，尚未開放</div>
-      </div>
+      <a href="{{ url_for('character.character_train') }}" style="flex:1 1 200px; padding:14px; border:1px solid var(--border); border-radius:8px; text-decoration:none; display:block;">
+        <div style="font-size:14px; color:var(--gold-bright); margin-bottom:4px;">🧘 修行場</div>
+        <div class="hint" style="margin:0;">使用屬性石淬煉六圍</div>
+      </a>
       <div style="flex:1 1 200px; padding:14px; border:1px dashed var(--border); border-radius:8px; opacity:0.45; filter:grayscale(1); cursor:not-allowed;">
         <div style="font-size:14px; color:var(--text-dim); margin-bottom:4px;">🔨 煉器閣</div>
         <div class="hint" style="margin:0;">敬請期待，尚未開放</div>

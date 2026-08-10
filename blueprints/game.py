@@ -466,6 +466,7 @@ def _render_game(**extra):
                   inventory.quantity AS quantity
            FROM inventory JOIN items ON items.id = inventory.item_id
            WHERE inventory.character_id = ? AND items.consumable_effect IS NOT NULL
+             AND items.consumable_effect != 'stat_stone'
            ORDER BY items.consumable_effect, items.name""",
         (character["character_id"],),
     ).fetchall()

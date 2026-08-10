@@ -670,6 +670,9 @@ def character_train():
     inventory-joined query independent of character_page's own context."""
     db = get_db()
     character = _character_for_promotion(db)
+    equipped_items = _fetch_equipped_items(db, character)
+    settings = db.execute("SELECT * FROM game_settings WHERE id = 1").fetchone()
+    stats = character_final_stats(character, equipped_items, settings)
     stones = db.execute(
         """SELECT items.id, items.name, items.stat, COALESCE(inventory.quantity, 0) AS quantity
            FROM items
@@ -679,11 +682,21 @@ def character_train():
            ORDER BY items.id""",
         (character["character_id"],),
     ).fetchall()
+    any_owned = any(stone["quantity"] >= 1 for stone in stones)
+    history = db.execute(
+        """SELECT detail, created_at FROM activity_log
+           WHERE character_id = ? AND action = 'stat_stone_use'
+           ORDER BY created_at DESC LIMIT 20""",
+        (character["character_id"],),
+    ).fetchall()
     db.close()
     return render_template(
         "character_train.html",
         character=character,
         stones=stones,
+        any_owned=any_owned,
+        history=history,
+        stats=stats,
         stat_labels=STAT_LABELS,
     )
 
