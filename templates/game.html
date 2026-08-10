@@ -159,7 +159,8 @@
   <nav class="quick-jump-nav" id="quick-jump-nav" aria-label="快速跳轉區塊"></nav>
 
   <div style="display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap;">
-    <div class="panel" style="padding:0; overflow:hidden; position:relative; flex:1 1 560px; max-width:560px;">
+    <details class="panel" id="block-map" style="padding:0; overflow:hidden; position:relative; flex:1 1 560px; max-width:560px;">
+      <summary style="padding:12px 16px; cursor:pointer;"><h3 style="margin:0; display:inline; color:var(--gold-bright); font-size:15px;">🗺️ 地圖</h3></summary>
       <svg viewBox="{{ view_box }}" style="width:100%; height:auto; display:block;">
         {% for h in hexes %}
         <g>
@@ -191,7 +192,7 @@
         <span>⛰️ 深色實心 = 山嶺（無法通行、無法佔領）</span>
         <span>⚪ 閃爍白點 = 你目前所在位置</span>
       </div>
-    </div>
+    </details>
 
     <div style="flex:1 1 480px; display:grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap:14px; align-content:start;">
       {% for block_key in action_block_order %}
@@ -200,23 +201,23 @@
     </div>
   </div>
 
-  <div class="panel" id="major-events-panel" style="margin-top:20px;">
-    <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">📜 重大事件</h3>
+  <details class="panel" id="block-major-events" style="margin-top:20px;">
+    <summary style="cursor:pointer;"><h3 style="margin:0; display:inline; color:var(--gold-bright); font-size:15px;">📜 重大事件</h3></summary>
     {% if major_events %}
-    <div id="major-events-list" style="display:flex; flex-direction:column; gap:10px; min-height:100px;"></div>
+    <div id="major-events-list" style="display:flex; flex-direction:column; gap:10px; min-height:100px; margin-top:12px;"></div>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
       <button type="button" id="major-events-prev" class="btn" style="padding:4px 10px; font-size:12px;">← 上一頁</button>
       <span id="major-events-page-label" style="font-size:11px; color:var(--text-dim);"></span>
       <button type="button" id="major-events-next" class="btn" style="padding:4px 10px; font-size:12px;">下一頁 →</button>
     </div>
     {% else %}
-    <p class="hint" style="margin:0;">目前還沒有重大事件</p>
+    <p class="hint" style="margin:12px 0 0;">目前還沒有重大事件</p>
     {% endif %}
-  </div>
+  </details>
 
-  <div class="panel" id="chat-panel" style="margin-top:20px;">
-    <h3 style="margin:0 0 12px; color:var(--gold-bright); font-size:15px;">💬 聊天</h3>
-    <div style="display:flex; gap:18px; flex-wrap:wrap;">
+  <details class="panel" id="block-chat" style="margin-top:20px;">
+    <summary style="cursor:pointer;"><h3 style="margin:0; display:inline; color:var(--gold-bright); font-size:15px;">💬 聊天</h3></summary>
+    <div style="display:flex; gap:18px; flex-wrap:wrap; margin-top:12px;">
       <div style="flex:1 1 300px; min-width:260px;">
         <div style="font-size:12px; color:var(--text-dim); margin-bottom:6px;">公共頻道</div>
         <div id="chat-public-list" style="height:220px; overflow-y:auto; background:var(--panel-2); border:1px solid var(--border); border-radius:6px; padding:8px 10px; font-size:12px; line-height:1.7;"></div>
@@ -234,7 +235,7 @@
         </form>
       </div>
     </div>
-  </div>
+  </details>
 
   <script>
     (function () {
@@ -486,7 +487,7 @@
         // system (see game_data.constants.GAME_LAYOUT_BLOCKS) -- they're
         // fixed, always-rendered panels lower on the page, so they're just
         // appended here directly rather than needing their own render-check.
-        [["major-events-panel", "📜 重大事件"], ["chat-panel", "💬 聊天"]].forEach(function (pair) {
+        [["block-major-events", "📜 重大事件"], ["block-chat", "💬 聊天"]].forEach(function (pair) {
           var el = document.getElementById(pair[0]);
           if (!el) return;
           any = true;
