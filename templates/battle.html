@@ -277,7 +277,7 @@
   <div>
     {% if can_continue_hunt %}
     <form method="post" action="{{ url_for('game.game_hunt') }}" id="continue-hunt-form" style="display:inline-block; margin-right:10px;">
-      <input type="hidden" name="ground_id" value="{{ ground.id }}">
+      <input type="hidden" name="ground_id" value="{{ session['last_ground_id'] }}">
       <button type="submit" class="turn-action-control btn-primary" id="continue-hunt-btn">⚔️ 繼續挑戰</button>
     </form>
     <button type="button" id="auto-hunt-toggle" class="btn-info" style="margin-right:10px;">🔁 自動連續挑戰</button>
@@ -539,7 +539,19 @@
       // naturally expires -- it never shortens or bypasses that cooldown,
       // game_hunt() itself is still the source of truth and will reject an
       // early submit regardless of anything computed here.
-      var groundId = {{ (ground.id if ground else None) | tojson }};
+      //
+      // Deliberately session['last_ground_id'] (the ground the player
+      // actually picked/continued into), NOT ground.id -- a 秘境 (hidden
+      // dungeon) interrupt swaps `ground` wholesale to the hidden ground's
+      // own row for that one fight (see game.py's game_hunt), which is
+      // never a valid direct ground_id (game_hunt rejects is_hidden=1 on
+      // the player-picked path). Using ground.id here would (a) make the
+      // "armed" sessionStorage flag's groundId suddenly mismatch the
+      // previous fight's, silently disarming the loop, and (b) even if it
+      // didn't, the continue-hunt-form's own hidden ground_id field would
+      // get rejected server-side -- either way auto-hunt would just stop
+      // dead right after a 秘境 fight instead of resuming the real ground.
+      var groundId = {{ (session['last_ground_id'] if ground else None) | tojson }};
       var eligible = {{ 'true' if can_continue_hunt else 'false' }};
       var cooldownRemaining = {{ cooldown_seconds | default(0) }};
       var maxHpAfter = {{ max_hp | default(0) }};
