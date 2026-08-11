@@ -752,6 +752,7 @@ def admin_settings():
 @admin_required
 def admin_update_game_settings():
     try:
+        battle_round_cap = int(request.form.get("battle_round_cap", ""))
         turn_wait_seconds = int(request.form.get("turn_wait_seconds", ""))
         exp_base = int(request.form.get("exp_base", ""))
         exp_growth_novice_percent = float(request.form.get("exp_growth_novice_percent", ""))
@@ -834,6 +835,10 @@ def admin_update_game_settings():
 
     if turn_wait_seconds < 0 or exp_base < 1:
         flash("設定值必須是正數")
+        return redirect(url_for("admin.admin_settings"))
+
+    if battle_round_cap < 1:
+        flash("戰鬥回合上限必須至少為 1")
         return redirect(url_for("admin.admin_settings"))
 
     if min(exp_growth_novice_percent, exp_growth_tier2_percent,
@@ -996,7 +1001,8 @@ def admin_update_game_settings():
     db = get_db()
     db.execute(
         """UPDATE game_settings
-           SET turn_wait_seconds = ?, exp_base = ?, exp_growth_novice_percent = ?,
+           SET battle_round_cap = ?,
+               turn_wait_seconds = ?, exp_base = ?, exp_growth_novice_percent = ?,
                exp_growth_tier2_percent = ?, exp_growth_tier3_percent = ?, exp_growth_tier4_percent = ?,
                rebirth_stat_bonus_percent = ?, sell_back_percent = ?,
                guardian_encounter_percent = ?, guardian_exp_multiplier = ?,
@@ -1032,6 +1038,7 @@ def admin_update_game_settings():
                king_min_contribution = ?, official_min_contribution = ?
            WHERE id = 1""",
         (
+            battle_round_cap,
             turn_wait_seconds, exp_base, exp_growth_novice_percent,
             exp_growth_tier2_percent, exp_growth_tier3_percent, exp_growth_tier4_percent,
             rebirth_stat_bonus_percent, sell_back_percent,

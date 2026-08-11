@@ -162,7 +162,10 @@ def _combat_hit(
     return damage, f"{attacker_name} {verb} {defender_name}，造成 {damage} 點傷害{suffix}"
 
 
-BATTLE_ROUND_CAP = 15
+# Fallback only -- the real cap always comes from settings["battle_round_cap"]
+# (admin-configurable, see blueprints/admin.py's admin_update_game_settings),
+# this just protects against a settings row that somehow predates the column.
+DEFAULT_BATTLE_ROUND_CAP = 15
 
 
 def run_battle(
@@ -188,9 +191,10 @@ def run_battle(
     Each player attack independently tries the character's known skills
     (strongest first) before falling back to a plain hit.
 
-    If BATTLE_ROUND_CAP is reached with both sides still alive, the fight
-    ends in a timeout (`timed_out=True`) rather than a loss -- the attacker
-    was never actually defeated, the round limit just ran out.
+    If the round cap (settings["battle_round_cap"]) is reached with both
+    sides still alive, the fight ends in a timeout (`timed_out=True`) rather
+    than a loss -- the attacker was never actually defeated, the round limit
+    just ran out.
 
     player_independent_damage_percent applies ONLY to the "player" side's
     hits. The monster-shaped opponent (a real monster, an NPC defense tower,
@@ -243,8 +247,10 @@ def run_battle(
             p_hp = max(0, p_hp - dmg)
             log.append(f"{line}（{player_name} 剩餘 HP {p_hp}）")
 
+    round_cap = settings["battle_round_cap"] if "battle_round_cap" in settings.keys() else DEFAULT_BATTLE_ROUND_CAP
     timed_out = False
-    for round_num in range(BATTLE_ROUND_CAP):
+    round_num = 0
+    for round_num in range(round_cap):
         if p_hp <= 0 or m_hp <= 0:
             break
         for _ in range(attacks_per_round[faster]):
@@ -259,12 +265,13 @@ def run_battle(
                 break
         if p_hp <= 0 or m_hp <= 0:
             break
-        if round_num == BATTLE_ROUND_CAP - 1:
+        if round_num == round_cap - 1:
             timed_out = True
 
     return {
         "log": log, "won": m_hp <= 0 and p_hp > 0, "timed_out": timed_out,
         "player_hp": p_hp, "player_mp": p_mp, "monster_hp": m_hp,
+        "rounds": round_num + 1, "round_cap": round_cap,
     }
 
 
@@ -362,8 +369,10 @@ def run_pvp_duel(
             a_hp = max(0, a_hp - dmg)
             log.append(f"{line}（{a_name} 剩餘 HP {a_hp}）")
 
+    round_cap = settings["battle_round_cap"] if "battle_round_cap" in settings.keys() else DEFAULT_BATTLE_ROUND_CAP
     timed_out = False
-    for round_num in range(BATTLE_ROUND_CAP):
+    round_num = 0
+    for round_num in range(round_cap):
         if a_hp <= 0 or b_hp <= 0:
             break
         for _ in range(attacks_per_round[faster]):
@@ -378,11 +387,12 @@ def run_pvp_duel(
                 break
         if a_hp <= 0 or b_hp <= 0:
             break
-        if round_num == BATTLE_ROUND_CAP - 1:
+        if round_num == round_cap - 1:
             timed_out = True
 
     return {
         "log": log, "a_hp": a_hp, "b_hp": b_hp, "a_mp": a_mp, "b_mp": b_mp,
         "timed_out": timed_out,
         "winner": "a" if b_hp <= 0 and a_hp > 0 else ("b" if a_hp <= 0 and b_hp > 0 else None),
+        "rounds": round_num + 1, "round_cap": round_cap,
     }

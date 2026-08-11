@@ -1161,6 +1161,8 @@ def game_hunt():
     return render_template(
         "battle.html",
         ground=ground,
+        rounds=result["rounds"],
+        battle_round_cap=result["round_cap"],
         hp_potion=dict(hp_potion) if hp_potion else None,
         mp_potion=dict(mp_potion) if mp_potion else None,
         page_background_url=_battle_bg_url(tile_element),
@@ -1407,6 +1409,8 @@ def game_hunt_boss_room():
     return render_template(
         "battle.html",
         ground=ground,
+        rounds=result["rounds"],
+        battle_round_cap=result["round_cap"],
         page_background_url=_battle_bg_url(tile_element),
         monster=fought_boss,
         boss_room_challenge=True,
@@ -1534,6 +1538,8 @@ def _resolve_bandit_conquest(
         "battle.html",
         conquest=True,
         bandit_fight=True,
+        rounds=result["rounds"],
+        battle_round_cap=result["round_cap"],
         page_background_url=_battle_bg_url(None),  # neutral tile, always
         captured_tile_name=tile_name,
         defending_country_name=character["name"],  # attacker's own country, once captured
@@ -1851,6 +1857,8 @@ def game_conquer():
         return render_template(
             "battle.html",
             conquest=True,
+            rounds=result["rounds"],
+            battle_round_cap=result["round_cap"],
             page_background_url=_battle_bg_url(defending_country["element"]),
             captured_tile_name=tile_name,
             defending_country_name=defending_country["name"],
@@ -1941,6 +1949,8 @@ def game_conquer():
     return render_template(
         "battle.html",
         conquest=True,
+        rounds=result["rounds"],
+        battle_round_cap=result["round_cap"],
         page_background_url=_battle_bg_url(defending_country["element"]),
         captured_tile_name=tile_name,
         defending_country_name=defending_country["name"],
@@ -3272,6 +3282,8 @@ def country_challenge_king():
     return render_template(
         "battle.html",
         usurp_duel=True,
+        rounds=result["rounds"],
+        battle_round_cap=result["round_cap"],
         opponent_seat_label="國王",
         opponent_country_name=country_name,
         page_background_url=_battle_bg_url(king_row["element"]),
@@ -3415,6 +3427,8 @@ def country_spar_official(seat):
     return render_template(
         "battle.html",
         spar_duel=True,
+        rounds=result["rounds"],
+        battle_round_cap=result["round_cap"],
         opponent_seat_label=seat_label,
         opponent_country_name=opponent_row["name"],  # bare countries.* -> own country's name
         page_background_url=_battle_bg_url(opponent_row["element"]),

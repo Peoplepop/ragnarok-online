@@ -1495,6 +1495,8 @@ def _upgrade_hunting_ground_bounds(conn):
 
 def _ensure_game_settings_columns(conn):
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(game_settings)")]
+    if "battle_round_cap" not in cols:
+        conn.execute("ALTER TABLE game_settings ADD COLUMN battle_round_cap INTEGER NOT NULL DEFAULT 15")
     if "sell_back_percent" not in cols:
         conn.execute("ALTER TABLE game_settings ADD COLUMN sell_back_percent REAL NOT NULL DEFAULT 75")
     if "boss_encounter_percent" not in cols:

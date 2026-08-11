@@ -224,6 +224,9 @@
       </p>
     {% endif %}
     <p style="margin:10px 0 0; font-size:13px; color:var(--text-dim);">你目前 HP {{ player_hp }}/{{ max_hp }}　MP {{ player_mp }}/{{ max_mp }}</p>
+    {% if rounds %}
+    <p style="margin:4px 0 0; font-size:13px; color:var(--text-dim);">本場戰鬥回合數：{{ rounds }}{% if battle_round_cap %} / {{ battle_round_cap }}{% endif %}{% if timed_out %}（已達回合上限，平手）{% endif %}</p>
+    {% endif %}
     {% if hidden_encounter_banner and won %}
       {% if hidden_loot_dropped %}
       <p style="margin:10px 0 0; font-size:13px; color:var(--gold-bright);">✨ 秘境寶物！你獲得了「{{ hidden_loot_dropped.name }}」（{{ hidden_loot_dropped.hidden_set_name }}），已放入背包！</p>

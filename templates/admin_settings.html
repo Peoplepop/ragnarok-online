@@ -25,6 +25,10 @@
     <form method="post" action="{{ url_for('admin.admin_update_game_settings') }}">
       <div class="admin-grid" style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
         <div>
+          <label>戰鬥回合上限（達上限未分勝負則平手）</label>
+          <input type="text" inputmode="numeric" name="battle_round_cap" value="{{ settings.battle_round_cap }}">
+        </div>
+        <div>
           <label>每回合等待秒數</label>
           <input type="text" inputmode="numeric" name="turn_wait_seconds" value="{{ settings.turn_wait_seconds }}">
         </div>
