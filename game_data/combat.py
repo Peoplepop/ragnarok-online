@@ -253,6 +253,11 @@ def run_battle(
     for round_num in range(round_cap):
         if p_hp <= 0 or m_hp <= 0:
             break
+        # A plain "第 N 回合" line, recognized and styled (bold gold) by
+        # battle.html's JS via its own roundMarkerRe -- deliberately just
+        # another log entry rather than a separate parallel list, so no
+        # other render_template call site needs to change.
+        log.append(f"第 {round_num + 1} 回合")
         for _ in range(attacks_per_round[faster]):
             attack_once(faster)
             if p_hp <= 0 or m_hp <= 0:
@@ -375,6 +380,7 @@ def run_pvp_duel(
     for round_num in range(round_cap):
         if a_hp <= 0 or b_hp <= 0:
             break
+        log.append(f"第 {round_num + 1} 回合")
         for _ in range(attacks_per_round[faster]):
             attack_once(faster)
             if a_hp <= 0 or b_hp <= 0:

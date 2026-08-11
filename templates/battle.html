@@ -338,6 +338,10 @@
       var hpRe = /（([^（]+) 剩餘 HP (\d+)）$/;
       var dmgRe = /造成 (\d+) 點傷害/;
       var skillNameRe = /使出「([^」]+)」/;
+      // Matches the "第 N 回合" marker line game_data/combat.py's run_battle
+      // inserts at the start of each round -- rendered bold gold instead of
+      // the normal dim attack-line styling, see appendLine below.
+      var roundMarkerRe = /^第 \d+ 回合$/;
 
       // 金/木/水/火/土 -> hex, single-sourced from game_data/constants.py
       // (same palette as map tiles/element badges elsewhere in the game).
@@ -497,8 +501,14 @@
         }
         var line = document.createElement("div");
         var text = log[i];
-        line.innerHTML = highlightLine(text);
-        line.style.color = "var(--text-dim)";
+        var isRoundMarker = roundMarkerRe.test(text);
+        if (isRoundMarker) {
+          line.textContent = text;
+          line.style.cssText = "color:var(--gold-bright); font-weight:700; margin-top:8px;";
+        } else {
+          line.innerHTML = highlightLine(text);
+          line.style.color = "var(--text-dim)";
+        }
         var isCrit = text.indexOf("會心一擊") !== -1;
         container.appendChild(line);
         container.scrollTop = container.scrollHeight;
