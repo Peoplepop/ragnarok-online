@@ -312,6 +312,16 @@
       var container = document.getElementById("battle-log");
       var result = document.getElementById("battle-result");
       var i = 0;
+      // Flag the auto-hunt script below (a separate <script> block/closure,
+      // hence attached to window rather than a shared var) polls before
+      // resubmitting the next fight -- without this, auto-hunt's "next fight"
+      // timer only waits out the server-side turn cooldown (~2s by default),
+      // completely independent of how long THIS log takes to visually
+      // finish playing (which can run well past 10s on a long/timed-out
+      // fight, more so now that every round adds its own log line -- see
+      // combat.py's round-marker insert), so the page would navigate to the
+      // next fight while this one was still mid-animation.
+      window.__battleLogDone = false;
 
       var enemyName = {{ monster.name | tojson if monster else '""' }};
       var playerHpFill = document.getElementById("player-hp-fill");
@@ -488,6 +498,7 @@
 
       function appendLine() {
         if (i >= log.length) {
+          window.__battleLogDone = true;
           updateHpBar(playerMpFill, playerMpLabel, playerMpFinal, playerMpMax, "MP");
           result.style.display = "";
           result.classList.add("reveal");
@@ -580,6 +591,29 @@
       // doesn't immediately re-trigger next fight if the potion is a small
       // one.
       var AUTO_POTION_TARGET_RATIO = 0.6;
+
+      // Every auto-hunt resubmission (continue/potion-then-resume/boss-room)
+      // used to fire on a flat setTimeout(fn, FIRST_SUBMIT_GRACE_MS) once the
+      // real server cooldown had already elapsed -- that grace window (1.5s)
+      // is nowhere near long enough for a long or timed-out fight's log to
+      // finish its line-by-line playback (up to BATTLE_ROUND_CAP rounds,
+      // each round now also adding its own "第 N 回合" line -- see
+      // combat.py), so the page would navigate to the next fight while this
+      // one was still visibly mid-animation. Polls window.__battleLogDone
+      // (set by the log-playback script above once appendLine reaches the
+      // end) so the resubmit always waits for both the cooldown AND the
+      // animation, whichever finishes later.
+      var LOG_DONE_POLL_MS = 150;
+      function waitForLogDone(minDelayMs, cb) {
+        var start = Date.now();
+        (function poll() {
+          if (window.__battleLogDone && Date.now() - start >= minDelayMs) {
+            cb();
+            return;
+          }
+          setTimeout(poll, LOG_DONE_POLL_MS);
+        })();
+      }
 
       var continueForm = document.getElementById("continue-hunt-form");
       var autoToggle = document.getElementById("auto-hunt-toggle");
@@ -748,7 +782,7 @@
             JSON.stringify({ groundId: groundId, armedAt: Date.now() })
           );
         } catch (e) {}
-        setTimeout(function () {
+        waitForLogDone(FIRST_SUBMIT_GRACE_MS, function () {
           var potionForm = document.createElement("form");
           potionForm.method = "post";
           potionForm.action = {{ url_for('game.game_inventory_use') | tojson }};
@@ -763,7 +797,7 @@
           potionForm.appendChild(qtyField);
           document.body.appendChild(potionForm);
           potionForm.submit();
-        }, FIRST_SUBMIT_GRACE_MS);
+        });
       }
 
       var armed = readArmed();
@@ -798,7 +832,7 @@
         // boss_room_challenge page too, so this same script naturally picks
         // "armed" back up there and keeps grinding the same ground.
         setStatus("⚔️ 自動進攻魔王房間中...");
-        setTimeout(function () { bossRoomForm.submit(); }, FIRST_SUBMIT_GRACE_MS);
+        waitForLogDone(FIRST_SUBMIT_GRACE_MS, function () { bossRoomForm.submit(); });
         return;
       } else if (armed && bossRoomAvailable) {
         // A guardian win just unlocked a one-time boss-room invitation
@@ -839,15 +873,17 @@
         if (firstTick) {
           firstTick = false;
           setStatus("自動挑戰中，即將重新出發...");
-          setTimeout(function () {
+          waitForLogDone(FIRST_SUBMIT_GRACE_MS, function () {
             if (!armed) return; // user paused during the grace window
             setStatus("自動挑戰中，重新出發...");
             if (continueForm) continueForm.submit();
-          }, FIRST_SUBMIT_GRACE_MS);
+          });
           return;
         }
         setStatus("自動挑戰中，重新出發...");
-        if (continueForm) continueForm.submit();
+        waitForLogDone(0, function () {
+          if (continueForm) continueForm.submit();
+        });
       }
 
       function tick() {
