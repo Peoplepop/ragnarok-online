@@ -63,6 +63,29 @@
   details.panel[open] > summary::before { transform: rotate(90deg); }
   details.panel > summary h3 { display: inline; margin: 0 !important; }
   details.panel > .panel-body { margin-top: 12px; }
+
+  .stat-bar-track { position: relative; border-radius: 6px; }
+  .stat-bar-fill {
+    transform-origin: left;
+    animation: stat-bar-fill-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @keyframes stat-bar-fill-in {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+  }
+  .stat-bar-track.pulse-danger { animation: stat-bar-pulse-danger 1.4s ease-in-out infinite; }
+  @keyframes stat-bar-pulse-danger {
+    0%, 100% { box-shadow: 0 0 0 rgba(224, 85, 90, 0); }
+    50% { box-shadow: 0 0 8px 1px rgba(224, 85, 90, 0.65); }
+  }
+  .stat-bar-track.pulse-gold { animation: stat-bar-pulse-gold 1.6s ease-in-out infinite; }
+  @keyframes stat-bar-pulse-gold {
+    0%, 100% { box-shadow: 0 0 0 rgba(212, 175, 55, 0); }
+    50% { box-shadow: 0 0 8px 1px rgba(242, 211, 116, 0.6); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .stat-bar-fill, .stat-bar-track.pulse-danger, .stat-bar-track.pulse-gold { animation: none !important; }
+  }
 </style>
 {% endblock %}
 
@@ -71,11 +94,12 @@
     <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
       <span style="color:var(--gold-bright); font-weight:700;">Lv.{{ character.level }}</span>
       {% if exp_needed %}
+      {% set exp_pct = (character.exp / exp_needed * 100) | round(1) %}
       <div style="width:220px;">
-        <div style="background:var(--panel-2); border:1px solid var(--border); border-radius:6px; height:10px; overflow:hidden;">
-          <div style="width:{{ (character.exp / exp_needed * 100) | round(1) }}%; height:100%; background:linear-gradient(90deg, var(--gold), var(--gold-bright));"></div>
+        <div class="stat-bar-track{{ ' pulse-gold' if exp_pct >= 90 else '' }}" style="background:var(--panel-2); border:1px solid var(--border); height:10px; overflow:hidden;">
+          <div class="stat-bar-fill" style="width:{{ exp_pct }}%; height:100%; background:linear-gradient(90deg, var(--gold), var(--gold-bright));"></div>
         </div>
-        <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">EXP {{ character.exp }} / {{ exp_needed }}</div>
+        <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">EXP {{ character.exp }} / {{ exp_needed }}{% if exp_pct >= 90 %} <span style="color:var(--gold-bright);">✨ 即將升級！</span>{% endif %}</div>
       </div>
       {% elif tier3_level_capped %}
       <span style="font-size:12px; color:var(--text-dim);">
@@ -86,15 +110,17 @@
       <span style="font-size:12px; color:var(--text-dim);">已達最高等級 Lv.{{ level_cap }}</span>
       {% endif %}
       <div style="display:flex; align-items:flex-end; gap:8px;">
+        {% set hp_pct = ((current_hp / stats.hp * 100) if stats.hp else 0) | round(1) %}
         <div style="width:100px;">
-          <div style="background:var(--panel-2); border:1px solid var(--border); border-radius:6px; height:8px; overflow:hidden;">
-            <div style="width:{{ ((current_hp / stats.hp * 100) if stats.hp else 0) | round(1) }}%; height:100%; background:linear-gradient(90deg, var(--danger), var(--danger-bright));"></div>
+          <div class="stat-bar-track{{ ' pulse-danger' if (current_hp > 0 and hp_pct <= 30) else '' }}" style="background:var(--panel-2); border:1px solid var(--border); height:8px; overflow:hidden;">
+            <div class="stat-bar-fill" style="width:{{ hp_pct }}%; height:100%; background:linear-gradient(90deg, var(--danger), var(--danger-bright));"></div>
           </div>
           <div style="font-size:10px; margin-top:2px; {% if current_hp <= 0 %}color:var(--danger);{% else %}color:var(--text-dim);{% endif %}">HP {{ current_hp }}/{{ stats.hp }}</div>
         </div>
+        {% set mp_pct = ((current_mp / stats.mp * 100) if stats.mp else 0) | round(1) %}
         <div style="width:100px;">
-          <div style="background:var(--panel-2); border:1px solid var(--border); border-radius:6px; height:8px; overflow:hidden;">
-            <div style="width:{{ ((current_mp / stats.mp * 100) if stats.mp else 0) | round(1) }}%; height:100%; background:linear-gradient(90deg, var(--mp), var(--mp-bright));"></div>
+          <div class="stat-bar-track" style="background:var(--panel-2); border:1px solid var(--border); height:8px; overflow:hidden;">
+            <div class="stat-bar-fill" style="width:{{ mp_pct }}%; height:100%; background:linear-gradient(90deg, var(--mp), var(--mp-bright));"></div>
           </div>
           <div style="font-size:10px; color:var(--text-dim); margin-top:2px;">MP {{ current_mp }}/{{ stats.mp }}</div>
         </div>
