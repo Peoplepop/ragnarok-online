@@ -3,7 +3,11 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 
 from db import get_db, log_activity
-from web_helpers import character_required, _add_to_inventory, _remove_from_inventory
+from web_helpers import (
+    character_required, _add_to_inventory, _remove_from_inventory,
+    _add_skill_book, _remove_skill_book,
+)
+from game_data.skills import SKILL_CATALOG
 
 trade_bp = Blueprint("trade", __name__)
 
@@ -361,6 +365,42 @@ def trade_room(trade_id):
         (trade_id, opp_character_id),
     ).fetchall()
 
+    my_offered_skillbook_qty = {
+        row["skill_key"]: row["quantity"]
+        for row in db.execute(
+            "SELECT skill_key, quantity FROM trade_skill_books WHERE trade_id = ? AND character_id = ?",
+            (trade_id, character["character_id"]),
+        ).fetchall()
+    }
+    my_skill_books = db.execute(
+        "SELECT skill_key, quantity FROM character_skill_books WHERE character_id = ? AND quantity > 0",
+        (character["character_id"],),
+    ).fetchall()
+    my_skill_book_offer_rows = sorted(
+        (
+            {
+                "skill_key": row["skill_key"],
+                "name": SKILL_CATALOG[row["skill_key"]]["name"],
+                "max_quantity": row["quantity"],
+                "offered_quantity": my_offered_skillbook_qty.get(row["skill_key"], 0),
+            }
+            for row in my_skill_books if row["skill_key"] in SKILL_CATALOG
+        ),
+        key=lambda r: r["name"],
+    )
+
+    opp_skill_books = sorted(
+        (
+            {"name": SKILL_CATALOG[row["skill_key"]]["name"], "quantity": row["quantity"]}
+            for row in db.execute(
+                "SELECT skill_key, quantity FROM trade_skill_books WHERE trade_id = ? AND character_id = ?",
+                (trade_id, opp_character_id),
+            ).fetchall()
+            if row["skill_key"] in SKILL_CATALOG
+        ),
+        key=lambda r: r["name"],
+    )
+
     db.close()
     return render_template(
         "trade_room.html",
@@ -373,6 +413,8 @@ def trade_room(trade_id):
         opp_confirmed=opp_confirmed,
         my_offer_rows=my_offer_rows,
         opp_items=opp_items,
+        my_skill_book_offer_rows=my_skill_book_offer_rows,
+        opp_skill_books=opp_skill_books,
         my_currency_available=character["character_currency"],
     )
 
@@ -416,6 +458,21 @@ def _apply_offer_from_form(db, trade, character):
         if qty > 0:
             new_items[row["item_id"]] = qty
 
+    skill_book_rows = db.execute(
+        "SELECT skill_key, quantity FROM character_skill_books WHERE character_id = ?",
+        (character["character_id"],),
+    ).fetchall()
+    new_skill_books = {}
+    for row in skill_book_rows:
+        raw_qty = request.form.get(f"skillbook_qty_{row['skill_key']}", "0").strip()
+        try:
+            qty = int(raw_qty)
+        except ValueError:
+            qty = 0
+        qty = max(0, min(qty, row["quantity"]))
+        if qty > 0:
+            new_skill_books[row["skill_key"]] = qty
+
     is_initiator = character["character_id"] == trade["initiator_character_id"]
     currency_column = "initiator_currency" if is_initiator else "target_currency"
     current_amount = trade["initiator_currency"] if is_initiator else trade["target_currency"]
@@ -426,7 +483,14 @@ def _apply_offer_from_form(db, trade, character):
             (trade["trade_id"], character["character_id"]),
         ).fetchall()
     }
-    if amount == current_amount and new_items == current_items:
+    current_skill_books = {
+        row["skill_key"]: row["quantity"]
+        for row in db.execute(
+            "SELECT skill_key, quantity FROM trade_skill_books WHERE trade_id = ? AND character_id = ?",
+            (trade["trade_id"], character["character_id"]),
+        ).fetchall()
+    }
+    if amount == current_amount and new_items == current_items and new_skill_books == current_skill_books:
         return
 
     db.execute(
@@ -437,6 +501,16 @@ def _apply_offer_from_form(db, trade, character):
         db.execute(
             "INSERT INTO trade_items (trade_id, character_id, item_id, quantity) VALUES (?, ?, ?, ?)",
             (trade["trade_id"], character["character_id"], item_id, qty),
+        )
+
+    db.execute(
+        "DELETE FROM trade_skill_books WHERE trade_id = ? AND character_id = ?",
+        (trade["trade_id"], character["character_id"]),
+    )
+    for skill_key, qty in new_skill_books.items():
+        db.execute(
+            "INSERT INTO trade_skill_books (trade_id, character_id, skill_key, quantity) VALUES (?, ?, ?, ?)",
+            (trade["trade_id"], character["character_id"], skill_key, qty),
         )
 
     db.execute(
@@ -543,6 +617,14 @@ def trade_confirm(trade_id):
         "SELECT item_id, quantity FROM trade_items WHERE trade_id = ? AND character_id = ?",
         (trade_id, trade["target_character_id"]),
     ).fetchall()
+    initiator_skill_books = db.execute(
+        "SELECT skill_key, quantity FROM trade_skill_books WHERE trade_id = ? AND character_id = ?",
+        (trade_id, trade["initiator_character_id"]),
+    ).fetchall()
+    target_skill_books = db.execute(
+        "SELECT skill_key, quantity FROM trade_skill_books WHERE trade_id = ? AND character_id = ?",
+        (trade_id, trade["target_character_id"]),
+    ).fetchall()
 
     valid = (
         trade["initiator_currency"] <= trade["initiator_character_currency"]
@@ -562,6 +644,24 @@ def trade_confirm(trade_id):
             have = db.execute(
                 "SELECT quantity FROM inventory WHERE character_id = ? AND item_id = ?",
                 (trade["target_character_id"], row["item_id"]),
+            ).fetchone()
+            if have is None or have["quantity"] < row["quantity"]:
+                valid = False
+                break
+    if valid:
+        for row in initiator_skill_books:
+            have = db.execute(
+                "SELECT quantity FROM character_skill_books WHERE character_id = ? AND skill_key = ?",
+                (trade["initiator_character_id"], row["skill_key"]),
+            ).fetchone()
+            if have is None or have["quantity"] < row["quantity"]:
+                valid = False
+                break
+    if valid:
+        for row in target_skill_books:
+            have = db.execute(
+                "SELECT quantity FROM character_skill_books WHERE character_id = ? AND skill_key = ?",
+                (trade["target_character_id"], row["skill_key"]),
             ).fetchone()
             if have is None or have["quantity"] < row["quantity"]:
                 valid = False
@@ -592,6 +692,12 @@ def trade_confirm(trade_id):
     for row in target_items:
         _remove_from_inventory(db, trade["target_character_id"], row["item_id"], row["quantity"])
         _add_to_inventory(db, trade["initiator_character_id"], row["item_id"], row["quantity"])
+    for row in initiator_skill_books:
+        _remove_skill_book(db, trade["initiator_character_id"], row["skill_key"], row["quantity"])
+        _add_skill_book(db, trade["target_character_id"], row["skill_key"], row["quantity"])
+    for row in target_skill_books:
+        _remove_skill_book(db, trade["target_character_id"], row["skill_key"], row["quantity"])
+        _add_skill_book(db, trade["initiator_character_id"], row["skill_key"], row["quantity"])
 
     db.execute(
         "UPDATE trades SET status = 'completed', updated_at = datetime('now') WHERE id = ?",

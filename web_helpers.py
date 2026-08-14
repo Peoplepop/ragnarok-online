@@ -318,6 +318,36 @@ def _remove_from_inventory(db, character_id, item_id, quantity=1):
     return True
 
 
+def _add_skill_book(db, character_id, skill_key, quantity=1):
+    db.execute(
+        """INSERT INTO character_skill_books (character_id, skill_key, quantity) VALUES (?, ?, ?)
+           ON CONFLICT(character_id, skill_key) DO UPDATE SET quantity = quantity + excluded.quantity""",
+        (character_id, skill_key, quantity),
+    )
+
+
+def _remove_skill_book(db, character_id, skill_key, quantity=1):
+    """Returns True if the skill book had enough quantity and was removed."""
+    row = db.execute(
+        "SELECT quantity FROM character_skill_books WHERE character_id = ? AND skill_key = ?",
+        (character_id, skill_key),
+    ).fetchone()
+    if row is None or row["quantity"] < quantity:
+        return False
+    remaining = row["quantity"] - quantity
+    if remaining <= 0:
+        db.execute(
+            "DELETE FROM character_skill_books WHERE character_id = ? AND skill_key = ?",
+            (character_id, skill_key),
+        )
+    else:
+        db.execute(
+            "UPDATE character_skill_books SET quantity = ? WHERE character_id = ? AND skill_key = ?",
+            (remaining, character_id, skill_key),
+        )
+    return True
+
+
 def avatar_url(avatar_key, avatar_custom_filename):
     """A custom upload always wins over the built-in key once one exists
     (see character.character_change_avatar) -- avatar_key is kept around as a

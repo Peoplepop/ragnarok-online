@@ -73,6 +73,10 @@
           {% if not my_offer_rows %}
           <p class="hint" style="margin:0 0 12px;">背包裡目前沒有可交易的裝備</p>
           {% endif %}
+          {% for row in my_skill_book_offer_rows %}
+          <label>📖 {{ row.name }}（持有 {{ row.max_quantity }}）</label>
+          <input type="text" inputmode="numeric" name="skillbook_qty_{{ row.skill_key }}" value="{{ row.offered_quantity }}">
+          {% endfor %}
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <button type="submit" class="btn-success">更新報價</button>
             <button type="submit" formaction="{{ url_for('trade.trade_confirm', trade_id=trade.trade_id) }}" class="btn-success">送出並確認交易</button>
@@ -85,14 +89,17 @@
           {{ opp_name }} 的報價{% if opp_confirmed %}（已確認）{% endif %}
         </h3>
         <p style="margin:0 0 8px; font-size:13px; color:var(--text-dim);">諸神幣：{{ opp_currency_offer }}</p>
-        {% if opp_items %}
+        {% if opp_items or opp_skill_books %}
         <ul style="margin:0 0 8px; padding-left:18px; font-size:13px; color:var(--text-dim);">
           {% for item in opp_items %}
           <li>{{ item.item_name }} x{{ item.quantity }}</li>
           {% endfor %}
+          {% for book in opp_skill_books %}
+          <li>📖 {{ book.name }} x{{ book.quantity }}</li>
+          {% endfor %}
         </ul>
         {% else %}
-        <p class="hint" style="margin:0 0 8px;">對方目前沒有提供裝備</p>
+        <p class="hint" style="margin:0 0 8px;">對方目前沒有提供裝備或技能書</p>
         {% endif %}
       </div>
     </div>
@@ -108,6 +115,7 @@
     <p class="hint" style="margin:0;">
       你收到了 {{ opp_name }} 提供的 {{ opp_currency_offer }} 諸神幣
       {%- if opp_items %}，以及 {{ opp_items|length }} 種裝備{% endif %}
+      {%- if opp_skill_books %}，以及 {{ opp_skill_books|length }} 種技能書{% endif %}
     </p>
     {% endif %}
   </div>

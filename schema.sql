@@ -439,6 +439,19 @@ CREATE TABLE IF NOT EXISTS trade_items (
     FOREIGN KEY (item_id) REFERENCES items(id)
 );
 
+-- Mirrors trade_items, but for character_skill_books rows (skill_key is a
+-- SKILL_CATALOG key, not a row in items, so it needs its own table rather
+-- than reusing trade_items' item_id FK).
+CREATE TABLE IF NOT EXISTS trade_skill_books (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    trade_id INTEGER NOT NULL,
+    character_id INTEGER NOT NULL,
+    skill_key TEXT NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    UNIQUE(trade_id, character_id, skill_key),
+    FOREIGN KEY (trade_id) REFERENCES trades(id)
+);
+
 -- channel is 'public' (everyone) or 'country' (scoped by country_id, NULL on
 -- 'public' rows). character_name/country_name are denormalized snapshots at
 -- send-time (matches this codebase's existing snapshot convention, e.g.
